@@ -1,2 +1,3 @@
-# fury-demos
-Examples demos for the WebGL game engine, Fury.
+# Fury Demos
+
+Examples demos for the WebGL game engine [Fury](https://github.com/delphic/Fury).
