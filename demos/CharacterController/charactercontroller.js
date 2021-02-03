@@ -39,6 +39,20 @@ Fury.Maths.getRoll = function(q) {
 // Init Fury
 Fury.init("fury");
 
+// Fullscreen logic
+let glCanvas = document.getElementById("fury");
+glCanvas.style = "width: 100%; height: 100vh;";
+document.body.style = "margin: 0; overflow-y: hidden;";
+let cameraRatio = 1.0, resolutionFactor = 1.0;
+let updateCanvasSize = (event) => {
+	glCanvas.width = resolutionFactor * glCanvas.clientWidth;
+	glCanvas.height = resolutionFactor * glCanvas.clientHeight;
+	cameraRatio = glCanvas.clientWidth / glCanvas.clientHeight;
+	if (camera && camera.ratio) camera.ratio = cameraRatio;
+};
+window.addEventListener('resize', updateCanvasSize);
+updateCanvasSize();
+
 // Create shader
 var shader = Fury.Shader.create({
 	vsSource: [
@@ -169,7 +183,7 @@ var createCuboidMesh = function(width, height, depth) {
 };
 
 // Create Camera & Scene
-var camera = Fury.Camera.create({ near: 0.1, far: 1000000.0, fov: Fury.Maths.toRadian(60), ratio: 1.0, position: vec3.fromValues(0.0, 1.0, 0.0) });
+var camera = Fury.Camera.create({ near: 0.1, far: 1000000.0, fov: Fury.Maths.toRadian(60), ratio: cameraRatio, position: vec3.fromValues(0.0, 1.0, 0.0) });
 var scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
 
 // Physics
@@ -215,10 +229,13 @@ let localX = vec3.create(), localZ = vec3.create();
 let lastPosition = vec3.create();
 let targetPosition = vec3.create();	// Would be nice to have a pool we could use.
 
-let movementSpeed = 1.5;
+let movementSpeed = 7;
+let airMovementFactor = 0.25;
 let lookSpeed = 1;
 
-let yVelocity = 0, jumping = false, jumpDeltaV = 3, stepHeight = 0.3;
+let jumping = false, jumpDeltaV = 5, stepHeight = 0.3;
+let airVelocity = vec3.create();
+let inputVector = vec3.create();
 // TODO: Store x/z velocity when jump and then can alter it with in air movement
 // but the maximum is less
 
@@ -332,9 +349,36 @@ var loop = function(){
 	// Move player position
 	vec3.copy(lastPosition, playerPosition);
 	vec3.copy(targetPosition, playerPosition);
+
 	// Calculate Target Position
-	vec3.scaleAndAdd(targetPosition, targetPosition, localZ, movementSpeed * elapsed * inputZ);
-	vec3.scaleAndAdd(targetPosition, targetPosition, localX, movementSpeed * elapsed * inputX);
+	if (!jumping) {
+		vec3.scaleAndAdd(targetPosition, targetPosition, localZ, movementSpeed * elapsed * inputZ);
+		vec3.scaleAndAdd(targetPosition, targetPosition, localX, movementSpeed * elapsed * inputX);
+	} else {
+		// decay air velocity
+		airVelocity[0] *= 0.99;
+		airVelocity[2] *= 0.99;
+		// Maybe should make this frame rate independent
+
+		// Convert inputX and inputZ into global X / Z velocity delta
+		vec3.zero(inputVector);
+		vec3.scaleAndAdd(inputVector, inputVector, localX, inputX);
+		vec3.scaleAndAdd(inputVector, inputVector, localZ, inputZ);
+
+		// Add velocity and make sure it's less than the maximum of current velocity and airMovementSpeed
+		inputVector[0] = airVelocity[0] + movementSpeed * airMovementFactor * inputVector[0];
+		inputVector[2] = airVelocity[2] + movementSpeed * airMovementFactor * inputVector[2];
+
+		let targetSpeed = Math.max(Math.sqrt(airVelocity[0] * airVelocity[0] + airVelocity[2] * airVelocity[2]), movementSpeed * airMovementFactor);
+		vec3.normalize(inputVector, inputVector);
+		vec3.scale(inputVector, inputVector, targetSpeed);
+		// probably should rename input vector to target air movement or something
+
+		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, inputVector[0] * elapsed);
+		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, inputVector[2] * elapsed);
+		// Note airvelocity is set to moved distance later (post collision checks)
+	}
+
 
 	// Move player to new position for physics checks
 	vec3.copy(playerPosition, targetPosition);
@@ -350,6 +394,8 @@ var loop = function(){
 	// We used to have the collision handling outside the loop, but has we need to continue
 	// the loops I moved it inside, a world collision method which returned a list of boxes
 	// that overlapped would be acceptable.
+	// Should look at vorld-decay's voxel collision code, it doesn't get stuck on adjacent voxels
+	// like this code can with adjancent boxes.
 	let stepCount = 0, stepX = false, stepZ = false;
 	for (let i = 0, l = world.boxes.length; i < l; i++) {
 		if (useBox) {
@@ -462,9 +508,17 @@ var loop = function(){
 	collision = false;
 	if (!jumping && Fury.Input.keyDown("Space")) {
 		jumping = true;
-		yVelocity = jumpDeltaV;
+		airVelocity[1] = jumpDeltaV;
+		// Well this is an odd ordering
+		airVelocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
+		airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
 	} else /*if (jumping)*/ { // How's this for "isGrounded" ;D
-		yVelocity -= 9.8 * elapsed;
+		airVelocity[1] -= 9.8 * elapsed;
+		airVelocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
+		airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
+		// ^^ We're running this when not jumping, which basically just makes it 'last velocity'
+		// but this is good cause it means if we run off a crate we'll take the velocity with us
+		// as well as if we jump off it.
 	}
 
 	// So the entered checks allow you to move out of objects you're clipping with
@@ -472,7 +526,7 @@ var loop = function(){
 
 	// Another Character Controller Move
 	vec3.copy(lastPosition, playerPosition);
-	vec3.scaleAndAdd(playerPosition, playerPosition, Maths.vec3Y, yVelocity * elapsed);
+	vec3.scaleAndAdd(playerPosition, playerPosition, Maths.vec3Y, airVelocity[1] * elapsed);
 	if (useBox) {
 		// playerBox.center has changed because it's set to the playerPosition ref
 		playerBox.calculateMinMax(playerBox.center, playerBox.extents);
@@ -480,6 +534,7 @@ var loop = function(){
 
 	for (let i = 0, l = world.boxes.length; i < l; i++) {
 		if (useBox) {
+			// TODO: Use a box cast instead of a box for high speeds
 			if (Physics.Box.intersect(playerBox, world.boxes[i])) {
 				collision = true;
 				// Only moving on one axis don't need to do the slide checks
@@ -498,12 +553,12 @@ var loop = function(){
 		// Penetration vector.
 		// need list of overlapping colliders though
 		vec3.copy(playerPosition, lastPosition);
-		if (yVelocity < 0) {
+		if (airVelocity[1] < 0) {
 			jumping = false;
 			// ^^ TODO: Need to convert this into isGrounded check, and will need to
 			// change dx / dz to be against slopes if/when we introduce them
 		}
-		yVelocity = 0;
+		airVelocity[1] = 0;
 	}
 
 	// Smoothly move the camera - no jerks from sudden movement please!
