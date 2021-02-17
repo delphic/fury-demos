@@ -151,8 +151,9 @@ redMaterial.color = vec3.fromValues(1,0,0);
 var namedMaterials = [];
 
 // Creates a cuboid origin in centre of specifed width / height / depth
-// Texture coordinates scaled by size
-var createCuboidMesh = function(width, height, depth) {
+// x, y, z used to offset the UVs
+// Texture coordinates 1:1 with world size
+var createCuboidMesh = function(width, height, depth, x, y, z) {
 	let sx = width / 2, sy = height / 2, sz = depth / 2;
 	return {
 		vertices: [
@@ -193,40 +194,40 @@ var createCuboidMesh = function(width, height, depth) {
 			-sx,  sy, -sz],
 		textureCoordinates: [
 			// Front face
-			0.0, 0.0,
-			width, 0.0,
-			width, height,
-			0.0, height,
+			x-sx, y-sy,
+			x+sx, y-sy,
+			x+sx, y+sy,
+			x-sx, y+sy,
 
 			// Back face
-			width, 0.0,
-			width, height,
-			0.0, height,
-			0.0, 0.0,
+			x-sx, y-sy,
+			x-sx, y+sy,
+			x+sx, y+sy,
+			x+sx, y-sy,
 
 			// Top face
-			0.0, depth,
-			0.0, 0.0,
-			width, 0.0,
-			width, depth,
+			x-sx, z+sz,
+			x-sx, z-sz,
+			x+sx, z-sz,
+			x+sx, z+sz,
 
 			// Bottom face
-			width, depth,
-			0.0, depth,
-			0.0, 0.0,
-			width, 0.0,
+			x+sx, z+sz,
+			x-sx, z+sz,
+			x-sx, z-sz,
+			x+sx, z-sz,
 
 			// Right face
-			depth, 0.0,
-			depth, height,
-			0.0, height,
-			0.0, 0.0,
+			z+sz, y-sy,
+			z+sz, y+sy,
+			z-sz, y+sy,
+			z-sz, y-sy,
 
 			// Left face
-			0.0, 0.0,
-			depth, 0.0,
-			depth, height,
-			0.0, height ],
+			z-sz, y-sy,
+			z+sz, y-sy,
+			z+sz, y+sy,
+			z-sz, y+sy ],
 		indices: [
 			0, 1, 2,      0, 2, 3,    // Front face
 			4, 5, 6,      4, 6, 7,    // Back face
@@ -251,14 +252,14 @@ let Maths = Fury.Maths;
 let Physics = Fury.Physics;
 
 var createDebugCube = function(size, position) {
-	let mesh = Fury.Mesh.create(createCuboidMesh(size[0], size[1], size[2]));
+	let mesh = Fury.Mesh.create(createCuboidMesh(size[0], size[1], size[2], position[0], position[1], position[2]));
 	return scene.add({ material: redMaterial, mesh: mesh, position: position });
 }
 
 var createCuboid = function(w, h, d, x, y, z, material) {
 	let position = vec3.fromValues(x, y, z);
 	let size = vec3.fromValues(w, h, d);
-	let mesh = Fury.Mesh.create(createCuboidMesh(w, h, d));
+	let mesh = Fury.Mesh.create(createCuboidMesh(w, h, d, x, y, z));
 	let box = Physics.Box.create({ center: position, size: size });
 	// Note if you move the cuboid you have to recalculate min max
 
@@ -332,8 +333,8 @@ var MapLoader = (function(){
 			let scaleFactor = 1/32;
 
 			// NOTE: Map coordinate system is +Z is up, +y is right, +x is back
-			// so need to convert to -x = forwards (+z), +y = right (+x), +z = up (+y)
-			let xMin = Math.min(y1, y2), xMax = Math.max(y1, y2);
+			// so need to convert to -x = forwards (+z), +y = right (-x), +z = up (+y)
+			let xMin = Math.min(-y1, -y2), xMax = Math.max(-y1, -y2);
 			let yMin = Math.min(z1, z2), yMax = Math.max(z1, z2);
 			let zMin = Math.min(-x1, -x2), zMax = Math.max(-x1, -x2);
 
@@ -363,7 +364,7 @@ var MapLoader = (function(){
 		let scaleFactor = 1/32;
 
 		return {
-			origin: [ scaleFactor * parseInt(originComponents[1], 10), scaleFactor * parseInt(originComponents[2], 10), scaleFactor * -parseInt(originComponents[0], 10) ],	// again with the coord transform
+			origin: [ scaleFactor * -parseInt(originComponents[1], 10), scaleFactor * parseInt(originComponents[2], 10), scaleFactor * -parseInt(originComponents[0], 10) ],	// again with the coord transform
 			angle: angle
 		};
 	};
