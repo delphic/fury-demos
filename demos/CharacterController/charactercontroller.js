@@ -28,12 +28,12 @@ Fury.Maths.calculateYaw = function(q) {
 };
 
 Fury.Maths.getRoll = function(q) {
-		// Used to avoid gimbal lock
-    let sinr_cosp = 2 * (q[3] * q[0] + q[1] * q[2]);
-    let cosr_cosp = 1 - 2 * (q[0] * q[0] + q[1] * q[1]);
-    return Math.atan(sinr_cosp / cosr_cosp);
-    // If you want to know sector you need atan2(sinr_cosp, cosr_cosp)
-    // but we don't in this case.
+	// Used to avoid gimbal lock
+	let sinr_cosp = 2 * (q[3] * q[0] + q[1] * q[2]);
+	let cosr_cosp = 1 - 2 * (q[0] * q[0] + q[1] * q[1]);
+	return Math.atan(sinr_cosp / cosr_cosp);
+	// If you want to know sector you need atan2(sinr_cosp, cosr_cosp)
+	// but we don't in this case.
 };
 
 // TODO: Move to Fury.Maths
@@ -60,34 +60,47 @@ updateCanvasSize();
 var shader = Fury.Shader.create({
 	vsSource: [
 		"attribute vec3 aVertexPosition;",
-    "attribute vec2 aTextureCoord;",
+		"attribute vec2 aTextureCoord;",
 
-    "uniform mat4 uMVMatrix;",
-    "uniform mat4 uPMatrix;",
+		"uniform mat4 uMVMatrix;",
+		"uniform mat4 uPMatrix;",
 
-    "varying vec2 vTextureCoord;",
-    "void main(void) {",
-        "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
-        "vTextureCoord = aTextureCoord;",
-    "}"].join('\n'),
+		"uniform float uSScale;",
+		"uniform float uTScale;",
+
+		"varying vec2 vTextureCoord;",
+		"void main(void) {",
+			"gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
+			"vTextureCoord = vec2(uSScale * aTextureCoord.s, uTScale * aTextureCoord.t);",
+		"}"].join('\n'),
 	fsSource: [
-	"precision mediump float;",
+		"precision mediump float;",
 
-    "varying vec2 vTextureCoord;",
+		"varying vec2 vTextureCoord;",
 
-    "uniform sampler2D uSampler;",
+		"uniform sampler2D uSampler;",
 
-    "void main(void) {",
-        "gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));",
-    "}"].join('\n'),
+		"void main(void) {",
+			"gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));",
+		"}"].join('\n'),
 	attributeNames: [ "aVertexPosition", "aTextureCoord" ],
-	uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler" ],
+	uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler", "uSScale", "uTScale" ],
 	textureUniformNames: [ "uSampler" ],
 	pMatrixUniformName: "uPMatrix",
 	mvMatrixUniformName: "uMVMatrix",
 	bindMaterial: function(material) {
 		this.enableAttribute("aVertexPosition");
 		this.enableAttribute("aTextureCoord");
+		if (material.sScale) {
+			this.setUniformFloat("uSScale", material.sScale);
+		} else {
+			this.setUniformFloat("uSScale", 1);
+		}
+		if (material.tScale) {
+			this.setUniformFloat("uTScale", material.tScale);
+		} else {
+			this.setUniformFloat("uTScale", 1);
+		}
 	},
 	bindBuffers: function(mesh) {
 		this.setAttribute("aVertexPosition", mesh.vertexBuffer);
@@ -134,6 +147,8 @@ var unlitColorShader = Fury.Shader.create({
 var material = Fury.Material.create({ shader : shader });
 var redMaterial = Fury.Material.create({ shader: unlitColorShader });
 redMaterial.color = vec3.fromValues(1,0,0);
+
+var namedMaterials = [];
 
 // Creates a cuboid origin in centre of specifed width / height / depth
 // Texture coordinates scaled by size
@@ -235,15 +250,12 @@ let world = { boxes: [], spheres: [] };
 let Maths = Fury.Maths;
 let Physics = Fury.Physics;
 
-// Build me a Room - 10x10, height 4
-let walls = [], floor, roof;	// We don't actually use these references yet
-
 var createDebugCube = function(size, position) {
 	let mesh = Fury.Mesh.create(createCuboidMesh(size[0], size[1], size[2]));
 	return scene.add({ material: redMaterial, mesh: mesh, position: position });
 }
 
-var createCuboid = function(w, h, d, x, y, z) {
+var createCuboid = function(w, h, d, x, y, z, material) {
 	let position = vec3.fromValues(x, y, z);
 	let size = vec3.fromValues(w, h, d);
 	let mesh = Fury.Mesh.create(createCuboidMesh(w, h, d));
@@ -255,16 +267,109 @@ var createCuboid = function(w, h, d, x, y, z) {
 	return scene.add({ material: material, mesh: mesh, position: position, static: true });
 };
 
-// Walls
-walls.push(createCuboid(10, 4, 1, 0, 2, 5.5));
-walls.push(createCuboid(10, 4, 1, 0, 2, -5.5));
-walls.push(createCuboid(1, 4, 10, 5.5, 2, 0));
-walls.push(createCuboid(1, 4, 10, -5.5, 2, 0));
-let step = createCuboid(0.5, 0.25, 0.5, 0, 0.125, -3);
-let step2 = createCuboid(0.5, 0.5, 0.5, 0, 0.25, -3.5);
+// Quick and Dirty .map file loader
+// Supports only AABB
+// c.f. http://www.gamers.org/dEngine/quake/QDP/qmapspec.html
+var MapLoader = (function(){
+	let exports = {};
 
-floor = createCuboid(10, 1, 10, 0, -0.5, 0);
-roof = createCuboid(10, 1, 10, 0, 4.5, 0);
+	exports.load = (data, shader, namedMaterials) => {
+		// Map to JSON would probably be a better way to do this, like token read char by char and just parse the data
+		let blocks = data.split("{");
+		let brushStartOffset = 2; // Assume starting comment with format details then worldspawn class details
+		let numberOfEntities = 1;	// Assume single entity of info_player_start
+		for(let i = 2; i <  blocks.length - numberOfEntities; i++) {
+			let brushStr = blocks[i].split('\n');
+			// Size will always be 10 until we get to last entry when it'll be 11 (closing "}")
+			// First entry is blank, then 6 with position data
+			let x1, x2, y1, y2, z1, z2;
+			let xFound = false, yFound = false, zFound = false;
+			let textureName = ""; // No support for different textures on different planes... yet
+
+			for (let j = 1; j < 7; j++) {
+				let brushInfo = brushStr[j].split(' ');
+				let point1 = [parseInt(brushInfo[1], 10), parseInt(brushInfo[2], 10), parseInt(brushInfo[3], 10)];	// 1-> 3
+				let point2 = [parseInt(brushInfo[6], 10), parseInt(brushInfo[7], 10), parseInt(brushInfo[8], 10)];  // 6 -> 8
+				let point3 = [parseInt(brushInfo[11], 10), parseInt(brushInfo[12], 10), parseInt(brushInfo[13], 10)]; // 11 -> 13
+				// 15 -> 20 contains texture name, x_off, y_off, rot_angle, x_scale, y_scale
+
+				// Convert Points to AABB
+				// These points define a plane, the correct way to solve is determine normal and point and then intersect the defined planes to determine
+				// vertices, however because we're limiting ourselves to AABB we can take a shortcut, which is one axis will have the same value across
+				// all three points, and this is one of that components min or max for the AABB
+				if (point1[0] == point2[0] && point2[0] == point3[0]) {
+					if (!xFound) {
+						x1 = point1[0];
+						xFound = true;
+					} else {
+						x2 = point1[0];
+					}
+				} else if (point1[1] == point2[1] && point2[1] == point3[1]) {
+					if (!yFound) {
+						y1 = point1[1];
+						yFound = true;
+					} else {
+						y2 = point1[1];
+					}
+				} else if (point1[2] == point2[2] && point2[2] == point3[2]) {
+					if (!zFound) {
+						z1 = point2[2];
+						zFound = true;
+					} else {
+						z2 = point2[2];
+					}
+				}
+
+				if (!textureName) {
+					textureName = brushInfo[15];
+					if (!namedMaterials.hasOwnProperty(textureName))
+					{
+						namedMaterials[textureName] = Fury.Material.create({ shader: shader });
+					}
+				}
+			}
+
+			let scaleFactor = 1/32;
+
+			// NOTE: Map coordinate system is +Z is up, +y is right, +x is back
+			// so need to convert to -x = forwards (+z), +y = right (+x), +z = up (+y)
+			let xMin = Math.min(y1, y2), xMax = Math.max(y1, y2);
+			let yMin = Math.min(z1, z2), yMax = Math.max(z1, z2);
+			let zMin = Math.min(-x1, -x2), zMax = Math.max(-x1, -x2);
+
+			xMin *= scaleFactor;
+			xMax *= scaleFactor;
+			yMin *= scaleFactor;
+			yMax *= scaleFactor;
+			zMin *= scaleFactor;
+			zMax *= scaleFactor;
+
+			createCuboid(
+				xMax-xMin,
+				yMax-yMin,
+				zMax-zMin,
+				xMin + 0.5 * (xMax-xMin),
+				yMin + 0.5 * (yMax-yMin),
+				zMin + 0.5 * (zMax-zMin),
+				namedMaterials[textureName]);
+		}
+
+		let entityData = blocks[blocks.length - 1].split('\n');
+		// 0 = empty, 1 = "classname" "info_player_start", 2 = "origin" "0 0 0", 3 = "angle" "180", 4 = "}"
+		// TODO: Assert that entityData[1].split('"') ... [1] == classname and [3] == "info_player_start" aka support more than one entity in the map
+		// TODO: Assert that entityData[2].split('"')[1] == "origin"
+		let angle = parseInt(entityData[3].split('"')[3], 10);
+		let originComponents = entityData[2].split('"')[3].split(' ');
+		let scaleFactor = 1/32;
+
+		return {
+			origin: [ scaleFactor * parseInt(originComponents[1], 10), scaleFactor * parseInt(originComponents[2], 10), scaleFactor * -parseInt(originComponents[0], 10) ],	// again with the coord transform
+			angle: angle
+		};
+	};
+
+	return exports;
+})();
 
 let playerPosition = vec3.clone(camera.position);
 let playerSphere = Physics.Sphere.create({ center: playerPosition, radius: 1.0 });
@@ -440,6 +545,11 @@ var loop = function(){
 			// Note because we're putting launch force directly into air velocioty
 			// we can very quickly negate it using air movement, this makes physical sense of course
 			// and might actually match Q3A movement, but doesn't give the impression of being flung
+
+			// TODO: Lets try "velocity from external forces" as a separate tracked vector, then play with how
+			// it decays, perhaps by the same % as drag on total velocity or perhaps just run drag on it independently
+			// with air velocity being velocityDueToExternalForces + movementInput (would allow us to not have to cache the y velocity separately)
+			// will be interesting to know if we can put gravity in that vector or not.
 			if (grounded && airVelocity[1] > 0) {
 				grounded = false;
 			}
@@ -512,6 +622,8 @@ var loop = function(){
 		// Note air velocity is set to moved distance later (post collision checks)
 	}
 
+	// TODO: Separate this next section into modules as per Vorld-decay
+	// just keep them in the same file so we don't need to use browserify in demos
 
 	// Move player to new position for physics checks
 	vec3.copy(playerPosition, targetPosition);
@@ -705,7 +817,7 @@ var loop = function(){
 	// Arguably the change due to falling if there is any, we should just do,
 	// as that should always be smooth
 	if (vec3.squaredLength(playerPosition) < 0.1) {
-		vec3.copy(camera.position, playerPosition);
+		vec3.copy(camera.position, playerPosition);	// TODO: an offset from player position please
 	} else {
 		vec3.lerp(camera.position, camera.position, playerPosition, 0.25);
 	}
@@ -717,9 +829,55 @@ var loop = function(){
 };
 
 // Create Texture
-var image = new Image();
+let lockCount = 0;
+let loadCallback = () => {
+	lockCount--;
+	if (lockCount <= 0) {
+		loop();
+	}
+};
+
+let loadMapTextures = function() {
+	let images = [];
+	let keys = Object.keys(namedMaterials);
+	for (let i = 0, l = keys.length; i < l; i++) {
+		lockCount++;
+		let textureName = keys[i];
+		images[textureName] = new Image();
+		images[textureName].onload = function() {
+			// Low quality, lets see the pixely glory
+			namedMaterials[textureName].textures["uSampler"] = Fury.Renderer.createTexture(images[textureName], "low");
+			// Scale should be 32 texels per unit
+			namedMaterials[textureName].sScale = 32 / images[textureName].width;
+			namedMaterials[textureName].tScale = 32 / images[textureName].height;
+
+			// TODO: texture alignment isn't quite right as UVs don't map to world position
+			loadCallback();
+		};
+		images[textureName].src = textureName + ".png";
+	}
+};
+
+lockCount++;
+let image = new Image();
 image.onload = function() {
 	material.textures["uSampler"] = Fury.Renderer.createTexture(image, "high");
-	loop();
+	loadCallback();
 };
 image.src = "debug.png";
+
+lockCount++
+fetch("test.map").then(function(response) {
+	return response.text();
+}).then(function(text) {
+	let playerSpawn = MapLoader.load(text, shader, namedMaterials);
+
+	vec3.set(camera.position, playerSpawn.origin[0], playerSpawn.origin[1], playerSpawn.origin[2]);
+	quat.fromEuler(camera.rotation, 0, playerSpawn.angle, 0);
+	vec3.copy(playerPosition, camera.position);
+
+	loadMapTextures();
+	lockCount--;
+}).catch(function(error) {
+	console.log("Failed to load test.map: " + error.message);
+});
