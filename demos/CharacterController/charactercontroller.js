@@ -379,6 +379,7 @@ let playerBox = Physics.Box.create({ center: playerPosition, size: vec3.fromValu
 let localX = vec3.create(), localZ = vec3.create();
 let lastPosition = vec3.create();
 let targetPosition = vec3.create();	// Would be nice to have a pool we could use.
+let cameraTargetPosition = vec3.create();
 
 let movementSpeed = 5;
 let airMovementFactor = 0.5;
@@ -759,7 +760,7 @@ var loop = function(){
 		airVelocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
 		airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
 	} else {	// Attempt to move down anyway (basically check for grounded if not grounded || jumping)
-		airVelocity[1] -= 9.8 * elapsed;
+		airVelocity[1] -= 9.8 * elapsed; // Increased gravity because games
 		// Cache X-Z movement as airspeed
 		airVelocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
 		airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
@@ -817,10 +818,12 @@ var loop = function(){
 	// Technically displacement isn't the issue, it's acceleration
 	// Arguably the change due to falling if there is any, we should just do,
 	// as that should always be smooth
-	if (vec3.squaredLength(playerPosition) < 0.1) {
-		vec3.copy(camera.position, playerPosition);	// TODO: an offset from player position please
+	vec3.copy(cameraTargetPosition, playerPosition);
+	vec3.scaleAndAdd(cameraTargetPosition, cameraTargetPosition, Maths.vec3Y, 0.5);	// 0.5 offset
+	if (vec3.squaredLength(cameraTargetPosition) < 0.1) {
+		vec3.copy(camera.position, cameraTargetPosition);	// TODO: an offset from player position please
 	} else {
-		vec3.lerp(camera.position, camera.position, playerPosition, 0.25);
+		vec3.lerp(camera.position, camera.position, cameraTargetPosition, 0.25);
 	}
 
 	scene.render();
@@ -874,8 +877,9 @@ fetch("test.map").then(function(response) {
 	let playerSpawn = MapLoader.load(text, shader, namedMaterials);
 
 	vec3.set(camera.position, playerSpawn.origin[0], playerSpawn.origin[1], playerSpawn.origin[2]);
-	quat.fromEuler(camera.rotation, 0, playerSpawn.angle, 0);
+	quat.fromEuler(camera.rotation, 0, playerSpawn.angle, 0);	// Q: Should we rotate the player too?
 	vec3.copy(playerPosition, camera.position);
+	vec3.scaleAndAdd(camera.position, camera.position, Maths.vec3Y, 0.5);	// 0.5 offset fpr camera
 
 	loadMapTextures();
 	lockCount--;
