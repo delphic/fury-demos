@@ -485,19 +485,22 @@ let lastPosition = vec3.create();
 let targetPosition = vec3.create();	// Would be nice to have a pool we could use.
 let cameraTargetPosition = vec3.create();
 
-let movementSpeed = 5;
-let airMovementFactor = 0.5;
+let movementSpeed = 8;
+let airMovementSpeed = 0.5;
+let maxAirMovementSpeed = 8;
 let lookSpeed = 1;
 let prevInputX = 0, prevInputZ = 0;
 // TODO: Add key down (key up) time tracking to Fury for more complex input logic
 // (and framerate independent smoothing) but you have to tell it to track the keys
 // rather than it just tracking everything?
 
-// TODO: dv implementation is not frame rate independent, should probably make it so
+// TODO: Is dv implementation actually frame rate independent?
 let rocketDeltaV = 30;
-let grounded = true, jumpDeltaV = 5, stepHeight = 0.3;
+let grounded = true, jumpDeltaV = 5, stepHeight = 0.3; // Might be easier to configure jump as desired jump height against gravity rather than deltaV
+let gravity = 2 * 9.8;
+let initialLaunchXZSpeed = 0;
+
 let airVelocity = vec3.create();
-let airTargetVelocity = vec3.create();
 let inputVector = vec3.create();
 let localForward = vec3.create();
 let hitPoint = vec3.create();
@@ -644,21 +647,23 @@ var loop = function(){
 		if (hit) {
 			// Note this is fine because cast is from CoM but if cast is from somewhere else
 			// would need to recaculate this distance to hit point
+			// !! TODO: Do this recalculation, want it to be closest point on hit box to that hit point
+			// (i.e. if you shoot at your feet you should be launched as far as shooting in front of your face)
+			// Just based on foot position would be an improvement (rather than closest point on box)
 			let velocityDelta = rocketDeltaV / (1 + closestDistance * closestDistance);	// 1 / (1 + dist) so rocketDeltaV is max velocity delta
 			airVelocity[0] += localForward[0] * velocityDelta;
-			airVelocity[1] += localForward[1] * velocityDelta;
 			airVelocity[2] += localForward[2] * velocityDelta;
+			airVelocity[1] += localForward[1] * velocityDelta;
+
+			initialLaunchXZSpeed = Math.sqrt(airVelocity[0] * airVelocity[0] + airVelocity[2] * airVelocity[2]);
 
 			// Note because we're putting launch force directly into air velocioty
-			// we can very quickly negate it using air movement, this makes physical sense of course
-			// and might actually match Q3A movement, but doesn't give the impression of being flung
-
-			// TODO: Lets try "velocity from external forces" as a separate tracked vector, then play with how
-			// it decays, perhaps by the same % as drag on total velocity or perhaps just run drag on it independently
-			// with air velocity being velocityDueToExternalForces + movementInput (would allow us to not have to cache the y velocity separately)
-			// will be interesting to know if we can put gravity in that vector or not.
+			// we can over time negate it using air movement, if air movement is high,
+			// this makes reasonable physical sense but requires slow cummuative air movement
+			// without capping to 'feel' okay
 			if (grounded && airVelocity[1] > 0) {
 				grounded = false;
+				// TODO: Allow push along the floor
 			}
 		}
 	}
@@ -673,6 +678,9 @@ var loop = function(){
 			airVelocity[0] += triggerVolumes[i].angle[0] * triggerVolumes[i].speed;
 			airVelocity[1] += triggerVolumes[i].angle[1] * triggerVolumes[i].speed;
 			airVelocity[2] += triggerVolumes[i].angle[2] * triggerVolumes[i].speed;
+
+			initialLaunchXZSpeed = Math.sqrt(airVelocity[0] * airVelocity[0] + airVelocity[2] * airVelocity[2]);
+
 			if (grounded && airVelocity[1] > 0) {
 				grounded = false;
 				// TODO: Allow push along the floor!
@@ -728,27 +736,29 @@ var loop = function(){
 		vec3.scaleAndAdd(inputVector, inputVector, localX, inputX);
 		vec3.scaleAndAdd(inputVector, inputVector, localZ, inputZ);
 
-		// Transfer airVelocity to airTargetVelocity to add movement speed to it
-		airTargetVelocity[0] = airVelocity[0];
-		airTargetVelocity[1] = 0;
-		airTargetVelocity[2] = airVelocity[2];
+		// If we wanted to keep forces external and not arrestable by air movement
+		// this where we would transfer it to a new variable and sure that in the remainder
+		// of this caculation
 
-		let maxAirSpeed = Math.max(vec3.length(airTargetVelocity), movementSpeed * airMovementFactor);
+		// Add air movement velocity to current movement velocity
+		airVelocity[0] = airVelocity[0] + airMovementSpeed * inputVector[0];
+		airVelocity[2] = airVelocity[2] + airMovementSpeed * inputVector[2];
 
-		// Add velocity and make sure it's less than the maximum of current velocity and airMovementSpeed
-		airTargetVelocity[0] = airTargetVelocity[0] + movementSpeed * airMovementFactor * inputVector[0];
-		airTargetVelocity[2] = airTargetVelocity[2] + movementSpeed * airMovementFactor * inputVector[2];
-		// This takes away from any launch velocity per frame permanently negating it, arguably we should
-		// store velocity due to launch and recalculate airVelocity from that (presumably velocity due to launch)
-		// will need to decay somehow and be cancelled by collisions
+		// Clamp it to max of launch + max / max
+		let maxAirSpeed = Math.max(initialLaunchXZSpeed + maxAirMovementSpeed, maxAirMovementSpeed);
+		// TODO: note this does not currently adjust for 'speed boosts' when it probably should,
+		// maxAirMovementSpeed should probably be a factor (maybe 1) of movement speed
+		// when you left the ground
 
-		if (vec3.length(airTargetVelocity) > maxAirSpeed) {
-			vec3.normalize(airTargetVelocity, airTargetVelocity);
-			vec3.scale(airTargetVelocity, airTargetVelocity, maxAirSpeed);
+		if (vec3.length(airVelocity) > maxAirSpeed) {
+			vec3.normalize(airVelocity, airVelocity);
+			vec3.scale(airVelocity, airVelocity, maxAirSpeed);
 		}
+		// TODO: This isn't right either, we want to keep it to initialLaunchSpeed * launchDirection + maxAirMovementSpeed in current dir
+		// Rather than just clamping to max in launch direction (which is what we're currently doing)
 
-		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, airTargetVelocity[0] * elapsed);
-		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, airTargetVelocity[2] * elapsed);
+		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, airVelocity[0] * elapsed);
+		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, airVelocity[2] * elapsed);
 		// Note air velocity is set to moved distance later (post collision checks)
 	}
 
@@ -887,27 +897,16 @@ var loop = function(){
 		airVelocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
 		airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
 	} else {	// Attempt to move down anyway (basically check for grounded if not grounded || jumping)
-		airVelocity[1] -= 9.8 * elapsed; // Increased gravity because games
+		airVelocity[1] -= gravity * elapsed; // Increased gravity because games
 
 		// Cache X-Z movement as airspeed
-		if (grounded) {
-			airVelocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
-			airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
-			// ^^ We're running this when not jumping, which basically just makes it 'last velocity'
-			// but this is good cause it means if we run off a crate we'll take the velocity with us
-			// as well as if we jump off it.
-			// If we change to allow sliding we may need to be more remove influence of player movement
-		} else {
-			// Need to remove the influence of player movement from velocity due to external forces when in air
-			// (which is currently just stored in airVelocity TODO: rename) for now just check to see if
-			// it's been zero-ed by a collision, but if in future we enter new mediums we might want other changes?
-			if (playerPosition[0] == lastPosition[0]) {
-				airVelocity[0] = 0;
-			}
-			if (playerPosition[2] == lastPosition[2]) {
-				airVelocity[2] = 0;
-			}
-		}
+		airVelocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
+		airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
+
+		// If want 'external forces' approach need to make sure we do not store it in
+		// airVelocity *or* only set airVelocity at this point to 0 when movement has been
+		// stopped when not grounded, rather than setting always setting it to distance moved
+		// over time.
 	}
 
 	// So the entered checks allow you to move out of objects you're clipping with
@@ -942,7 +941,16 @@ var loop = function(){
 		// need list of overlapping colliders though
 
 		vec3.copy(playerPosition, lastPosition);
-		if (!grounded && airVelocity[1] < 0) {
+		if (airVelocity[1] < 0) {
+			// Only external forces currently set initial launch speed
+			// so if we're grounded ensure launch speed is zero (another event could)
+			// set it to a non-zero value even if we're grounded
+
+			// TODO: Try putting in the ability to be pushed along the floor by
+			// decaying initial launch speed by friction instead of zeroing and
+			// add it to normal to normal XZ movement (will need to cache launch direction too)
+			initialLaunchXZSpeed = 0;
+
 			// NOTE: this is called multiple times as we reach the point where we can't move the minimum
 			// distance as implied by acceleration by gravity from 0, because we don't move up to the object
 			// we just stop.. as stated above we should move *upto* the object.
