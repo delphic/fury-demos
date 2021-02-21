@@ -276,19 +276,22 @@ var MapLoader = (function(){
 
 	exports.load = (data, shader, namedMaterials) => {
 		// Map to JSON would probably be a better way to do this, like token read char by char and just parse the data
+
+		// TODO: Should actually parse worldspawn and then this is just an entity data followed by brushes loop
 		let blocks = data.split("{");
 		let brushStartOffset = 2; // Assume starting comment with format details then worldspawn class details
-		let numberOfEntities = 1;	// Assume single entity of info_player_start
-		for(let i = 2; i <  blocks.length - numberOfEntities; i++) {
-			let brushStr = blocks[i].split('\n');
-			// Size will always be 10 until we get to last entry when it'll be 11 (closing "}")
+		let entityStartOffset = 0;
+
+		let brushData = {};
+
+		let parseBrush = (out, brushLines) => {
 			// First entry is blank, then 6 with position data
 			let x1, x2, y1, y2, z1, z2;
 			let xFound = false, yFound = false, zFound = false;
 			let textureName = ""; // No support for different textures on different planes... yet
 
 			for (let j = 1; j < 7; j++) {
-				let brushInfo = brushStr[j].split(' ');
+				let brushInfo = brushLines[j].split(' ');
 				let point1 = [parseInt(brushInfo[1], 10), parseInt(brushInfo[2], 10), parseInt(brushInfo[3], 10)];	// 1-> 3
 				let point2 = [parseInt(brushInfo[6], 10), parseInt(brushInfo[7], 10), parseInt(brushInfo[8], 10)];  // 6 -> 8
 				let point3 = [parseInt(brushInfo[11], 10), parseInt(brushInfo[12], 10), parseInt(brushInfo[13], 10)]; // 11 -> 13
@@ -322,11 +325,8 @@ var MapLoader = (function(){
 				}
 
 				if (!textureName) {
+					// TODO: Support multiple textureNames per brush
 					textureName = brushInfo[15];
-					if (!namedMaterials.hasOwnProperty(textureName))
-					{
-						namedMaterials[textureName] = Fury.Material.create({ shader: shader });
-					}
 				}
 			}
 
@@ -345,28 +345,130 @@ var MapLoader = (function(){
 			zMin *= scaleFactor;
 			zMax *= scaleFactor;
 
+			out.xMin = xMin;
+			out.xMax = xMax;
+			out.yMin = yMin;
+			out.yMax = yMax;
+			out.zMin = zMin;
+			out.zMax = zMax;
+			out.textureName = textureName;
+		};
+
+		for(let i = brushStartOffset; i < blocks.length; i++) {
+			let brushLines = blocks[i].split('\n');
+			// Size will always be 10 until we get to last entry when it'll be 11 (closing "}")
+
+			parseBrush(brushData, brushLines);
+
+			if (brushData.textureName && !namedMaterials.hasOwnProperty(brushData.textureName)) {
+				namedMaterials[brushData.textureName] = Fury.Material.create({ shader: shader });
+			}
+
 			createCuboid(
-				xMax-xMin,
-				yMax-yMin,
-				zMax-zMin,
-				xMin + 0.5 * (xMax-xMin),
-				yMin + 0.5 * (yMax-yMin),
-				zMin + 0.5 * (zMax-zMin),
-				namedMaterials[textureName]);
+				brushData.xMax-brushData.xMin,
+				brushData.yMax-brushData.yMin,
+				brushData.zMax-brushData.zMin,
+				brushData.xMin + 0.5 * (brushData.xMax-brushData.xMin),
+				brushData.yMin + 0.5 * (brushData.yMax-brushData.yMin),
+				brushData.zMin + 0.5 * (brushData.zMax-brushData.zMin),
+				namedMaterials[brushData.textureName]);
+
+			if (brushLines.length == 11) {
+				// Has closing "}" - have reached the end of world spawn brushes
+				entityStartOffset = i + 1;
+				break;
+			}
 		}
 
-		let entityData = blocks[blocks.length - 1].split('\n');
-		// 0 = empty, 1 = "classname" "info_player_start", 2 = "origin" "0 0 0", 3 = "angle" "180", 4 = "}"
-		// TODO: Assert that entityData[1].split('"') ... [1] == classname and [3] == "info_player_start" aka support more than one entity in the map
-		// TODO: Assert that entityData[2].split('"')[1] == "origin"
-		let angle = parseInt(entityData[3].split('"')[3], 10);
-		let originComponents = entityData[2].split('"')[3].split(' ');
-		let scaleFactor = 1/32;
+		let origin = [];
+		let angle = 0;
+		let entities = [];
+
+		for(let i = entityStartOffset; i < blocks.length; i++) {
+			let entityData = blocks[i].split('\n');
+			if (entityData[1][0] == '"') { // Is entity not brush
+				let entity = {};
+				for (let j = 1; j < entityData.length; j++) {
+					if (entityData[j][0] == '"') { // Is property so parse
+						let entityLine = entityData[j].split('"');
+						entity[entityLine[1]] = entityLine[3];
+					}
+				}
+				entities.push(entity);
+
+				switch (entity.classname) {
+					case "info_player_start":
+						angle = parseInt(entity.angle, 10);
+						let oc = entity.origin.split(' ');
+						let scaleFactor = 1/32;
+						// Coord transform - TODO: Move to method
+						origin = [ scaleFactor * -parseInt(oc[1], 10), scaleFactor * parseInt(oc[2], 10), scaleFactor * -parseInt(oc[0], 10) ];
+						break;
+				}
+			} else {
+				// Brush for previous entity
+				let brush = {}
+				let lastEntity = entities[entities.length - 1];
+				if (!lastEntity.brushes) {
+					lastEntity.brushes = [];
+				}
+				parseBrush(brush, entityData);
+				lastEntity.brushes.push(brush);
+			}
+		}
+
+		for (let i = 0, l = entities.length; i < l; i++) {
+			if (entities[i].classname == "trigger_push") {
+				// NOTE: Relying on global
+				triggerVolumes.push(TriggerVolume.create(entities[i]));
+			}
+		}
 
 		return {
-			origin: [ scaleFactor * -parseInt(originComponents[1], 10), scaleFactor * parseInt(originComponents[2], 10), scaleFactor * -parseInt(originComponents[0], 10) ],	// again with the coord transform
+			origin: origin,
 			angle: angle
 		};
+	};
+
+	return exports;
+})();
+
+// Quick and dirty trigger volume!
+let TriggerVolume = (function(){
+	let exports = {};
+
+	exports.create = (params) => {
+		let triggerVolume = {};
+		triggerVolume.box = Physics.Box.create({
+			min: vec3.fromValues(params.brushes[0].xMin, params.brushes[0].yMin, params.brushes[0].zMin),
+			max: vec3.fromValues(params.brushes[0].xMax, params.brushes[0].yMax, params.brushes[0].zMax)
+		});
+		triggerVolume.triggered = false;
+		triggerVolume.resetTimer = 0;
+		triggerVolume.update = (elapsed) => {
+			if (triggerVolume.triggered) {
+				triggerVolume.resetTimer -= elapsed;
+				if (triggerVolume.resetTimer <= 0) {
+					triggerVolume.resetTimer = 0;
+					triggerVolume.triggered = false;
+				}
+			}
+		};
+		triggerVolume.speed = params.speed;
+		// TODO: Move this to launch_direction for clarity
+		let angleC = params.angle.split(' ');
+		let angleDirection = vec3.fromValues(parseFloat(angleC[0]), parseFloat(angleC[1]), parseFloat(angleC[2]));
+		vec3.normalize(angleDirection, angleDirection);
+		triggerVolume.angle = angleDirection;
+		triggerVolume.tryIntersectBox = (box) => {
+			if (!triggerVolume.triggered && Physics.Box.intersect(box, triggerVolume.box)) {
+				triggerVolume.triggered = true;
+				triggerVolume.resetTimer = 1;
+				return true;
+			}
+			return false;
+		};
+		return triggerVolume;
 	};
 
 	return exports;
@@ -375,6 +477,8 @@ var MapLoader = (function(){
 let playerPosition = vec3.clone(camera.position);
 let playerSphere = Physics.Sphere.create({ center: playerPosition, radius: 1.0 });
 let playerBox = Physics.Box.create({ center: playerPosition, size: vec3.fromValues(0.5, 2, 0.5) });
+
+let triggerVolumes = [];
 
 let localX = vec3.create(), localZ = vec3.create();
 let lastPosition = vec3.create();
@@ -393,6 +497,7 @@ let prevInputX = 0, prevInputZ = 0;
 let rocketDeltaV = 30;
 let grounded = true, jumpDeltaV = 5, stepHeight = 0.3;
 let airVelocity = vec3.create();
+let airTargetVelocity = vec3.create();
 let inputVector = vec3.create();
 let localForward = vec3.create();
 let hitPoint = vec3.create();
@@ -558,6 +663,27 @@ var loop = function(){
 		}
 	}
 
+	// Look for trigger volume - this another example of external force
+	for (let i = 0, l = triggerVolumes.length; i < l; i++) {
+		triggerVolumes[i].update(elapsed);
+		if (triggerVolumes[i].tryIntersectBox(playerBox)) {
+			// TODO: I wonder if set is better if grounded, only retain air velocity if already in the air?
+			// Probably - also lets change this to velocity due to external forces then put air velocity back in
+			// and have grounded launch movement work to that (i.e. you can arrest velocity due to your own movement)
+			airVelocity[0] += triggerVolumes[i].angle[0] * triggerVolumes[i].speed;
+			airVelocity[1] += triggerVolumes[i].angle[1] * triggerVolumes[i].speed;
+			airVelocity[2] += triggerVolumes[i].angle[2] * triggerVolumes[i].speed;
+			if (grounded && airVelocity[1] > 0) {
+				grounded = false;
+				// TODO: Allow push along the floor!
+			}
+		}
+	}
+
+	// Playing Q3A - it seems like we had the right idea before, modify air velocity directly and then allow the player to
+	// cumulatively add speed, the difference is q3a did not clamp the speed addtion at all, so you could only modify a small
+	// amount but it could add up to far more
+
 	// Copy player position into temp variables
 	vec3.copy(lastPosition, playerPosition);
 	vec3.copy(targetPosition, playerPosition);
@@ -602,25 +728,27 @@ var loop = function(){
 		vec3.scaleAndAdd(inputVector, inputVector, localX, inputX);
 		vec3.scaleAndAdd(inputVector, inputVector, localZ, inputZ);
 
-		let airSpeedY = airVelocity[1];
-		airVelocity[1] = 0;
-		let maxAirSpeed = Math.max(vec3.length(airVelocity), movementSpeed * airMovementFactor);
+		// Transfer airVelocity to airTargetVelocity to add movement speed to it
+		airTargetVelocity[0] = airVelocity[0];
+		airTargetVelocity[1] = 0;
+		airTargetVelocity[2] = airVelocity[2];
+
+		let maxAirSpeed = Math.max(vec3.length(airTargetVelocity), movementSpeed * airMovementFactor);
 
 		// Add velocity and make sure it's less than the maximum of current velocity and airMovementSpeed
-		airVelocity[0] = airVelocity[0] + movementSpeed * airMovementFactor * inputVector[0];
-		airVelocity[2] = airVelocity[2] + movementSpeed * airMovementFactor * inputVector[2];
+		airTargetVelocity[0] = airTargetVelocity[0] + movementSpeed * airMovementFactor * inputVector[0];
+		airTargetVelocity[2] = airTargetVelocity[2] + movementSpeed * airMovementFactor * inputVector[2];
 		// This takes away from any launch velocity per frame permanently negating it, arguably we should
 		// store velocity due to launch and recalculate airVelocity from that (presumably velocity due to launch)
 		// will need to decay somehow and be cancelled by collisions
 
-		if (vec3.length(airVelocity) > maxAirSpeed) {
-			vec3.normalize(airVelocity, airVelocity);
-			vec3.scale(airVelocity, airVelocity, maxAirSpeed);
+		if (vec3.length(airTargetVelocity) > maxAirSpeed) {
+			vec3.normalize(airTargetVelocity, airTargetVelocity);
+			vec3.scale(airTargetVelocity, airTargetVelocity, maxAirSpeed);
 		}
-		airVelocity[1] = airSpeedY;
 
-		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, airVelocity[0] * elapsed);
-		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, airVelocity[2] * elapsed);
+		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, airTargetVelocity[0] * elapsed);
+		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, airTargetVelocity[2] * elapsed);
 		// Note air velocity is set to moved distance later (post collision checks)
 	}
 
@@ -750,7 +878,6 @@ var loop = function(){
 	}
 	// Also need to support steps and slopes
 
-
 	// Now lets do it again for gravity / grounded
 	collision = false;
 	if (grounded && Fury.Input.keyDown("Space", true)) {	// TODO: Grace time (both if you land soon after and soon after you've left the ground)
@@ -761,12 +888,26 @@ var loop = function(){
 		airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
 	} else {	// Attempt to move down anyway (basically check for grounded if not grounded || jumping)
 		airVelocity[1] -= 9.8 * elapsed; // Increased gravity because games
+
 		// Cache X-Z movement as airspeed
-		airVelocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
-		airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
-		// ^^ We're running this when not jumping, which basically just makes it 'last velocity'
-		// but this is good cause it means if we run off a crate we'll take the velocity with us
-		// as well as if we jump off it.
+		if (grounded) {
+			airVelocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
+			airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
+			// ^^ We're running this when not jumping, which basically just makes it 'last velocity'
+			// but this is good cause it means if we run off a crate we'll take the velocity with us
+			// as well as if we jump off it.
+			// If we change to allow sliding we may need to be more remove influence of player movement
+		} else {
+			// Need to remove the influence of player movement from velocity due to external forces when in air
+			// (which is currently just stored in airVelocity TODO: rename) for now just check to see if
+			// it's been zero-ed by a collision, but if in future we enter new mediums we might want other changes?
+			if (playerPosition[0] == lastPosition[0]) {
+				airVelocity[0] = 0;
+			}
+			if (playerPosition[2] == lastPosition[2]) {
+				airVelocity[2] = 0;
+			}
+		}
 	}
 
 	// So the entered checks allow you to move out of objects you're clipping with
