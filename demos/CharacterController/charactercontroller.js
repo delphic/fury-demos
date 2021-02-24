@@ -489,16 +489,21 @@ let lastPosition = vec3.create();
 let targetPosition = vec3.create();	// Would be nice to have a pool we could use.
 let cameraTargetPosition = vec3.create();
 
-let movementSpeed = 8;				// TODO: Try Acceleration with clamped max speed instead (or could just use ground drag to balance)
-let airMovementSpeed = 0.25;	// TODO: Try Acceleration instead
-let maxAirMovementSpeed = 4;
+// TODO: Try Acceleration with clamped max speed instead (or could just use ground drag to balance)
+// TODO: Try Acceleration instead
+let movementSpeed = 8;
+let airMovementSpeed = 0.25; // Currently used like acceleration, so frame rate dependent, bad!
+let maxAirMovementSpeed = movementSpeed;
+// Set to movement speed so when jumping it's not wierd, may want to track launched and use movement speed or maxAirMovementSpeed as clamp depending
+// Although we still have a bug where sometimes you increase you're movement speed
 let lookSpeed = 1;
 let prevInputX = 0, prevInputZ = 0;
 // TODO: Add key down (key up) time tracking to Fury for more complex input logic
 // (and framerate independent smoothing) but you have to tell it to track the keys
 // rather than it just tracking everything?
 
-// TODO: Is dv implementation actually frame rate independent?
+// DeltaVs need to be instanteously applied (impulse / mass)
+// They make no sense over multiple frames
 let rocketDeltaV = 30;
 let grounded = true, jumpDeltaV = 5, stepHeight = 0.3; // Might be easier to configure jump as desired jump height against gravity rather than deltaV
 let gravity = 2 * 9.8;
@@ -902,7 +907,8 @@ var loop = function(){
 		// Cache X-Z movement as airspeed
 		airVelocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
 		airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
-		vec3.copy(launchVelocity, airVelocity);
+		// vec3.copy(launchVelocity, airVelocity);
+		vec3.zero(launchVelocity);
 		// Apply Jump Velocity!
 		airVelocity[1] = jumpDeltaV;
 
