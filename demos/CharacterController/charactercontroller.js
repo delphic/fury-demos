@@ -39,6 +39,8 @@ Fury.Maths.getRoll = function(q) {
 // TODO: Move to Fury.Maths
 let lerp = (a,b,r) => { return r * (b - a) + a; };
 
+let clamp = (x, min, max) => { return Math.max(Math.min(max, x), min); }
+
 // Init Fury
 Fury.init("fury");
 
@@ -326,6 +328,8 @@ var MapLoader = (function(){
 
 				if (!textureName) {
 					// TODO: Support multiple textureNames per brush
+					// To do this would need to detect when this is multiple textures
+					// and then create just quads instead of meshes
 					textureName = brushInfo[15];
 				}
 			}
@@ -485,9 +489,9 @@ let lastPosition = vec3.create();
 let targetPosition = vec3.create();	// Would be nice to have a pool we could use.
 let cameraTargetPosition = vec3.create();
 
-let movementSpeed = 8;
-let airMovementSpeed = 0.5;
-let maxAirMovementSpeed = 8;
+let movementSpeed = 8;				// TODO: Try Acceleration with clamped max speed instead (or could just use ground drag to balance)
+let airMovementSpeed = 0.25;	// TODO: Try Acceleration instead
+let maxAirMovementSpeed = 4;
 let lookSpeed = 1;
 let prevInputX = 0, prevInputZ = 0;
 // TODO: Add key down (key up) time tracking to Fury for more complex input logic
@@ -499,6 +503,7 @@ let rocketDeltaV = 30;
 let grounded = true, jumpDeltaV = 5, stepHeight = 0.3; // Might be easier to configure jump as desired jump height against gravity rather than deltaV
 let gravity = 2 * 9.8;
 let initialLaunchXZSpeed = 0;
+let launchVelocity = vec3.create();
 
 let airVelocity = vec3.create();
 let inputVector = vec3.create();
@@ -651,17 +656,19 @@ var loop = function(){
 			// (i.e. if you shoot at your feet you should be launched as far as shooting in front of your face)
 			// Just based on foot position would be an improvement (rather than closest point on box)
 			let velocityDelta = rocketDeltaV / (1 + closestDistance * closestDistance);	// 1 / (1 + dist) so rocketDeltaV is max velocity delta
-			airVelocity[0] += localForward[0] * velocityDelta;
-			airVelocity[2] += localForward[2] * velocityDelta;
-			airVelocity[1] += localForward[1] * velocityDelta;
+			launchVelocity[0] += localForward[0] * velocityDelta;
+			launchVelocity[2] += localForward[2] * velocityDelta;
+			launchVelocity[1] += localForward[1] * velocityDelta;
 
-			initialLaunchXZSpeed = Math.sqrt(airVelocity[0] * airVelocity[0] + airVelocity[2] * airVelocity[2]);
+			initialLaunchXZSpeed = Math.sqrt(launchVelocity[0] * launchVelocity[0] + launchVelocity[2] * launchVelocity[2]);
+
+			vec3.add(airVelocity, airVelocity, launchVelocity);
 
 			// Note because we're putting launch force directly into air velocioty
 			// we can over time negate it using air movement, if air movement is high,
 			// this makes reasonable physical sense but requires slow cummuative air movement
 			// without capping to 'feel' okay
-			if (grounded && airVelocity[1] > 0) {
+			if (grounded && launchVelocity[1] > 0) {
 				grounded = false;
 				// TODO: Allow push along the floor
 			}
@@ -675,13 +682,15 @@ var loop = function(){
 			// TODO: I wonder if set is better if grounded, only retain air velocity if already in the air?
 			// Probably - also lets change this to velocity due to external forces then put air velocity back in
 			// and have grounded launch movement work to that (i.e. you can arrest velocity due to your own movement)
-			airVelocity[0] += triggerVolumes[i].angle[0] * triggerVolumes[i].speed;
-			airVelocity[1] += triggerVolumes[i].angle[1] * triggerVolumes[i].speed;
-			airVelocity[2] += triggerVolumes[i].angle[2] * triggerVolumes[i].speed;
+			launchVelocity[0] += triggerVolumes[i].angle[0] * triggerVolumes[i].speed;
+			launchVelocity[1] += triggerVolumes[i].angle[1] * triggerVolumes[i].speed;
+			launchVelocity[2] += triggerVolumes[i].angle[2] * triggerVolumes[i].speed;
 
-			initialLaunchXZSpeed = Math.sqrt(airVelocity[0] * airVelocity[0] + airVelocity[2] * airVelocity[2]);
+			initialLaunchXZSpeed = Math.sqrt(launchVelocity[0] * launchVelocity[0] + launchVelocity[2] * launchVelocity[2]);
 
-			if (grounded && airVelocity[1] > 0) {
+			vec3.add(airVelocity, airVelocity, launchVelocity);
+
+			if (grounded && launchVelocity[1] > 0) {
 				grounded = false;
 				// TODO: Allow push along the floor!
 			}
@@ -741,21 +750,19 @@ var loop = function(){
 		// of this caculation
 
 		// Add air movement velocity to current movement velocity
-		airVelocity[0] = airVelocity[0] + airMovementSpeed * inputVector[0];
-		airVelocity[2] = airVelocity[2] + airMovementSpeed * inputVector[2];
-
-		// Clamp it to max of launch + max / max
-		let maxAirSpeed = Math.max(initialLaunchXZSpeed + maxAirMovementSpeed, maxAirMovementSpeed);
-		// TODO: note this does not currently adjust for 'speed boosts' when it probably should,
-		// maxAirMovementSpeed should probably be a factor (maybe 1) of movement speed
-		// when you left the ground
-
-		if (vec3.length(airVelocity) > maxAirSpeed) {
-			vec3.normalize(airVelocity, airVelocity);
-			vec3.scale(airVelocity, airVelocity, maxAirSpeed);
-		}
-		// TODO: This isn't right either, we want to keep it to initialLaunchSpeed * launchDirection + maxAirMovementSpeed in current dir
-		// Rather than just clamping to max in launch direction (which is what we're currently doing)
+		// but clamped to a circle around launchVelocity of radius maxAirMovementSpeed
+		// (maxAirMovementSpeed is actually max air speed of component due to input)
+		let airMinX = launchVelocity[0] - maxAirMovementSpeed;
+		let airMaxX = launchVelocity[0] + maxAirMovementSpeed;
+		airVelocity[0] = clamp(airVelocity[0] + airMovementSpeed * inputVector[0], airMinX, airMaxX);
+		let airMinZ = launchVelocity[2] - maxAirMovementSpeed;
+		let airMaxZ = launchVelocity[2] + maxAirMovementSpeed;
+		airVelocity[2] = clamp(airVelocity[2] + airMovementSpeed * inputVector[2], airMinZ, airMaxZ);
+		// ^^ This overrides drag... which isn't good... maybe min max should adjust
+		// or we should apply drag to launchVelocity too
+		// This isn't right - if we don't put launch velocity when jumping you get clamped wierdly
+		// If you do, you can accelerate your jumps ... perhaps we should have an isLaunched bool
+		// and react differently in each case, as horrible as that seems
 
 		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, airVelocity[0] * elapsed);
 		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, airVelocity[2] * elapsed);
@@ -892,10 +899,13 @@ var loop = function(){
 	collision = false;
 	if (grounded && Fury.Input.keyDown("Space", true)) {	// TODO: Grace time (both if you land soon after and soon after you've left the ground)
 		grounded = false;
-		airVelocity[1] = jumpDeltaV;
 		// Cache X-Z movement as airspeed
 		airVelocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
 		airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
+		vec3.copy(launchVelocity, airVelocity);
+		// Apply Jump Velocity!
+		airVelocity[1] = jumpDeltaV;
+
 	} else {	// Attempt to move down anyway (basically check for grounded if not grounded || jumping)
 		airVelocity[1] -= gravity * elapsed; // Increased gravity because games
 
@@ -950,6 +960,7 @@ var loop = function(){
 			// decaying initial launch speed by friction instead of zeroing and
 			// add it to normal to normal XZ movement (will need to cache launch direction too)
 			initialLaunchXZSpeed = 0;
+			vec3.zero(launchVelocity);
 
 			// NOTE: this is called multiple times as we reach the point where we can't move the minimum
 			// distance as implied by acceleration by gravity from 0, because we don't move up to the object
