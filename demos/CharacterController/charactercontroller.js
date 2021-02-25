@@ -489,13 +489,12 @@ let lastPosition = vec3.create();
 let targetPosition = vec3.create();	// Would be nice to have a pool we could use.
 let cameraTargetPosition = vec3.create();
 
-// TODO: Try Acceleration with clamped max speed instead (or could just use ground drag to balance)
-// TODO: Try Acceleration instead
+let acceleration = 100;
 let movementSpeed = 8;
-let airMovementSpeed = 0.25; // Currently used like acceleration, so frame rate dependent, bad!
-let maxAirMovementSpeed = movementSpeed;
-// Set to movement speed so when jumping it's not wierd, may want to track launched and use movement speed or maxAirMovementSpeed as clamp depending
-// Although we still have a bug where sometimes you increase you're movement speed
+let stopSpeed = 2;
+let airMovementSpeed = 8;
+let airAcceleration = 10;
+
 let lookSpeed = 1;
 let prevInputX = 0, prevInputZ = 0;
 // TODO: Add key down (key up) time tracking to Fury for more complex input logic
@@ -507,10 +506,12 @@ let prevInputX = 0, prevInputZ = 0;
 let rocketDeltaV = 30;
 let grounded = true, jumpDeltaV = 5, stepHeight = 0.3; // Might be easier to configure jump as desired jump height against gravity rather than deltaV
 let gravity = 2 * 9.8;
+
 let initialLaunchXZSpeed = 0;
 let launchVelocity = vec3.create();
 
-let airVelocity = vec3.create();
+let velocity = vec3.create();
+
 let inputVector = vec3.create();
 let localForward = vec3.create();
 let hitPoint = vec3.create();
@@ -558,6 +559,11 @@ var loop = function(){
 
 	// Need to pause the timer when you blur to that this doesn't end up huge and you clip through the floor
 	// :thinking: I wonder what happens to websockets when you alt tab.
+	if (elapsed == 0) {
+		// HACK: Stop FUBAR due to 0 elapsed in movement calculations
+		requestAnimationFrame(loop);
+		return;
+	}
 
 	let ry = 0, rx = 0;
 
@@ -589,13 +595,14 @@ var loop = function(){
 	// Directly rotate camera
 	Maths.quatRotate(camera.rotation, camera.rotation, ry, Maths.vec3Y);
 
+	// TODO: Check this against vorld-decay
 	let roll = Fury.Maths.getRoll(camera.rotation); // Note doesn't lock in the right place if you're using atan2 version
 	let clampAngle = 10 * Math.PI/180;
 	if (Math.sign(roll) == Math.sign(-rx) || Math.abs(roll - rx) < 0.5*Math.PI - clampAngle) {
 		quat.rotateX(camera.rotation, camera.rotation, rx);
 	}
 
-		// TODO: Add smoothing / acceleration
+		// TODO: Add smoothing?
 	let inputX = 0, inputZ = 0;
 	if (Fury.Input.keyDown("w")) {
 		inputZ -= 1;
@@ -626,14 +633,6 @@ var loop = function(){
 		inputX /= Math.SQRT2;
 		inputZ /= Math.SQRT2;
 	}
-	// Smoothing (TODO: frame rate independent please, also Maths.lerp ?)
-	//inputX = lerp(prevInputX, inputX, 0.5);
-	//inputZ = lerp(prevInputZ, inputZ, 0.5);
-	// Annnnd Cache
-	//prevInputX = inputX;
-	//prevInputZ = inputZ;
-	// BUG: ^^ Adding this naive smoothing caused you a jump with no movement after a jump *with* movement
-	// to cause you to jump in the direction you were moving for that previous jump
 
 	// Placeholder - instead of rocket launcher spawn impulse on mouse down
 	if (Fury.Input.mouseDown(0, true)) {
@@ -667,15 +666,10 @@ var loop = function(){
 
 			initialLaunchXZSpeed = Math.sqrt(launchVelocity[0] * launchVelocity[0] + launchVelocity[2] * launchVelocity[2]);
 
-			vec3.add(airVelocity, airVelocity, launchVelocity);
+			vec3.add(velocity, velocity, launchVelocity);
 
-			// Note because we're putting launch force directly into air velocioty
-			// we can over time negate it using air movement, if air movement is high,
-			// this makes reasonable physical sense but requires slow cummuative air movement
-			// without capping to 'feel' okay
-			if (grounded && launchVelocity[1] > 0) {
+			if (grounded && velocity[1] > 0) {
 				grounded = false;
-				// TODO: Allow push along the floor
 			}
 		}
 	}
@@ -684,20 +678,20 @@ var loop = function(){
 	for (let i = 0, l = triggerVolumes.length; i < l; i++) {
 		triggerVolumes[i].update(elapsed);
 		if (triggerVolumes[i].tryIntersectBox(playerBox)) {
-			// TODO: I wonder if set is better if grounded, only retain air velocity if already in the air?
-			// Probably - also lets change this to velocity due to external forces then put air velocity back in
-			// and have grounded launch movement work to that (i.e. you can arrest velocity due to your own movement)
+
 			launchVelocity[0] += triggerVolumes[i].angle[0] * triggerVolumes[i].speed;
 			launchVelocity[1] += triggerVolumes[i].angle[1] * triggerVolumes[i].speed;
 			launchVelocity[2] += triggerVolumes[i].angle[2] * triggerVolumes[i].speed;
 
 			initialLaunchXZSpeed = Math.sqrt(launchVelocity[0] * launchVelocity[0] + launchVelocity[2] * launchVelocity[2]);
 
-			vec3.add(airVelocity, airVelocity, launchVelocity);
+			vec3.add(velocity, velocity, launchVelocity);
+			// TODO: I wonder if set is better if grounded, only retain velocity if in the air
+			// Probably - also lets change this to velocity due to external forces then put air velocity back in
+			// and have grounded launch movement work to that (i.e. you can arrest velocity due to your own movement)
 
-			if (grounded && launchVelocity[1] > 0) {
+			if (grounded && velocity[1] > 0) {
 				grounded = false;
-				// TODO: Allow push along the floor!
 			}
 		}
 	}
@@ -712,8 +706,46 @@ var loop = function(){
 
 	// Calculate Target Position
 	if (grounded) {
-		vec3.scaleAndAdd(targetPosition, targetPosition, localZ, movementSpeed * elapsed * inputZ);
-		vec3.scaleAndAdd(targetPosition, targetPosition, localX, movementSpeed * elapsed * inputX);
+		vec3.zero(inputVector);
+		vec3.scaleAndAdd(inputVector, inputVector, localX, inputX);
+		vec3.scaleAndAdd(inputVector, inputVector, localZ, inputZ);
+
+		// Accelerate
+		velocity[0] += acceleration * elapsed * inputVector[0];
+		velocity[2] += acceleration * elapsed * inputVector[2];
+
+		// Apply Friction
+		let groundSpeed = Math.sqrt(velocity[0] * velocity[0] + velocity[2] * velocity[2]);
+		let frictionFactor = 2.5;	// Compeltely arbitary factor
+		let frictionDv = groundSpeed * groundSpeed * frictionFactor * elapsed;
+
+		if (frictionDv > groundSpeed) console.error("Calculated Drag greater than speed");
+		frictionDv = Math.min(groundSpeed, frictionDv);
+
+		let ySpeed = velocity[1];
+		velocity[1] = 0;
+		if (groundSpeed > movementSpeed) {
+			// Clamp to movementSpeed
+			vec3.scale(velocity, velocity, movementSpeed / groundSpeed);
+		} else if (!inputX && !inputZ) {
+			// Not sure if this is a good idea or not
+			// (only applying friction when not moving,
+			// if applying whilst moving makes it hard to have enough friction to stop quickly, without impacting top speed,
+			// arguably could / should have a deceleration amount)
+			if( groundSpeed <= stopSpeed) {
+				// Stop below a certain speed if not trying to move
+				vec3.zero(velocity);
+			} else if (groundSpeed != 0) {
+				// Apply Friction
+				vec3.scale(velocity, velocity, (groundSpeed - frictionDv) / groundSpeed);
+			} else {
+				vec3.zero(velocity);
+			}
+		}
+		velocity[1] = ySpeed;
+
+		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, velocity[0] * elapsed);
+		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, velocity[2] * elapsed);
 	} else {
 		// Apply Drag
 		// F(drag) = (1/2)pvvC(drag)A
@@ -730,14 +762,14 @@ var loop = function(){
 
 		// TODO: Also do this in water with much bigger coefficent
 
-		let airSpeed = vec3.length(airVelocity);
-		let dragDv = (airSpeed * airSpeed * 1.225 * elapsed) / (2 * 100);	// Assumes air and mass of 100kg, crag coefficent of ~1 and surface area ~1 (it's probably less)
+		let airSpeed = vec3.length(velocity);
+		let dragDv = (airSpeed * airSpeed * 1.225 * elapsed) / (2 * 100);	// Assumes air and mass of 100kg, drag coefficent of ~1 and surface area ~1 (it's probably less)
 		// ^^ Technically surface area is different based on direction, so maybe should break down vertical against others
 		// Update Air Velocity
 		if (airSpeed !== 0) {
-			vec3.scale(airVelocity, airVelocity, (airSpeed - dragDv) / airSpeed);
+			vec3.scale(velocity, velocity, (airSpeed - dragDv) / airSpeed);
 		} else {
-			vec3.zero(airVelocity);
+			vec3.zero(velocity);
 		}
 		if (airSpeed < dragDv) {
 			// NOT sure if this is possible now but it clearly was when I had a bug in my code! (wasn't multiplying by dt)
@@ -755,34 +787,69 @@ var loop = function(){
 		// of this caculation
 
 		// Add air movement velocity to current movement velocity
-		// but clamped to a circle around launchVelocity of radius maxAirMovementSpeed
+		// but clamped to a circle around launchVelocity of radius airMovementSpeed
 		// (maxAirMovementSpeed is actually max air speed of component due to input)
-		let airMinX = launchVelocity[0] - maxAirMovementSpeed;
-		let airMaxX = launchVelocity[0] + maxAirMovementSpeed;
-		airVelocity[0] = clamp(airVelocity[0] + airMovementSpeed * inputVector[0], airMinX, airMaxX);
-		let airMinZ = launchVelocity[2] - maxAirMovementSpeed;
-		let airMaxZ = launchVelocity[2] + maxAirMovementSpeed;
-		airVelocity[2] = clamp(airVelocity[2] + airMovementSpeed * inputVector[2], airMinZ, airMaxZ);
+		let airMinX = launchVelocity[0] - airMovementSpeed;
+		let airMaxX = launchVelocity[0] + airMovementSpeed;
+		velocity[0] = clamp(velocity[0] + airAcceleration * elapsed * inputVector[0], airMinX, airMaxX);
+		let airMinZ = launchVelocity[2] - airMovementSpeed;
+		let airMaxZ = launchVelocity[2] + airMovementSpeed;
+		velocity[2] = clamp(velocity[2] + airAcceleration * elapsed * inputVector[2], airMinZ, airMaxZ);
 		// ^^ This overrides drag... which isn't good... maybe min max should adjust
 		// or we should apply drag to launchVelocity too
-		// This isn't right - if we don't put launch velocity when jumping you get clamped wierdly
-		// If you do, you can accelerate your jumps ... perhaps we should have an isLaunched bool
-		// and react differently in each case, as horrible as that seems
 
-		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, airVelocity[0] * elapsed);
-		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, airVelocity[2] * elapsed);
+		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, velocity[0] * elapsed);
+		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, velocity[2] * elapsed);
 		// Note air velocity is set to moved distance later (post collision checks)
 	}
 
-	// TODO: Separate this next section into modules as per Vorld-decay
-	// just keep them in the same file so we don't need to use browserify in demos
+	// XZ Move
+	characterMoveXZ(elapsed);
+
+	// Cache X-Z movement
+	velocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
+	velocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
+
+	if (grounded && Fury.Input.keyDown("Space", true)) {	// TODO: Grace time (both if you land soon after and soon after you've left the ground)
+		grounded = false;
+		vec3.zero(launchVelocity);
+		// Apply Jump Velocity!
+		velocity[1] = jumpDeltaV;
+
+	} else {	// Attempt to move down anyway (basically check for grounded if not grounded || jumping)
+		velocity[1] -= gravity * elapsed; // Increased gravity because games
+	}
+
+	// So the entered checks allow you to move out of objects you're clipping with
+	// the lack here means that if you're overlapping with something you fall through the floor
+
+	// Y Move
+	characterMoveY(elapsed);
+
+	// Smoothly move the camera - no jerks from sudden movement please!
+	// Technically displacement isn't the issue, it's acceleration
+	// Arguably the change due to falling if there is any, we should just do,
+	// as that should always be smooth
+	vec3.copy(cameraTargetPosition, playerPosition);
+	vec3.scaleAndAdd(cameraTargetPosition, cameraTargetPosition, Maths.vec3Y, 0.5);	// 0.5 offset
+	if (vec3.squaredLength(cameraTargetPosition) < 0.1) {
+		vec3.copy(camera.position, cameraTargetPosition);	// TODO: an offset from player position please
+	} else {
+		vec3.lerp(camera.position, camera.position, cameraTargetPosition, 0.25);
+	}
+
+	scene.render();
+
+	Fury.Input.handleFrameFinished();
+	window.requestAnimationFrame(loop);
+};
+
+let characterMoveXZ = (elapsed) => {
+	let collision = false, useBox = true;
 
 	// Move player to new position for physics checks
 	vec3.copy(playerPosition, targetPosition);
 
-	let collision = false, useBox = true;
-
-	// This is basically character controller move
 	if (useBox) {
 		// playerBox.center has changed because it's set to the playerPosition ref
 		playerBox.calculateMinMax(playerBox.center, playerBox.extents);
@@ -899,38 +966,15 @@ var loop = function(){
 		}
 	}
 	// Also need to support steps and slopes
+};
 
+let characterMoveY = (elapsed) => {
 	// Now lets do it again for gravity / grounded
-	collision = false;
-	if (grounded && Fury.Input.keyDown("Space", true)) {	// TODO: Grace time (both if you land soon after and soon after you've left the ground)
-		grounded = false;
-		// Cache X-Z movement as airspeed
-		airVelocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
-		airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
-		// vec3.copy(launchVelocity, airVelocity);
-		vec3.zero(launchVelocity);
-		// Apply Jump Velocity!
-		airVelocity[1] = jumpDeltaV;
+	let collision = false, useBox = true;
 
-	} else {	// Attempt to move down anyway (basically check for grounded if not grounded || jumping)
-		airVelocity[1] -= gravity * elapsed; // Increased gravity because games
-
-		// Cache X-Z movement as airspeed
-		airVelocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
-		airVelocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
-
-		// If want 'external forces' approach need to make sure we do not store it in
-		// airVelocity *or* only set airVelocity at this point to 0 when movement has been
-		// stopped when not grounded, rather than setting always setting it to distance moved
-		// over time.
-	}
-
-	// So the entered checks allow you to move out of objects you're clipping with
-	// the lack here means that if you're overlapping with something you fall through the floor
-
-	// Another Character Controller Move
 	vec3.copy(lastPosition, playerPosition);
-	vec3.scaleAndAdd(playerPosition, playerPosition, Maths.vec3Y, airVelocity[1] * elapsed);
+	vec3.scaleAndAdd(playerPosition, playerPosition, Maths.vec3Y, velocity[1] * elapsed);
+
 	if (useBox) {
 		// playerBox.center has changed because it's set to the playerPosition ref
 		playerBox.calculateMinMax(playerBox.center, playerBox.extents);
@@ -957,7 +1001,7 @@ var loop = function(){
 		// need list of overlapping colliders though
 
 		vec3.copy(playerPosition, lastPosition);
-		if (airVelocity[1] < 0) {
+		if (velocity[1] <= 0) {
 			// Only external forces currently set initial launch speed
 			// so if we're grounded ensure launch speed is zero (another event could)
 			// set it to a non-zero value even if we're grounded
@@ -974,28 +1018,13 @@ var loop = function(){
 			grounded = true;
 			// ^^ TODO: Need to convert this into isGrounded check, and will need to
 			// change dx / dz to be against slopes if/when we introduce them
+
+			// BUG: This isn't always being set to true
 		}
-		airVelocity[1] = 0;
-	} else if (grounded && airVelocity[1] < 0) {
+		velocity[1] = 0;
+	} else if (grounded && velocity[1] < 0) {
 		grounded = false;
 	}
-
-	// Smoothly move the camera - no jerks from sudden movement please!
-	// Technically displacement isn't the issue, it's acceleration
-	// Arguably the change due to falling if there is any, we should just do,
-	// as that should always be smooth
-	vec3.copy(cameraTargetPosition, playerPosition);
-	vec3.scaleAndAdd(cameraTargetPosition, cameraTargetPosition, Maths.vec3Y, 0.5);	// 0.5 offset
-	if (vec3.squaredLength(cameraTargetPosition) < 0.1) {
-		vec3.copy(camera.position, cameraTargetPosition);	// TODO: an offset from player position please
-	} else {
-		vec3.lerp(camera.position, camera.position, cameraTargetPosition, 0.25);
-	}
-
-	scene.render();
-
-	Fury.Input.handleFrameFinished();
-	window.requestAnimationFrame(loop);
 };
 
 // Create Texture
