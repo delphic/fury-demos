@@ -112,39 +112,40 @@ var shader = Fury.Shader.create({
 });
 
 var unlitColorShader = Fury.Shader.create({
-	 vsSource: [
+	vsSource: [
 		"attribute vec3 aVertexPosition;",
 
 		"uniform mat4 uMVMatrix;",
 		"uniform mat4 uPMatrix;",
 
 		"void main(void) {",
-			 "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
+			"gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
 		"}"
-		].join('\n'),
-		fsSource: [
-			"precision mediump float;",
+	].join('\n'),
+	fsSource: [
+		"precision mediump float;",
 
-			"uniform vec3 uColor;",
+		"uniform vec3 uColor;",
 
-			"void main(void) {",
-				 "gl_FragColor = vec4(uColor, 1.0);",
-			"}"].join('\n'),
-		attributeNames: [ "aVertexPosition", ],
-		uniformNames: [ "uMVMatrix", "uPMatrix", "uColor" ],
-		pMatrixUniformName: "uPMatrix",
-		mvMatrixUniformName: "uMVMatrix",
-		bindMaterial: function(material) {
-			this.enableAttribute("aVertexPosition");
-			this.setUniformFloat3("uColor", material.color[0], material.color[1], material.color[2]);
-			// TOOD: ^^ A method to call when creating materials from the shader definition
-			// to ensure they have any additional properties might be nice
-		},
-		bindBuffers: function(mesh) {
-			this.setAttribute("aVertexPosition", mesh.vertexBuffer);
-			this.setIndexedAttribute(mesh.indexBuffer);
-		}
-	});
+		"void main(void) {",
+			"gl_FragColor = vec4(uColor, 1.0);",
+		"}"
+	].join('\n'),
+	attributeNames: [ "aVertexPosition", ],
+	uniformNames: [ "uMVMatrix", "uPMatrix", "uColor" ],
+	pMatrixUniformName: "uPMatrix",
+	mvMatrixUniformName: "uMVMatrix",
+	bindMaterial: function(material) {
+		this.enableAttribute("aVertexPosition");
+		this.setUniformFloat3("uColor", material.color[0], material.color[1], material.color[2]);
+		// TOOD: ^^ A method to call when creating materials from the shader definition
+		// to ensure they have any additional properties might be nice
+	},
+	bindBuffers: function(mesh) {
+		this.setAttribute("aVertexPosition", mesh.vertexBuffer);
+		this.setIndexedAttribute(mesh.indexBuffer);
+	}
+});
 
 var material = Fury.Material.create({ shader : shader });
 var redMaterial = Fury.Material.create({ shader: unlitColorShader });
@@ -268,6 +269,16 @@ var createCuboid = function(w, h, d, x, y, z, material) {
 	// Add to scene and physics world
 	world.boxes.push(box);
 	return scene.add({ material: material, mesh: mesh, position: position, static: true });
+};
+
+let createDebugText = function() {
+	let p = document.createElement("p");
+	document.body.appendChild(p);
+
+	p.style = "position: absolute; top: 0; right: 0; font-size: 32px; font-family: monospace; color: white; padding: 5px; margin: 0;";
+	p.textContent = "Test!";
+
+	return p;
 };
 
 // Quick and Dirty .map file loader
@@ -482,6 +493,8 @@ let playerPosition = vec3.clone(camera.position);
 let playerSphere = Physics.Sphere.create({ center: playerPosition, radius: 1.0 });
 let playerBox = Physics.Box.create({ center: playerPosition, size: vec3.fromValues(0.5, 2, 0.5) });
 
+let debugText = createDebugText();
+
 let triggerVolumes = [];
 
 let localX = vec3.create(), localZ = vec3.create();
@@ -517,7 +530,7 @@ let localForward = vec3.create();
 let hitPoint = vec3.create();
 let temp = vec3.create();
 
-let debugCube = createDebugCube(vec3.fromValues(0.1,0.1,0.1), hitPoint);	// Using hitpoint so it moves to where-ever last hit!
+// let debugCube = createDebugCube(vec3.fromValues(0.1,0.1,0.1), hitPoint);	// Using hitpoint so it moves to where-ever last hit!
 
 // Mouse look / pointer lock
 let mouseLookSpeed = 0.1;
@@ -654,11 +667,9 @@ var loop = function(){
 		vec3.negate(localForward, localForward); // point it away from facing direction again
 
 		if (hit) {
-			// Note this is fine because cast is from CoM but if cast is from somewhere else
-			// would need to recaculate this distance to hit point
-			// !! TODO: Do this recalculation, want it to be closest point on hit box to that hit point
-			// (i.e. if you shoot at your feet you should be launched as far as shooting in front of your face)
-			// Just based on foot position would be an improvement (rather than closest point on box)
+			// Calculate closest point on box
+			closestDistance = Physics.Box.rayCast(temp, hitPoint, localForward, playerBox);
+
 			let velocityDelta = rocketDeltaV / (1 + closestDistance * closestDistance);	// 1 / (1 + dist) so rocketDeltaV is max velocity delta
 			launchVelocity[0] += localForward[0] * velocityDelta;
 			launchVelocity[2] += localForward[2] * velocityDelta;
@@ -798,6 +809,9 @@ var loop = function(){
 		// ^^ This overrides drag... which isn't good... maybe min max should adjust
 		// or we should apply drag to launchVelocity too
 
+		// q3a testing - it feels like some jump pads have no clamping at all and allow free movement
+		// whereas some are almost launch rails and you're stuck at whatever your initial velocity is until you land
+
 		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, velocity[0] * elapsed);
 		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, velocity[2] * elapsed);
 		// Note air velocity is set to moved distance later (post collision checks)
@@ -836,6 +850,11 @@ var loop = function(){
 		vec3.copy(camera.position, cameraTargetPosition);	// TODO: an offset from player position please
 	} else {
 		vec3.lerp(camera.position, camera.position, cameraTargetPosition, 0.25);
+	}
+
+	if (debugText) {
+		// Show X-Z Velocity
+		debugText.textContent = Math.sqrt(velocity[0] * velocity[0] + velocity[2] * velocity[2]).toFixed(2);
 	}
 
 	scene.render();
