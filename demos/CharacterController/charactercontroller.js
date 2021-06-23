@@ -793,24 +793,16 @@ var loop = function(){
 		vec3.scaleAndAdd(inputVector, inputVector, localX, inputX);
 		vec3.scaleAndAdd(inputVector, inputVector, localZ, inputZ);
 
-		// If we wanted to keep forces external and not arrestable by air movement
-		// this where we would transfer it to a new variable and sure that in the remainder
-		// of this caculation
+		// Lets do more simple and try just "you can deccelerate but not accelerate in air"
+		let targetX = velocity[0] + airAcceleration * elapsed * inputVector[0];
+		let targetZ = velocity[2] + airAcceleration * elapsed * inputVector[2];
 
-		// Add air movement velocity to current movement velocity
-		// but clamped to a circle around launchVelocity of radius airMovementSpeed
-		// (maxAirMovementSpeed is actually max air speed of component due to input)
-		let airMinX = launchVelocity[0] - airMovementSpeed;
-		let airMaxX = launchVelocity[0] + airMovementSpeed;
-		velocity[0] = clamp(velocity[0] + airAcceleration * elapsed * inputVector[0], airMinX, airMaxX);
-		let airMinZ = launchVelocity[2] - airMovementSpeed;
-		let airMaxZ = launchVelocity[2] + airMovementSpeed;
-		velocity[2] = clamp(velocity[2] + airAcceleration * elapsed * inputVector[2], airMinZ, airMaxZ);
-		// ^^ This overrides drag... which isn't good... maybe min max should adjust
-		// or we should apply drag to launchVelocity too
-
-		// q3a testing - it feels like some jump pads have no clamping at all and allow free movement
-		// whereas some are almost launch rails and you're stuck at whatever your initial velocity is until you land
+		if (Math.abs(targetX) < Math.abs(velocity[0])) {
+			velocity[0] = targetX;
+		}
+		if (Math.abs(targetZ) < Math.abs(velocity[2])) {
+			velocity[2] = targetZ;
+		}
 
 		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, velocity[0] * elapsed);
 		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, velocity[2] * elapsed);
