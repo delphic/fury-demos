@@ -497,6 +497,18 @@ let debugText = createDebugText();
 
 let triggerVolumes = [];
 
+let collisionsBuffer = [];	// used to store reference to the world boxes which were collided with
+let collisionsBufferHitInfo = {
+	enteredX: [],
+	enteredY: [],
+	enteredZ: [],
+	timeX: [],
+	timeY: [],
+	timeZ: []
+};	// Used to store detailed hit information on collision buffer
+let minHitInfo = {};	// Used to store minimum times and indices
+// TODO: Could combine these ^^
+
 let localX = vec3.create(), localZ = vec3.create();
 let lastPosition = vec3.create();
 let targetPosition = vec3.create();	// Would be nice to have a pool we could use.
@@ -505,14 +517,10 @@ let cameraTargetPosition = vec3.create();
 let acceleration = 100;
 let movementSpeed = 8;
 let stopSpeed = 2;
-let airMovementSpeed = 8;
+let airMovementSpeed = 4;
 let airAcceleration = 10;
 
 let lookSpeed = 1;
-let prevInputX = 0, prevInputZ = 0;
-// TODO: Add key down (key up) time tracking to Fury for more complex input logic
-// (and framerate independent smoothing) but you have to tell it to track the keys
-// rather than it just tracking everything?
 
 // DeltaVs need to be instanteously applied (impulse / mass)
 // They make no sense over multiple frames
@@ -671,13 +679,12 @@ var loop = function(){
 			closestDistance = Physics.Box.rayCast(temp, hitPoint, localForward, playerBox);
 
 			let velocityDelta = rocketDeltaV / (1 + closestDistance * closestDistance);	// 1 / (1 + dist) so rocketDeltaV is max velocity delta
-			launchVelocity[0] += localForward[0] * velocityDelta;
-			launchVelocity[2] += localForward[2] * velocityDelta;
-			launchVelocity[1] += localForward[1] * velocityDelta;
+			vec3.zero(temp);
+			vec3.scaleAndAdd(temp, temp, localForward, velocityDelta);
+			vec3.add(velocity, velocity, temp);
 
+			vec3.add(launchVelocity, launchVelocity, temp);
 			initialLaunchXZSpeed = Math.sqrt(launchVelocity[0] * launchVelocity[0] + launchVelocity[2] * launchVelocity[2]);
-
-			vec3.add(velocity, velocity, launchVelocity);
 
 			if (grounded && velocity[1] > 0) {
 				grounded = false;
@@ -689,17 +696,14 @@ var loop = function(){
 	for (let i = 0, l = triggerVolumes.length; i < l; i++) {
 		triggerVolumes[i].update(elapsed);
 		if (triggerVolumes[i].tryIntersectBox(playerBox)) {
+			vec3.zero(temp);
+			vec3.scaleAndAdd(temp, temp, triggerVolumes[i].angle, triggerVolumes[i].speed);
+			vec3.add(velocity, velocity, temp); 
+			// ^^ This needs work to feel like a good launch pad
+			// arguably should arrest all negative y velocity, and potentially arrest some or all x/z velocity 
 
-			launchVelocity[0] += triggerVolumes[i].angle[0] * triggerVolumes[i].speed;
-			launchVelocity[1] += triggerVolumes[i].angle[1] * triggerVolumes[i].speed;
-			launchVelocity[2] += triggerVolumes[i].angle[2] * triggerVolumes[i].speed;
-
+			vec3.add(launchVelocity, launchVelocity, temp);
 			initialLaunchXZSpeed = Math.sqrt(launchVelocity[0] * launchVelocity[0] + launchVelocity[2] * launchVelocity[2]);
-
-			vec3.add(velocity, velocity, launchVelocity);
-			// TODO: I wonder if set is better if grounded, only retain velocity if in the air
-			// Probably - also lets change this to velocity due to external forces then put air velocity back in
-			// and have grounded launch movement work to that (i.e. you can arrest velocity due to your own movement)
 
 			if (grounded && velocity[1] > 0) {
 				grounded = false;
@@ -725,20 +729,23 @@ var loop = function(){
 		velocity[0] += acceleration * elapsed * inputVector[0];
 		velocity[2] += acceleration * elapsed * inputVector[2];
 
-		// Apply Friction
 		let groundSpeed = Math.sqrt(velocity[0] * velocity[0] + velocity[2] * velocity[2]);
-		let frictionFactor = 2.5;	// Compeltely arbitary factor
-		let frictionDv = groundSpeed * groundSpeed * frictionFactor * elapsed;
-
-		if (frictionDv > groundSpeed) console.error("Calculated Drag greater than speed");
-		frictionDv = Math.min(groundSpeed, frictionDv);
 
 		let ySpeed = velocity[1];
 		velocity[1] = 0;
 		if (groundSpeed > movementSpeed) {
 			// Clamp to movementSpeed
+			// TODO: Switch to be like air movement, only allow deceleration if above movement speed, that way you can be pushed along the ground
+			// Note the same precise code as air movement probably won't work current as friction not applied when trying to run
 			vec3.scale(velocity, velocity, movementSpeed / groundSpeed);
 		} else if (!inputX && !inputZ) {
+			// Apply Friction
+			let frictionFactor = 2.5;	// Compeltely arbitary factor
+			let frictionDv = groundSpeed * groundSpeed * frictionFactor * elapsed;
+	
+			if (frictionDv > groundSpeed) console.error("Calculated Drag greater than speed");
+			frictionDv = Math.min(groundSpeed, frictionDv);
+
 			// Not sure if this is a good idea or not
 			// (only applying friction when not moving,
 			// if applying whilst moving makes it hard to have enough friction to stop quickly, without impacting top speed,
@@ -793,14 +800,15 @@ var loop = function(){
 		vec3.scaleAndAdd(inputVector, inputVector, localX, inputX);
 		vec3.scaleAndAdd(inputVector, inputVector, localZ, inputZ);
 
-		// Lets do more simple and try just "you can deccelerate but not accelerate in air"
 		let targetX = velocity[0] + airAcceleration * elapsed * inputVector[0];
 		let targetZ = velocity[2] + airAcceleration * elapsed * inputVector[2];
 
-		if (Math.abs(targetX) < Math.abs(velocity[0])) {
+		// Lets try a much more simple, can only decelerate if above airMovementSpeed
+		let canAccelerate = targetX * targetX + targetZ * targetZ < airMovementSpeed * airMovementSpeed;
+		if (canAccelerate || Math.abs(targetX) < Math.abs(velocity[0])) {
 			velocity[0] = targetX;
 		}
-		if (Math.abs(targetZ) < Math.abs(velocity[2])) {
+		if (canAccelerate || Math.abs(targetZ) < Math.abs(velocity[2])) {
 			velocity[2] = targetZ;
 		}
 
@@ -855,128 +863,213 @@ var loop = function(){
 	window.requestAnimationFrame(loop);
 };
 
-let characterMoveXZ = (elapsed) => {
-	let collision = false, useBox = true;
-
+let movePlayer = (targetPosition) => {
 	// Move player to new position for physics checks
 	vec3.copy(playerPosition, targetPosition);
+	// playerBox.center has changed because it's set to the playerPosition ref
+	playerBox.calculateMinMax(playerBox.center, playerBox.extents);
+};
 
-	if (useBox) {
-		// playerBox.center has changed because it's set to the playerPosition ref
-		playerBox.calculateMinMax(playerBox.center, playerBox.extents);
-	}
-
-	// We used to have the collision handling outside the loop, but has we need to continue
-	// the loops I moved it inside, a world collision method which returned a list of boxes
-	// that overlapped would be acceptable.
-	// TODO: look at vorld-decay's voxel collision code, it doesn't get stuck on adjacent voxels
-	// like this code can with adjancent boxes.
-	let stepCount = 0, stepX = false, stepZ = false;
+let checkForPlayerCollisions = (result, elapsed) => {
+	let overlapCount = 0;
+	let minXTime = elapsed + 1, minYTime = elapsed + 1, minZTime = elapsed + 1;
+	let minXIndex = -1, minYIndex = -1, minZIndex = -1;
+	
 	for (let i = 0, l = world.boxes.length; i < l; i++) {
-		if (useBox) {
-			if (Physics.Box.intersect(playerBox, world.boxes[i])) {
-				collision = true;
+		if (Physics.Box.intersect(playerBox, world.boxes[i])) {
+			collisionsBuffer[overlapCount] = world.boxes[i];
 
-				// Check each axis individually and only stop movement on those which changed from
-				// not overlapping to overlapping. In theory we should calculate distance and move
-				// up to it for high speeds, however we'd probably want a skin depth, for the speeds
-				// we're travelling, just stop is probably fine
-				// BUG: You can get stuck on corners of flush surfaces when sliding along them
-				// Should be resolvable if we find all colliding boxes first then respond with full information
-				if (Physics.Box.enteredX(world.boxes[i], playerBox, playerPosition[0] - lastPosition[0])) {
-					let separation = world.boxes[i].max[1] - playerBox.min[1];
-					if (stepCount == 0 && !stepX && separation <= stepHeight) {
-						// Step!
-						stepCount = 1;
-						stepX = true;
-						playerPosition[1] += separation;
-					} else {
-						playerPosition[0] = lastPosition[0];
-						if (stepX) {
-							// If have stepping in this direction already cancel
-							playerPosition[1] = lastPosition[1];
-						}
-					}
+			// Calculate collision time and which axis
+			let delta = playerPosition[0] - lastPosition[0];
+			if (Math.abs(delta) > 0 && Physics.Box.enteredX(world.boxes[i], playerBox, delta)) {
+				collisionsBufferHitInfo.enteredX[overlapCount] = true;
+				let distance = 0;
+				if (delta > 0) {
+					// player max crossed box min
+					distance = delta - (playerBox.max[0] - world.boxes[i].min[0]);
+				} else {
+					// player min crossed box max
+					distance = -delta - (world.boxes[i].max[0] - playerBox.min[0]);
 				}
-				if (Physics.Box.enteredZ(world.boxes[i], playerBox, playerPosition[2] - lastPosition[2])) {
-					let separation = world.boxes[i].max[1] - playerBox.min[1];
-					if (stepCount == 0 && separation <= stepHeight) {
-						// Step!
-						stepCount = 1;
-						stepZ = true;
-						playerPosition[1] += separation;
-					} else {
-						playerPosition[2] = lastPosition[2];
-						if (stepZ) {
-							// If have stepped in this direction already cancel
-							playerPosition[1] = lastPosition[1];
-						}
-					}
+				let time = distance / Math.abs(delta / elapsed);
+				collisionsBufferHitInfo.timeX[overlapCount] = time;
+				
+				if (time < minXTime) {
+					minXTime = time;
+					minXIndex = overlapCount;
 				}
-				// Whilst we're only moving on x-z atm but if we change to fly camera we'll need this
-				if (Physics.Box.enteredY(world.boxes[i], playerBox, playerPosition[1] - lastPosition[1])) {
-					playerPosition[1] = lastPosition[1];
-					// TODO: If stepped should reset those too?
+			} else {
+				collisionsBufferHitInfo.enteredX[overlapCount] = false;
+				collisionsBufferHitInfo.timeX[overlapCount] = 0;
+			}
+
+			delta = playerPosition[1] - lastPosition[1];
+			if (Math.abs(delta) > 0 && Physics.Box.enteredY(world.boxes[i], playerBox, delta)) {
+				collisionsBufferHitInfo.enteredY[overlapCount] = true;
+				let distance = 0;
+				if (delta > 0) {
+					distance = delta - (playerBox.max[1] - world.boxes[i].min[1]);
+				} else {
+					distance = -delta - (world.boxes[i].max[1] - playerBox.min[1]);
 				}
 
-				// Note this only works AABB, for OOBB and other colliders we'd probably need to get
-				// impact normal and then convert the movement to be perpendicular, and if there's multiple
-				// collider collisions... ?
+				let time = distance / Math.abs(delta / elapsed);
+				collisionsBufferHitInfo.timeZ[overlapCount] = time;
 
-				// Update target position and box bounds for future checks
-				vec3.copy(targetPosition, playerPosition);
-				playerBox.calculateMinMax(playerBox.center, playerBox.extents);
-
-				// TODO: if we've changed target y position because of steps we should technically re-evaluate all boxes on y axis
-				// If collider and they are above us we should remove the step and cancel the x/z movement as appropriate
-
-				// Have to check other boxes cause still moving, so no break - technically we could track which
-				// axes we'd collided on and not check those in future if we wanted to try to optimize.
-				// Also could break if all axes we moved in had returned true
-				// Could also only check axes we were actually moving in
-			}
-		} else if (Physics.Box.intersectSphere(playerSphere, world.boxes[i])) {
-			collision = true;
-			vec3.copy(playerPosition, lastPosition);
-
-			// Does it even make sense to step with a sphere collider?
-
-			// Check Axis by Axis
-			let didOverlap, nowOverlap;
-			didOverlap = Physics.Box.intersectSphere(playerSphere, world.boxes[i]);
-
-			camera.position[0] = targetPosition[0];
-			nowOverlap = Physics.Box.intersectSphere(playerSphere, world.boxes[i]);
-			if (!didOverlap && nowOverlap) {
-				// Stop movement in axis
-				playerPosition[0] = lastPosition[0];
+				if (time < minYTime) {
+					minYTime = time;
+					minYIndex = overlapCount;
+				}
+			} else {
+				collisionsBufferHitInfo.enteredY[overlapCount] = false;
+				collisionsBufferHitInfo.timeY[overlapCount] = 0;
 			}
 
-			camera.position[1] = targetPosition[1];
-			// Don't have to reset other axis points because we're testing axis by axis
-			nowOverlap = Physics.Box.intersectSphere(playerSphere, world.boxes[i]);
-			if (!didOverlap && nowOverlap) {
-				// Stop movement in axis
-				playerPosition[1] = lastPosition[1];
+			delta = playerPosition[2] - lastPosition[2];
+			if (Math.abs(delta) > 0 && Physics.Box.enteredZ(world.boxes[i], playerBox, delta)) {
+				collisionsBufferHitInfo.enteredZ[overlapCount] = true;
+				let distance = 0;
+				if (delta > 0) {
+					distance = delta - (playerBox.max[2] - world.boxes[i].min[2]);
+				} else {
+					distance = -delta - (world.boxes[i].max[2] - playerBox.min[2]);
+				}
+				let time = distance / Math.abs(delta / elapsed);
+				collisionsBufferHitInfo.timeZ[overlapCount] = time;
+
+				if (time < minZTime) {
+					minZTime = time;
+					minZIndex = overlapCount;
+				}
+			} else {
+				collisionsBufferHitInfo.enteredZ[overlapCount] = false;
+				collisionsBufferHitInfo.timeZ[overlapCount] = 0;	
 			}
 
-			camera.position[2] = targetPosition[2];
-			nowOverlap = Physics.Box.intersectSphere(playerSphere, world.boxes[i]);
-			if (!didOverlap && nowOverlap) {
-				// Stop movement in axis
-				playerPosition[2] = lastPosition[2];
-			}
-
-			// Update target position for future checks
-			vec3.copy(targetPosition, playerPosition);
-
-			// Have to check other boxes cause still moving, so no break - technically we could track which
-			// axes we'd collided on and not check those in future if we wanted to try to optimize.
-			// Also could break if all axes we moved in had returned true & could also
-			// only check the axises we're moving in
+			overlapCount += 1;
+			// Could check to see if you actually collided or were stuck here
 		}
 	}
-	// Also need to support steps and slopes
+
+	result.minXIndex = minXIndex;
+	result.minYIndex = minYIndex;
+	result.minZIndex = minZIndex;
+	result.minXTime = minXTime;
+	result.minYTime = minYTime;
+	result.minZTime = minZTime;
+	result.overlapCount = overlapCount;
+
+	return overlapCount;
+};
+
+let characterMoveXZ = (elapsed) => {
+	movePlayer(targetPosition);
+	checkForPlayerCollisions(minHitInfo, elapsed);
+
+	let maxStepHeight = playerBox.min[1] + stepHeight; 
+	let resolvedX = minHitInfo.minXIndex == -1, resolvedZ = minHitInfo.minZIndex == -1;
+
+	let minXTime = minHitInfo.minXTime;
+	let minZTime = minHitInfo.minZTime;
+	let minXIndex = minHitInfo.minXIndex;
+	let minZIndex = minHitInfo.minZIndex;
+
+	// Note with all of these we're just stopping rather than 
+	// moving 'up to' the collision.
+	if (!resolvedX && !resolvedZ) {
+		// NOTE: Not bothering with step logic if entering both x and z boxes
+		// because frankly I can't be bothered with the number of permutations
+		if (minXTime < minZTime) {
+			// Try resolve X first
+			let targetX = targetPosition[0];
+			targetPosition[0] = lastPosition[0];
+			movePlayer(targetPosition);
+			checkForPlayerCollisions(minHitInfo, elapsed);
+	
+			if (minHitInfo.minZIndex != -1) {
+				// No sliding along in z direction
+				targetPosition[2] = lastPosition[2];
+	
+				// Try sliding the x instead with no z movement
+				targetPosition[0] = targetX;
+				movePlayer(targetPosition);
+				checkForPlayerCollisions(minHitInfo, elapsed);
+				if (minHitInfo.minXIndex != -1) {
+					// No dice really in a corner
+					targetPosition[0] = lastPosition[0];
+					movePlayer(targetPosition);
+				}
+			}
+		} else {
+			// Try resolve Z first
+			let targetZ = targetPosition[2];
+			targetPosition[2] = lastPosition[2];
+			movePlayer(targetPosition);
+			checkForPlayerCollisions(minHitInfo, elapsed);
+
+			if (minHitInfo.minXIndex != -1) {
+				// No sliding along in x direction
+				targetPosition[0] = lastPosition[0];
+				// Try sliding along z direction instead
+				targetPosition[2] = targetZ;
+				movePlayer(targetPosition);
+				checkForPlayerCollisions(minHitInfo, elapsed, targetPosition);
+				if (minHitInfo.minZIndex != -1) {
+					// No dice really in a corner
+					targetPosition[2] = lastPosition[2];
+					movePlayer(targetPosition);
+				}
+			}
+		}
+	} else if (!resolvedX) {
+		let stepSuccess = false;
+		if (collisionsBuffer[minXIndex].max[1] < maxStepHeight) {
+			// Try step!
+			playerPosition[1] += collisionsBuffer[minXIndex].max[1] - playerBox.min[1];
+			movePlayer(playerPosition); // Update bounds
+			if (checkForPlayerCollisions(minHitInfo, elapsed) == 0) {
+				stepSuccess = true;
+				// Only step if it's completely clear to move to the target spot for ease
+			} else {
+				playerPosition[1] = lastPosition[1];
+			}
+		}
+		
+		if (!stepSuccess) {
+			targetPosition[0] = lastPosition[0];		
+			movePlayer(targetPosition);
+			checkForPlayerCollisions(minHitInfo, elapsed);
+			if (minHitInfo.minZIndex != -1) {
+				// Oh no now that we're not moving in x we're hitting something in z
+				targetPosition[2] = lastPosition[2];
+				movePlayer(targetPosition);
+			}
+		}
+	} else if (!resolvedZ) {
+		let stepSuccess = false;
+		if (collisionsBuffer[minZIndex].max[1] < maxStepHeight) {
+			// Try step!
+			playerPosition[1] += collisionsBuffer[minZIndex].max[1] - playerBox.min[1];
+			movePlayer(playerPosition); // Update bounds
+			if (checkForPlayerCollisions(minHitInfo, elapsed) == 0) {
+				stepSuccess = true;
+				// Only step if it's completely clear to move to the target spot for ease
+			} else {
+				playerPosition[1] = lastPosition[1];
+			}
+		}
+
+		if (!stepSuccess) {
+			targetPosition[2] = lastPosition[2];
+			movePlayer(targetPosition);
+			checkForPlayerCollisions(minHitInfo, elapsed, targetPosition);
+			if (minHitInfo.minXIndex != -1) {
+				// Oh no now that we're not moving in z we're hitting something in x
+				targetPosition[0] = lastPosition[0];
+				movePlayer(targetPosition);
+			}
+		}
+	}
 };
 
 let characterMoveY = (elapsed) => {
