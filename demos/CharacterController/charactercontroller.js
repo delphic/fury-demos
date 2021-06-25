@@ -490,7 +490,6 @@ let TriggerVolume = (function(){
 })();
 
 let playerPosition = vec3.clone(camera.position);
-let playerSphere = Physics.Sphere.create({ center: playerPosition, radius: 1.0 });
 let playerBox = Physics.Box.create({ center: playerPosition, size: vec3.fromValues(0.5, 2, 0.5) });
 
 let debugText = createDebugText();
@@ -1093,13 +1092,11 @@ let loadMapTextures = function() {
 		let textureName = keys[i];
 		images[textureName] = new Image();
 		images[textureName].onload = function() {
-			// Low quality, lets see the pixely glory
-			namedMaterials[textureName].textures["uSampler"] = Fury.Renderer.createTexture(images[textureName], "low");
-			// Scale should be 32 texels per unit
-			namedMaterials[textureName].sScale = 32 / images[textureName].width;
-			namedMaterials[textureName].tScale = 32 / images[textureName].height;
+			namedMaterials[textureName].textures["uSampler"] = Fury.Renderer.createTexture(images[textureName], "pixel");
+			// Scale should be 32 texels per unit (we've increased the source scale by factor 4 to use mipmaps with clear pixels)
+			namedMaterials[textureName].sScale = (4 * 32) / images[textureName].width;
+			namedMaterials[textureName].tScale = (4 * 32) / images[textureName].height;
 
-			// TODO: texture alignment isn't quite right as UVs don't map to world position
 			loadCallback();
 		};
 		images[textureName].src = textureName + ".png";
