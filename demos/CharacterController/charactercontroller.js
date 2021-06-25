@@ -497,17 +497,12 @@ let debugText = createDebugText();
 
 let triggerVolumes = [];
 
-let collisionsBuffer = [];	// used to store reference to the world boxes which were collided with
-let collisionsBufferHitInfo = {
-	enteredX: [],
-	enteredY: [],
-	enteredZ: [],
-	timeX: [],
-	timeY: [],
-	timeZ: []
-};	// Used to store detailed hit information on collision buffer
-let minHitInfo = {};	// Used to store minimum times and indices
-// TODO: Could combine these ^^
+// Used to store collisions, with minimum times and indices
+let playerCollisionInfo = {
+	collisionsBuffer: [],	// used to store reference to the world boxes which were collided with
+	minTime: [],
+	minIndex: []
+};
 
 let localX = vec3.create(), localZ = vec3.create();
 let lastPosition = vec3.create();
@@ -870,109 +865,64 @@ let movePlayer = (targetPosition) => {
 	playerBox.calculateMinMax(playerBox.center, playerBox.extents);
 };
 
-let checkForPlayerCollisions = (result, elapsed) => {
+let checksEnteredAxis = (out, box, axis, collisionIndex, elapsed, enteredPredicate) => {
+	// Checks for minimum against out and writes to it
+	let delta = playerPosition[axis] - lastPosition[axis];
+	if (Math.abs(delta) > 0 && enteredPredicate(box, playerBox, delta)) {
+		let distance = 0;
+		if (delta > 0) {
+			// player max crossed box min
+			distance = delta - (playerBox.max[axis] - box.min[axis]);
+		} else {
+			// player min crossed box max
+			distance = -delta - (box.max[axis] - playerBox.min[axis]);
+		}
+		let time = distance / Math.abs(delta / elapsed);	
+		if (time < out.minTime[axis]) {
+			out.minTime[axis] = time;
+			out.minIndex[axis] = collisionIndex;
+		}
+	}
+};
+
+let checkForPlayerCollisions = (out, elapsed) => {
 	let overlapCount = 0;
-	let minXTime = elapsed + 1, minYTime = elapsed + 1, minZTime = elapsed + 1;
-	let minXIndex = -1, minYIndex = -1, minZIndex = -1;
 	
+	out.minIndex[0] = out.minIndex[1] = out.minIndex[2] = -1;
+	out.minTime[0] = out.minTime[1] = out.minTime[2] = elapsed + 1;
+
 	for (let i = 0, l = world.boxes.length; i < l; i++) {
 		if (Physics.Box.intersect(playerBox, world.boxes[i])) {
-			collisionsBuffer[overlapCount] = world.boxes[i];
+			out.collisionsBuffer[overlapCount] = world.boxes[i];
 
 			// Calculate collision time and which axis
-			let delta = playerPosition[0] - lastPosition[0];
-			if (Math.abs(delta) > 0 && Physics.Box.enteredX(world.boxes[i], playerBox, delta)) {
-				collisionsBufferHitInfo.enteredX[overlapCount] = true;
-				let distance = 0;
-				if (delta > 0) {
-					// player max crossed box min
-					distance = delta - (playerBox.max[0] - world.boxes[i].min[0]);
-				} else {
-					// player min crossed box max
-					distance = -delta - (world.boxes[i].max[0] - playerBox.min[0]);
-				}
-				let time = distance / Math.abs(delta / elapsed);
-				collisionsBufferHitInfo.timeX[overlapCount] = time;
-				
-				if (time < minXTime) {
-					minXTime = time;
-					minXIndex = overlapCount;
-				}
-			} else {
-				collisionsBufferHitInfo.enteredX[overlapCount] = false;
-				collisionsBufferHitInfo.timeX[overlapCount] = 0;
-			}
-
-			delta = playerPosition[1] - lastPosition[1];
-			if (Math.abs(delta) > 0 && Physics.Box.enteredY(world.boxes[i], playerBox, delta)) {
-				collisionsBufferHitInfo.enteredY[overlapCount] = true;
-				let distance = 0;
-				if (delta > 0) {
-					distance = delta - (playerBox.max[1] - world.boxes[i].min[1]);
-				} else {
-					distance = -delta - (world.boxes[i].max[1] - playerBox.min[1]);
-				}
-
-				let time = distance / Math.abs(delta / elapsed);
-				collisionsBufferHitInfo.timeZ[overlapCount] = time;
-
-				if (time < minYTime) {
-					minYTime = time;
-					minYIndex = overlapCount;
-				}
-			} else {
-				collisionsBufferHitInfo.enteredY[overlapCount] = false;
-				collisionsBufferHitInfo.timeY[overlapCount] = 0;
-			}
-
-			delta = playerPosition[2] - lastPosition[2];
-			if (Math.abs(delta) > 0 && Physics.Box.enteredZ(world.boxes[i], playerBox, delta)) {
-				collisionsBufferHitInfo.enteredZ[overlapCount] = true;
-				let distance = 0;
-				if (delta > 0) {
-					distance = delta - (playerBox.max[2] - world.boxes[i].min[2]);
-				} else {
-					distance = -delta - (world.boxes[i].max[2] - playerBox.min[2]);
-				}
-				let time = distance / Math.abs(delta / elapsed);
-				collisionsBufferHitInfo.timeZ[overlapCount] = time;
-
-				if (time < minZTime) {
-					minZTime = time;
-					minZIndex = overlapCount;
-				}
-			} else {
-				collisionsBufferHitInfo.enteredZ[overlapCount] = false;
-				collisionsBufferHitInfo.timeZ[overlapCount] = 0;	
-			}
+			// TODO: Update Physics.Box to have an enteredAxis function
+			checksEnteredAxis(out, world.boxes[i], 0, overlapCount, elapsed, Physics.Box.enteredX);
+			checksEnteredAxis(out, world.boxes[i], 1, overlapCount, elapsed, Physics.Box.enteredY);
+			checksEnteredAxis(out, world.boxes[i], 2, overlapCount, elapsed, Physics.Box.enteredZ);
 
 			overlapCount += 1;
-			// Could check to see if you actually collided or were stuck here
+			// Could record if you actually collided or were stuck here
 		}
 	}
 
-	result.minXIndex = minXIndex;
-	result.minYIndex = minYIndex;
-	result.minZIndex = minZIndex;
-	result.minXTime = minXTime;
-	result.minYTime = minYTime;
-	result.minZTime = minZTime;
-	result.overlapCount = overlapCount;
+	out.overlapCount = overlapCount;
 
 	return overlapCount;
 };
 
 let characterMoveXZ = (elapsed) => {
 	movePlayer(targetPosition);
-	checkForPlayerCollisions(minHitInfo, elapsed);
+	checkForPlayerCollisions(playerCollisionInfo, elapsed);
+
+	let minXTime = playerCollisionInfo.minTime[0];
+	let minZTime = playerCollisionInfo.minTime[2];
+	let minXIndex = playerCollisionInfo.minIndex[0];
+	let minZIndex = playerCollisionInfo.minIndex[2];
+	let collisionsBuffer = playerCollisionInfo.collisionsBuffer;
 
 	let maxStepHeight = playerBox.min[1] + stepHeight; 
-	let resolvedX = minHitInfo.minXIndex == -1, resolvedZ = minHitInfo.minZIndex == -1;
-
-	let minXTime = minHitInfo.minXTime;
-	let minZTime = minHitInfo.minZTime;
-	let minXIndex = minHitInfo.minXIndex;
-	let minZIndex = minHitInfo.minZIndex;
+	let resolvedX = minXIndex == -1, resolvedZ = minZIndex == -1;
 
 	// Note with all of these we're just stopping rather than 
 	// moving 'up to' the collision.
@@ -984,17 +934,17 @@ let characterMoveXZ = (elapsed) => {
 			let targetX = targetPosition[0];
 			targetPosition[0] = lastPosition[0];
 			movePlayer(targetPosition);
-			checkForPlayerCollisions(minHitInfo, elapsed);
+			checkForPlayerCollisions(playerCollisionInfo, elapsed);
 	
-			if (minHitInfo.minZIndex != -1) {
+			if (playerCollisionInfo.minIndex[2] != -1) {
 				// No sliding along in z direction
 				targetPosition[2] = lastPosition[2];
 	
 				// Try sliding the x instead with no z movement
 				targetPosition[0] = targetX;
 				movePlayer(targetPosition);
-				checkForPlayerCollisions(minHitInfo, elapsed);
-				if (minHitInfo.minXIndex != -1) {
+				checkForPlayerCollisions(playerCollisionInfo, elapsed);
+				if (playerCollisionInfo.minIndex[0] != -1) {
 					// No dice really in a corner
 					targetPosition[0] = lastPosition[0];
 					movePlayer(targetPosition);
@@ -1005,16 +955,17 @@ let characterMoveXZ = (elapsed) => {
 			let targetZ = targetPosition[2];
 			targetPosition[2] = lastPosition[2];
 			movePlayer(targetPosition);
-			checkForPlayerCollisions(minHitInfo, elapsed);
+			checkForPlayerCollisions(playerCollisionInfo, elapsed);
 
-			if (minHitInfo.minXIndex != -1) {
+			if (playerCollisionInfo.minIndex[0] != -1) {
 				// No sliding along in x direction
 				targetPosition[0] = lastPosition[0];
+
 				// Try sliding along z direction instead
 				targetPosition[2] = targetZ;
 				movePlayer(targetPosition);
-				checkForPlayerCollisions(minHitInfo, elapsed, targetPosition);
-				if (minHitInfo.minZIndex != -1) {
+				checkForPlayerCollisions(playerCollisionInfo, elapsed, targetPosition);
+				if (playerCollisionInfo.minIndex[2] != -1) {
 					// No dice really in a corner
 					targetPosition[2] = lastPosition[2];
 					movePlayer(targetPosition);
@@ -1027,7 +978,7 @@ let characterMoveXZ = (elapsed) => {
 			// Try step!
 			playerPosition[1] += collisionsBuffer[minXIndex].max[1] - playerBox.min[1];
 			movePlayer(playerPosition); // Update bounds
-			if (checkForPlayerCollisions(minHitInfo, elapsed) == 0) {
+			if (checkForPlayerCollisions(playerCollisionInfo, elapsed) == 0) {
 				stepSuccess = true;
 				// Only step if it's completely clear to move to the target spot for ease
 			} else {
@@ -1038,8 +989,8 @@ let characterMoveXZ = (elapsed) => {
 		if (!stepSuccess) {
 			targetPosition[0] = lastPosition[0];		
 			movePlayer(targetPosition);
-			checkForPlayerCollisions(minHitInfo, elapsed);
-			if (minHitInfo.minZIndex != -1) {
+			checkForPlayerCollisions(playerCollisionInfo, elapsed);
+			if (playerCollisionInfo.minIndex[2] != -1) {
 				// Oh no now that we're not moving in x we're hitting something in z
 				targetPosition[2] = lastPosition[2];
 				movePlayer(targetPosition);
@@ -1051,7 +1002,7 @@ let characterMoveXZ = (elapsed) => {
 			// Try step!
 			playerPosition[1] += collisionsBuffer[minZIndex].max[1] - playerBox.min[1];
 			movePlayer(playerPosition); // Update bounds
-			if (checkForPlayerCollisions(minHitInfo, elapsed) == 0) {
+			if (checkForPlayerCollisions(playerCollisionInfo, elapsed) == 0) {
 				stepSuccess = true;
 				// Only step if it's completely clear to move to the target spot for ease
 			} else {
@@ -1062,8 +1013,8 @@ let characterMoveXZ = (elapsed) => {
 		if (!stepSuccess) {
 			targetPosition[2] = lastPosition[2];
 			movePlayer(targetPosition);
-			checkForPlayerCollisions(minHitInfo, elapsed, targetPosition);
-			if (minHitInfo.minXIndex != -1) {
+			checkForPlayerCollisions(playerCollisionInfo, elapsed, targetPosition);
+			if (playerCollisionInfo.minIndex[0] != -1) {
 				// Oh no now that we're not moving in z we're hitting something in x
 				targetPosition[0] = lastPosition[0];
 				movePlayer(targetPosition);
@@ -1074,29 +1025,23 @@ let characterMoveXZ = (elapsed) => {
 
 let characterMoveY = (elapsed) => {
 	// Now lets do it again for gravity / grounded
-	let collision = false, useBox = true;
+	let collision = false;
 
 	vec3.copy(lastPosition, playerPosition);
+	
 	vec3.scaleAndAdd(playerPosition, playerPosition, Maths.vec3Y, velocity[1] * elapsed);
-
-	if (useBox) {
-		// playerBox.center has changed because it's set to the playerPosition ref
-		playerBox.calculateMinMax(playerBox.center, playerBox.extents);
-	}
-
+	// playerBox.center has changed because it's set to the playerPosition ref
+	playerBox.calculateMinMax(playerBox.center, playerBox.extents);
+	
 	for (let i = 0, l = world.boxes.length; i < l; i++) {
-		if (useBox) {
-			// TODO: Use a box cast instead of a box for high speeds
-			if (Physics.Box.intersect(playerBox, world.boxes[i])) {
-				collision = true;
-				// Only moving on one axis don't need to do the slide checks
-				break;
-			}
-		} else if (Physics.Box.intersectSphere(playerSphere, world.boxes[i])) {
+		// TODO: Use a box cast instead of a box for high speeds
+		if (Physics.Box.intersect(playerBox, world.boxes[i])) {
 			collision = true;
+			// Only moving on one axis don't need to do the slide checks
 			break;
 		}
 	}
+
 	if (collision) {
 		// TODO: Would be nice to move up to the object instead
 		// To do this figure out which axes you moved in on - and move out to touch point
