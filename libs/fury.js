@@ -202,7 +202,8 @@ var Camera = module.exports = function() {
 		// Set Rotation from Euler
 		// Set Position x, y, z
 		// Note do not have enforced copy setters, the user is responsible for this
-		calculateFrustrum: function() {
+		calculateFrustum: function() {
+			// TODO: Update to work for orthonormal projection as well
 			Maths.quatLocalAxes(this.rotation, localX, localY, localZ);
 
 			// Calculate Planes
@@ -306,10 +307,9 @@ var Camera = module.exports = function() {
 			return out;
 		},
 		viewportToWorld: function(out, viewPort, z) {
-			if(this.type == Camerea.Type.Orthonormal) {
-				// TODO: Actually test this...
-				out[0] = (this.height * this.ratio) * (viewPort[0] - 0.5) / 2.0;
-				out[1] = this.height * (viewPort[1] - 0.5) / 2.0;
+			if(this.type == Camera.Type.Orthonormal) {
+				out[0] = (this.height * this.ratio) * (viewPort[0] - 0.5);
+				out[1] = this.height * (0.5 - viewPort[1]);	// measuring viewport from top-left this seems correct!
 				out[2] = (z || 0);
 				vec3.transformQuat(out, out, this.rotation);
 				vec3.add(out, out, this.position);
@@ -350,7 +350,6 @@ var Camera = module.exports = function() {
 		for (let i = 0; i < 8; i++) {
 			camera.points[i] = vec3.create();
 		}
-		camera.calculateFrustrum(); // TEST - REMOVE
 
 		// TODO: Add Clear Color
 
@@ -481,10 +480,7 @@ var Input = module.exports = function() {
 			canvas.addEventListener("mousemove", handleMouseMove);
 			canvas.addEventListener("mousedown", handleMouseDown, true);
 			canvas.addEventListener("mouseup", handleMouseUp);
-			canvas.addEventListener('mousemove', (event) => {
-				MouseDelta[0] += event.movementX;
-				MouseDelta[1] += event.movementY;
-			});
+
 			document.addEventListener('pointerlockchange', (event) => {
 				pointerLocked = !!(document.pointerLockElement || document.mozPointerLockElement); // polyfill
 			});
@@ -635,6 +631,8 @@ var Input = module.exports = function() {
 	var handleMouseMove = function(event) {
 		MousePosition[0] = event.pageX;
 		MousePosition[1] = event.pageY;
+		MouseDelta[0] += event.movementX;
+		MouseDelta[1] += event.movementY;
 	};
 
 	var handleMouseDown = function(event) {
@@ -648,6 +646,14 @@ var Input = module.exports = function() {
 	var handleMouseUp = function(event) {
 		mouseState[event.button] = false;
 		upMouse[event.button] = true;
+	};
+
+	exports.getMouseViewportX = function() {
+		return MousePosition[0] / canvas.clientWidth;
+	};
+
+	exports.getMouseViewportY = function() {
+		return MousePosition[1] / canvas.clientHeight;
 	};
 
 	// TODO: Add Numpad Keys
@@ -909,6 +915,12 @@ let Maths = module.exports = (function() {
   var vec3Z = exports.vec3Z = glMatrix.vec3.fromValues(0,0,1);
 
   let equals = glMatrix.glMatrix.equals;
+
+  exports.lerp = (a, b, r) => { return r * (b - a) + a; };
+
+  exports.clamp = (x, min, max) => { return Math.max(Math.min(max, x), min); };
+
+  exports.clamp01 = (x) => { return exports.clamp(x, 0, 1); };
 
 	exports.vec3ToString = (v) => { return "(" + v[0] + ", " + v[1] + ", " + v[2] + ")"; };
 
@@ -1479,20 +1491,20 @@ exports.createElementArrayBuffer = function(data, itemSize, numItems) {
 var TextureLocations = exports.TextureLocations = [];
 
 var TextureQuality = exports.TextureQuality = {
-	Pixel: "pixel",		// Uses Mips and nearest pixel
-	Highest: "highest",	// Uses Mips & Interp (trilinear)
+	Pixel: "pixel",			// Uses Mips and nearest pixel
+	Highest: "highest",		// Uses Mips & Interp (trilinear)
 	High: "high",			// Uses Mips & Interp (bilinear)
 	Medium: "medium",		// Linear Interp
 	Low: "low"				// Uses nearest pixel
 };
 
-exports.createTexture = function(source, quality, clamp) {
+exports.createTexture = function(source, quality, clamp, disableAniso) {
 	var texture = gl.createTexture();
 	gl.bindTexture(gl.TEXTURE_2D, texture);
 	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
 
-	setTextureQuality(gl.TEXTURE_2D, quality);
+	setTextureQuality(gl.TEXTURE_2D, quality, disableAniso);
 
 	if (clamp) {
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1523,40 +1535,38 @@ exports.createTextureArray = function(source, width, height, imageCount, quality
 	return texture;
 };
 
-var setTextureQuality = function(glTextureType, quality) {
-	if (quality === TextureQuality.Pixel) {
-		// Unfortunately it doesn't seem to allow MAG_FILTER nearest with MIN_FILTER MIPMAP
-		// Might be able to use dFdx / dFdy to determine MIPMAP level and use two textures
-		// and blend the samples based of if it'd be mipmap level 0 or not
-		// Or use multiple samplers in an version 300 ES shader
+var setTextureQuality = function(glTextureType, quality, disableAniso) {
+	if (quality == TextureQuality.Pixel) {
 		gl.texParameteri(glTextureType, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 		gl.texParameteri(glTextureType, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-		if (anisotropyExt) {
+		if (!disableAniso && anisotropyExt) {
+			// Unfortunately you can't use MAG_FILTER NEAREST with MIN_FILTER MIPMAP when using the anisotropy extension
+			// you can without it however, so there is a trade off on crisp near pixels against blurry textures at severe angles
+			
+			// Could investigate using multiple samplers in a version 300 ES Shader and blending between them,
+			// or using multiple texture with different settings, potentially using dFdx and dFdy to determine / estimate MIPMAP level
+			// TODO: arguement to enable or disable anisotropy for pixel 
 			gl.texParameterf(glTextureType, anisotropyExt.TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
 		}
 		gl.generateMipmap(glTextureType);
-	}
-	else if (quality === TextureQuality.Highest) {
+	} else if (quality === TextureQuality.Highest) {
 		gl.texParameteri(glTextureType, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 		gl.texParameteri(glTextureType, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-		if (anisotropyExt) {
+		if (!disableAniso && anisotropyExt) {
 			gl.texParameterf(glTextureType, anisotropyExt.TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
 		}
 		gl.generateMipmap(glTextureType);
-	}
-	else if (quality === TextureQuality.High) {
+	} else if (quality === TextureQuality.High) {
 		gl.texParameteri(glTextureType, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 		gl.texParameteri(glTextureType, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
-		if (anisotropyExt) {
+		if (!disableAniso && anisotropyExt) {
 			gl.texParameterf(glTextureType, anisotropyExt.TEXTURE_MAX_ANISOTROPY_EXT, Math.round(maxAnisotropy/2));
 		}
 		gl.generateMipmap(glTextureType);
-	}
-	else if (quality === TextureQuality.Medium) {
+	} else if (quality === TextureQuality.Medium) {
 		gl.texParameteri(glTextureType, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 		gl.texParameteri(glTextureType, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-	}
-	else {
+	} else {
 		gl.texParameteri(glTextureType, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 		gl.texParameteri(glTextureType, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 	}
@@ -1966,7 +1976,7 @@ var Scene = module.exports = function() {
 		scene.render = function(cameraName) {
 			var camera = cameras[cameraName ? cameraName : mainCameraName];
 			if (scene.enableFrustumCulling) {
-				camera.calculateFrustrum();
+				camera.calculateFrustum();
 			}
 			camera.getProjectionMatrix(pMatrix);
 			// Camera Matrix should transform world space -> camera space

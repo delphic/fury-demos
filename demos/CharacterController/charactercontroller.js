@@ -36,11 +36,6 @@ Fury.Maths.getRoll = function(q) {
 	// but we don't in this case.
 };
 
-// TODO: Move to Fury.Maths
-let lerp = (a,b,r) => { return r * (b - a) + a; };
-
-let clamp = (x, min, max) => { return Math.max(Math.min(max, x), min); }
-
 // Init Fury
 Fury.init("fury");
 
@@ -613,11 +608,11 @@ var loop = function(){
 	// TODO: Check this against vorld-decay
 	let roll = Fury.Maths.getRoll(camera.rotation); // Note doesn't lock in the right place if you're using atan2 version
 	let clampAngle = 10 * Math.PI/180;
-	if (Math.sign(roll) == Math.sign(-rx) || Math.abs(roll - rx) < 0.5*Math.PI - clampAngle) {
+	if (Math.sign(roll) == Math.sign(-rx) || Math.abs(roll - rx) < 0.5 * Math.PI - clampAngle) {
 		quat.rotateX(camera.rotation, camera.rotation, rx);
 	}
 
-		// TODO: Add smoothing?
+	// TODO: Add smoothing?
 	let inputX = 0, inputZ = 0;
 	if (Fury.Input.keyDown("w")) {
 		inputZ -= 1;
@@ -1092,10 +1087,10 @@ let loadMapTextures = function() {
 		let textureName = keys[i];
 		images[textureName] = new Image();
 		images[textureName].onload = function() {
-			namedMaterials[textureName].textures["uSampler"] = Fury.Renderer.createTexture(images[textureName], "pixel");
-			// Scale should be 32 texels per unit (we've increased the source scale by factor 4 to use mipmaps with clear pixels)
-			namedMaterials[textureName].sScale = (4 * 32) / images[textureName].width;
-			namedMaterials[textureName].tScale = (4 * 32) / images[textureName].height;
+			namedMaterials[textureName].textures["uSampler"] = Fury.Renderer.createTexture(images[textureName], "pixel", false, true);
+			// Scale should be 32 texels per unit
+			namedMaterials[textureName].sScale = 32 / images[textureName].width;
+			namedMaterials[textureName].tScale = 32 / images[textureName].height;
 
 			loadCallback();
 		};
