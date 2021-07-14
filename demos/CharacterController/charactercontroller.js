@@ -526,6 +526,7 @@ let inputVector = vec3.create();
 let localForward = vec3.create();
 let hitPoint = vec3.create();
 let temp = vec3.create();
+let temp2 = vec3.create(); // TODO: vec3 Pool
 
 // let debugCube = createDebugCube(vec3.fromValues(0.1,0.1,0.1), hitPoint);	// Using hitpoint so it moves to where-ever last hit!
 
@@ -687,6 +688,12 @@ var loop = function(){
 		if (triggerVolumes[i].tryIntersectBox(playerBox)) {
 			vec3.zero(temp);
 			vec3.scaleAndAdd(temp, temp, triggerVolumes[i].angle, triggerVolumes[i].speed);
+
+			// Set velocity in direction of angle and up to 0, keep perpendicular velocity
+			vec3.cross(temp2, triggerVolumes[i].angle, Maths.vec3Y);
+			let dot = vec3.dot(temp2, velocity);
+			vec3.zero(velocity);
+			vec3.scaleAndAdd(velocity, velocity, temp2, dot);
 			vec3.add(velocity, velocity, temp); 
 			// ^^ This needs work to feel like a good launch pad
 			// arguably should arrest all negative y velocity, and potentially arrest some or all x/z velocity 
