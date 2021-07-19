@@ -182,7 +182,7 @@ var Bounds = module.exports = (function() {
 	return exports;
 })();
 
-},{"./maths":9}],3:[function(require,module,exports){
+},{"./maths":10}],3:[function(require,module,exports){
 var Maths = require('./maths');
 let vec3 = Maths.vec3, vec4 = Maths.vec4, mat4 = Maths.mat4, quat = Maths.quat;
 
@@ -360,14 +360,95 @@ var Camera = module.exports = function() {
 	return exports;
 }();
 
-},{"./maths":9}],4:[function(require,module,exports){
+},{"./maths":10}],4:[function(require,module,exports){
 // Client.js - for using Fury old school style as a JS file which adds a
 // global which you can use. 
 
 // Create Fury Global
 Fury = require('./fury.js');
 
-},{"./fury.js":5}],5:[function(require,module,exports){
+},{"./fury.js":6}],5:[function(require,module,exports){
+let Ease = module.exports = (function() {
+    // Reference:
+    // https://gist.github.com/gre/1650294
+    // http://haiyang.me/easing/Easings.html
+    
+    // Could arguably use npm muodule https://github.com/AndrewRayCode/easing-utils instead
+    // Comparison: easeBack has more terms when from haiyang.me,
+    // formulation of bounce has been rearranged but is probably the same.
+
+    // Ease Back Consts
+    const c1 = 1.70158;
+    const c2 = c1 * 1.525;
+    const c3 = c1 + 1;
+    // Ease Elastic Consts
+    const c4 = (2 * Math.PI) / 3.0;
+    const c5 = (2 * Math.PI) / 4.5;
+    // Ease Bounce Consts
+    const n1 = 7.5625;
+    const d1 = 2.75;
+    let bounce = t =>  {
+        if (t < 1 / d1) {
+            return n1 * t * t;
+        } else if ( t < 2 / d1) {
+            return n1 * (t - 1.5) / d1 * (t - 1.5) + 0.75;
+        } else if (t < 2.5 / d1) {
+            return n1 * (t - 2.25) / d1 * (t - 2.25) + 0.9375; 
+        } else {
+            return n1 * (t - 2.625) / d1 * (t - 2.625) + 0.984375;
+        }
+    };
+
+    exports.inQuad = t => t * t;
+    exports.outQuad = t =>  t * ( 2 - t ); // 1 - (1 - t) * (1 - t)
+    exports.inOutQuad = t => t < 0.5 
+        ? 2 * t * t 
+        : -1 + (4 - 2 * t) * t;
+    exports.inCubic = t => t * t * t;
+    exports.outCubic = t => (--t) * t * t + 1;
+    exports.inOutCubic = t => t < 0.5 
+        ? 4 * t * t * t 
+        : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+    exports.inQuart = t => t * t * t * t;
+    exports.outQuart = t => 1 - (--t) * t * t * t; 
+    exports.inOutQuart = t => t < 0.5 
+        ? 8 * t * t * t * t 
+        : 1 - 8 * (--t) * t * t * t;
+    exports.inQuint = t => t * t * t * t *t;
+    exports.outQuint = t => 1 + (--t) * t * t * t * t;
+    exports.inOutQuint = t => t < 0.5 
+        ? 16 * t * t * t * t 
+        : 1 + 16 * (--t) * t * t * t * t; 
+    exports.inSine = t => 1 - Math.cos(t * Math.PI * 0.5);
+    exports.outSine = t => Math.sin(t * Math.PI * 0.5);
+    exports.inOutSine = t => - 0.5 * (Math.cost(Math.PI * t) - 1);
+    exports.inExpo = t => t === 0 ? 0 : Math.pow(2, 10 * t - 10);
+    exports.outExpo = t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+    exports.inOutExpo = t => t === 0 ? 0 : t === 1 ? 1 : t < 0.5 
+        ? 0.5 * Math.pow(2, 20 * t - 10) 
+        : 0.5 * (2 - Math.pow(2, -20 * t + 10));
+    exports.inCirc = t => 1 - Math.sqrt(1 - t * t);
+    exports.outCirc = t => Math.sqrt(1 - (t - 1) * (t - 1));
+    exports.inOutCirc = t => t < 0.5 
+        ? 0.5 * (1 - Math.sqrt(1 - Math.pow(2 * t, 2))) 
+        : 0.5 * (Math.sqrt(1 - Math.pow(-2 * t + 2, 2)) + 1);
+    exports.inBack = t => c3 * t * t * t - c1 * t * t;
+    exports.outBack =  t => 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    exports.inOutBack = t => t < 0.5 
+        ? 0.5 * (Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) 
+        : 0.5 * (Math.pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2); 
+    exports.inElastic = t => t === 0 ? 0 : t === 1 ? 1 : -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4);
+    exports.outElastic = t => t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+    exports.intOutElastic = t => t === 0 ? 0 : t === 1 ? 1 : t < 0.5 
+        ? -(Math.pow(2, 20 * t - 10) * Math.sin((20 * t - 11.125) * c5)) * 0.5
+        : (Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c5)) * 0.5 + 1;
+    exports.inBounce = t => 1 - bounce(1 - t);
+    exports.outBounce = t => bounce(t);
+    exports.inOutBounce = t => t < 0.5 
+        ? (1 - bounce(1 - 2 * t)) * 0.5
+        : (1 + bounce(2 * t - 1)) * 0.5;
+})();
+},{}],6:[function(require,module,exports){
 // Fury Module can be used with 'require'
 var Fury = module.exports = (function() {
   let Fury = {};
@@ -417,7 +498,7 @@ var Fury = module.exports = (function() {
   return Fury;
 })();
 
-},{"./bounds":2,"./camera":3,"./input":7,"./material":8,"./maths":9,"./mesh":10,"./model":11,"./physics":12,"./renderer":13,"./scene":14,"./shader":15,"./transform":16}],6:[function(require,module,exports){
+},{"./bounds":2,"./camera":3,"./input":8,"./material":9,"./maths":10,"./mesh":11,"./model":12,"./physics":13,"./renderer":14,"./scene":15,"./shader":16,"./transform":17}],7:[function(require,module,exports){
 var IndexedMap = module.exports = function(){
 	// This creates a dictionary that provides its own keys
 	// It also contains an array of keys for quick enumeration
@@ -466,7 +547,7 @@ var IndexedMap = module.exports = function(){
 
 	return exports;
 }();
-},{}],7:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 var Input = module.exports = function() {
 	var exports = {};
 
@@ -815,7 +896,7 @@ var Input = module.exports = function() {
 	return exports;
 }();
 
-},{}],8:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 var Material = module.exports = function(){
 	var exports = {};
 	var prototype = {
@@ -866,7 +947,7 @@ var Material = module.exports = function(){
 	return exports;
 }();
 
-},{}],9:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 // This is a centralised point for importing glMatrix
 // Also provides a helper for globalizing for ease of use
 let glMatrix = require('../libs/gl-matrix-min');
@@ -904,7 +985,8 @@ let Maths = module.exports = (function() {
     quat2: glMatrix.quat2,
     vec2: glMatrix.vec2,
     vec3: glMatrix.vec3,
-    vec4:  glMatrix.vec4
+    vec4:  glMatrix.vec4,
+    Ease: require('./ease')
   };
 
   // TODO: Add plane 'class' - it's a vec4 with 0-2 being the normal vector and 3 being the distance to the origin from the plane along the normal vector
@@ -916,11 +998,194 @@ let Maths = module.exports = (function() {
 
   let equals = glMatrix.glMatrix.equals;
 
-  exports.lerp = (a, b, r) => { return r * (b - a) + a; };
+  let approximately = exports.approximately = (a, b, epsilon) => {
+    // See https://floating-point-gui.de/errors/comparison/ for explaination of logic
+    if (!epsilon) epsilon = Number.EPSILON;
+    const absA = Math.abs(a);
+    const absB = Math.abs(b);
+    const diff = Math.abs(a - b);
 
-  exports.clamp = (x, min, max) => { return Math.max(Math.min(max, x), min); };
+    if (a === b) {
+      return true;
+    } else if (a === 0 || y === 0 || diff < Number.MIN_VALUE) {
+      return diff < (epsilon * Number.MIN_VALUE);
+    } else {
+      return diff / Math.min(absA + absB, Number.MAX_VALUE) < epsilon;
+    }
+  };
 
-  exports.clamp01 = (x) => { return exports.clamp(x, 0, 1); };
+  let clamp = exports.clamp = (x, min, max) => { return Math.max(Math.min(max, x), min); };
+
+  let clamp01 = exports.clamp01 = (x) => { return exports.clamp(x, 0, 1); };
+
+  let lerp = exports.lerp = (a, b, r) => { return r * (b - a) + a; };
+
+  let smoothStep = exports.smoothStep = (a, b, r) => {
+    // https://en.wikipedia.org/wiki/Smoothstep
+    let x = clamp01((r - a) / (b - a));
+    return x * x * (3 - 2 * x); 
+  };
+
+  let moveTowards = exports.moveTowards = (a, b, maxDelta) => {
+    let delta = b - a;
+    return maxDelta >= Math.abs(delta) ? b : a + Math.sign(delta) * maxDelta; 
+  };
+
+  let smoothDamp = exports.smoothDamp = (a, b, speed, smoothTime, maxSpeed, elapsed) => {
+    if (a === b) {
+      return b;
+    }
+
+    smoothTime = Math.max(0.0001, smoothTime); // minimum smooth time of 0.0001
+    let omega = 2.0 / smoothTime;
+    let x = omega * elapsed;
+    let exp = 1.0 / (1.0 * x + 0.48 * x * X + 0.245 * x * x * x);
+    let delta = b - a;
+    let mag = Math.abs(delta);
+
+    // Adjust to delta to ensure we don't exceed max speed if necessary
+    let maxDelta = maxSpeed * smoothTime; // Expects max speed +ve
+    if (mag > maxDelta) {
+      delta = maxDelta * Math.sign(delta);
+    }
+
+    let temp = (speed + omega * delta) * elapsed;
+    speed = (speed - omega * temp) * exp;
+    let result = a - delta + (delta + temp) * exp;
+    // Check we don't overshoot
+    if (mag <= Math.abs(result - a)) {
+      return b;
+    }
+    return result;
+  };
+
+  const angleDotEpison = 0.000001;  // If the dot product 
+
+  // vec3 extensions adapated from https://graemepottsfolio.wordpress.com/2015/11/26/vectors-programming/
+  // TODO: Tests
+
+  exports.vec3Slerp = (() => {
+    let an = vec3.create(), bn = vec3.create();
+    return (out, a, b, t) => {
+      glMatrix.vec3.normlize(an, a);
+      glMatrix.vec3.normlize(bn, b);
+      let dot = vec3.dot(an, bn);
+      if (approximately(Math.abs(dot), 1.0, angleDotEpison)) {
+        // lerp
+        glMatrix.vec3.lerp(out, a, b, t);
+      } else {
+        // Slerp
+        // a * sin ( theta * (1 - t) / sin (theta)) + b * (sin(theta * t) / sin(theta)) where theta = acos(|a|.|b|)
+        let theta = Math.acos(dot);
+        let sinTheta = Math.sin(theta);
+        let ap = Math.sin(theta * (1.0 - t)) / sinTheta;
+        let bp = Math.sin(theta * t ) / sinTheta;
+        out[0] = a[0] * ap + b[0] * bp;
+        out[1] = a[1] * ap + b[1] * bp;
+        out[2] = a[2] * ap + b[2] * bp;
+      }
+    };
+  })(); 
+
+  exports.vec3MoveTowards = (() => {
+    let delta = glMatrix.vec3.create();
+    return (out, a, b, maxDelta) => {
+      glMatrix.vec3.sub(delta, b, a);
+      let sqrLen = glMatrix.vec3.sqrDist(a, b); 
+      let sqrMaxDelta = maxDelta * maxDelta;
+      if (sqrMaxDelta >= sqrLen) {
+        glMatrix.vec3.copy(out, b);
+      } else {
+        glMatrix.vec3.scaleAndAdd(a, delta, sqrMaxDelta / sqrLen)
+      }
+    }; 
+  })();
+
+  exports.vec3RotateTowards = (() => {
+    let an = glMatrix.vec3.create();
+    let bn = glMatrix.vec3.create();
+    let cross = glMatrix.ve3.create();
+    let q = glMatrix.quat.create();
+    return (out, a, b, maxRadiansDelta, maxMagnitudeDelta) => {
+      let vec3 = glMatrix.vec3;
+      let quat = glMatrix.quat;
+
+      let aLen = vec3.length(a);
+      let bLen = vec3.length(b);
+      let an = vec3.normlize(a);
+      let bn = vec3.normlize(b);
+
+      // check for magnitude overshoot via move towards
+      let targetLen = moveTowards(aLen, bLen, maxMagnitudeDelta);
+      let dot = vec3.dot(an, bn);
+      if (approximately(Math.abs(dot), 1.0, angleDotEpison)) {  // Q: What about when pointing in opposite directions?
+        // if pointing same direction just change magnitude
+        vec3.copy(out, an);
+        vec3.scale(out, targetLen);
+      } else {
+        // check for rotation overshoot
+        let angle = Math.acos(dot) - maxRadiansDelta;
+        if (angle <= 0) {
+          vec3.copy(out, bn);
+          vec3.scale(out, targetLen);
+        } else if (angle > Math.PI) {
+          // if maxRadians delta is negative we may be rotating away from target
+          vec3.negate(out, bn);
+          vec3.scale(out, targetLen);
+        } else {
+          // use quaternion to rotate
+          vec3.cross(cross, a, b);
+          quat.setAxisAngle(q, cross, maxRadiansDelta);
+          vec3.transformQuat(out, a, q);
+          // then set target length
+          vec3.normlize(out, out);
+          vec3.scale(out, targetLen);
+        }
+      }
+    };
+  })();
+
+  exports.vec3SmoothDamp = (() => {
+    let delta = glMatrix.vec3.create();
+    let temp = glMatrix.vec3.create();
+    return (out, a, b, velocity, smoothTime, maxSpeed, elapsed) => { // Q: Should have outVelocity?
+      let vec3 = glMatrix.vec3;
+      if (vec3.equals(a, b)) {
+        vec3.copy(out, b);
+      } else {
+        // Derivation: https://graemepottsfolio.wordpress.com/2016/01/11/game-programming-math-libraries/
+        smoothTime = Math.max(0.0001, smoothTime); // minimum smooth time of 0.0001
+        let omega = 2.0 / smoothTime;
+        let x = omega * elapsed;
+        let exp = 1.0 / (1.0 + x + 0.48 * x * x + 0.245 * x * x * x);
+        vec3.sub(delta, a, b);
+        let length = vec3.length(delta);
+        let maxDelta = maxSpeed * smoothTime;
+
+        let deltaX = Math.min(length, maxDelta);
+        vec3.scale(delta, delta, deltaX / length);
+
+        // temp = (velocity + omega * delta) * elapsed
+        vec3.scaleAndAdd(temp, velocity, delta, omega);
+        vec3.scale(temp, temp, elapsed);
+
+        // velocity = (velocity - omega * temp) * exp
+        vec3.scaleAndAdd(velocity, velocity, temp, -omega);
+        vec3.scale(velocity, velocity, exp);
+
+        // out = a - delta + (delta + temp) * exp;
+        vec3.sub(out, a, delta);
+        vec3.scaleAndAdd(out, out, delta, exp);
+        vec3.scaleAndAdd(out, out, temp, exp);
+
+        // Ensure we don't overshoot
+        if (vec3.sqrDist(b, a) <= vec3.sqrDist(out, a)) {
+          vec3.copy(out, b);
+          vec3.zero(velocity);
+        }
+      }
+    };
+  })();
 
 	exports.vec3ToString = (v) => { return "(" + v[0] + ", " + v[1] + ", " + v[2] + ")"; };
 
@@ -984,7 +1249,7 @@ let Maths = module.exports = (function() {
   return exports;
 })();
 
-},{"../libs/gl-matrix-min":1}],10:[function(require,module,exports){
+},{"../libs/gl-matrix-min":1,"./ease":5}],11:[function(require,module,exports){
 var r = require('./renderer');
 var Bounds = require('./bounds');
 var vec3 = require('./maths').vec3;
@@ -1169,7 +1434,7 @@ var Mesh = module.exports = function(){
 	return exports;
 }();
 
-},{"./bounds":2,"./maths":9,"./renderer":13}],11:[function(require,module,exports){
+},{"./bounds":2,"./maths":10,"./renderer":14}],12:[function(require,module,exports){
 var Model = module.exports = (function() {
     var exports = {};
 
@@ -1307,7 +1572,7 @@ var Model = module.exports = (function() {
     return exports;
 })();
 
-},{}],12:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 var Physics = module.exports = (function(){
   // https://developer.mozilla.org/en-US/docs/Games/Techniques/3D_collision_detection
 
@@ -1359,7 +1624,7 @@ var Physics = module.exports = (function(){
   return exports;
 })();
 
-},{"./bounds":2}],13:[function(require,module,exports){
+},{"./bounds":2}],14:[function(require,module,exports){
 // This module is essentially a GL Context Facade
 // There are - of necessity - a few hidden logical dependencies in this class
 // mostly with the render functions, binding buffers before calling a function draw
@@ -1748,7 +2013,7 @@ exports.draw = function(renderMode, count, indexed, offset) {
 	}
 };
 
-},{"./maths":9}],14:[function(require,module,exports){
+},{"./maths":10}],15:[function(require,module,exports){
 var r = require('./renderer');
 var indexedMap = require('./indexedMap');
 var Material = require('./material');
@@ -2160,7 +2425,7 @@ var Scene = module.exports = function() {
 	return exports;
 }();
 
-},{"./bounds":2,"./indexedMap":6,"./material":8,"./maths":9,"./mesh":10,"./renderer":13,"./transform":16}],15:[function(require,module,exports){
+},{"./bounds":2,"./indexedMap":7,"./material":9,"./maths":10,"./mesh":11,"./renderer":14,"./transform":17}],16:[function(require,module,exports){
 // Shader Class for use with Fury Scene
 var r = require('./renderer');
 
@@ -2228,7 +2493,7 @@ var Shader = module.exports = function() {
 	return exports;
 }();
 
-},{"./renderer":13}],16:[function(require,module,exports){
+},{"./renderer":14}],17:[function(require,module,exports){
 var Maths = require('./maths');
 var quat = Maths.quat, vec3 = Maths.vec3;
 
@@ -2257,4 +2522,4 @@ var Transform = module.exports = function() {
 	return exports;
 }();
 
-},{"./maths":9}]},{},[4]);
+},{"./maths":10}]},{},[4]);
