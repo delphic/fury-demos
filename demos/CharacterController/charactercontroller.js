@@ -249,6 +249,13 @@ let world = { boxes: [], spheres: [] };
 let Maths = Fury.Maths;
 let Physics = Fury.Physics;
 
+let vec3ScaleXZ = (out, a, scale) => {
+	let y = a[1];
+	a[1] = 0;
+	vec3.scale(out, a, scale);
+	a[1] = out[1] = y;
+};
+
 var createDebugCube = function(size, position) {
 	let mesh = Fury.Mesh.create(createCuboidMesh(size[0], size[1], size[2], position[0], position[1], position[2]));
 	return scene.add({ material: redMaterial, mesh: mesh, position: position });
@@ -695,8 +702,7 @@ var loop = function(){
 			vec3.zero(velocity);
 			vec3.scaleAndAdd(velocity, velocity, temp2, dot);
 			vec3.add(velocity, velocity, temp); 
-			// ^^ This needs work to feel like a good launch pad
-			// arguably should arrest all negative y velocity, and potentially arrest some or all x/z velocity 
+			// TODO: Potentially should arrest rather than zero velocity in launch direction in XZ plane
 
 			vec3.add(launchVelocity, launchVelocity, temp);
 			initialLaunchXZSpeed = Math.sqrt(launchVelocity[0] * launchVelocity[0] + launchVelocity[2] * launchVelocity[2]);
@@ -706,10 +712,6 @@ var loop = function(){
 			}
 		}
 	}
-
-	// Playing Q3A - it seems like we had the right idea before, modify air velocity directly and then allow the player to
-	// cumulatively add speed, the difference is q3a did not clamp the speed addtion at all, so you could only modify a small
-	// amount but it could add up to far more
 
 	// Copy player position into temp variables
 	vec3.copy(lastPosition, playerPosition);
@@ -721,42 +723,64 @@ var loop = function(){
 		vec3.scaleAndAdd(inputVector, inputVector, localX, inputX);
 		vec3.scaleAndAdd(inputVector, inputVector, localZ, inputZ);
 
-		// Accelerate
-		velocity[0] += acceleration * elapsed * inputVector[0];
-		velocity[2] += acceleration * elapsed * inputVector[2];
+		let vSqr = velocity[0] * velocity[0] + velocity[2] * velocity[2];
+		let isSliding = vSqr > movementSpeed * movementSpeed + 0.001; // Fudge factor for double precision when scaling
+
+		if (isSliding) {
+			// Only deceleration
+			if (Math.sign(velocity[0]) != Math.sign(inputVector[0])) {
+				velocity[0] += acceleration * elapsed * inputVector[0];
+			}
+			if (Math.sign(velocity[2]) != Math.sign(inputVector[2])) {
+				velocity[2] += acceleration * elapsed * inputVector[2];
+			}
+		} else {
+			// Accelerate
+			velocity[0] += acceleration * elapsed * inputVector[0];
+			velocity[2] += acceleration * elapsed * inputVector[2];
+		}
 
 		let groundSpeed = Math.sqrt(velocity[0] * velocity[0] + velocity[2] * velocity[2]);
 
-		let ySpeed = velocity[1];
-		velocity[1] = 0;
-		if (groundSpeed > movementSpeed) {
-			// Clamp to movementSpeed
-			// TODO: Switch to be like air movement, only allow deceleration if above movement speed, that way you can be pushed along the ground
-			// Note the same precise code as air movement probably won't work current as friction not applied when trying to run
-			vec3.scale(velocity, velocity, movementSpeed / groundSpeed);
-		} else if (!inputX && !inputZ) {
-			// Apply Friction
-			let frictionFactor = 2.5;	// Compeltely arbitary factor
-			let frictionDv = groundSpeed * groundSpeed * frictionFactor * elapsed;
-	
-			if (frictionDv > groundSpeed) console.error("Calculated Drag greater than speed");
-			frictionDv = Math.min(groundSpeed, frictionDv);
+		if (groundSpeed > movementSpeed && !isSliding) {
+			// Clamp to movementSpeed if not isSliding
+			vec3ScaleXZ(velocity, velocity, movementSpeed / groundSpeed);
+		} else if (groundSpeed > 0 && ((!inputX && !inputZ) || isSliding)) {
+			// Apply slow down force
+			// This tries to model someone at a run deciding to stop if in the 0 to max movement speed range
+			// Greater than this they are considered sliding and a different formula is used.
 
-			// Not sure if this is a good idea or not
-			// (only applying friction when not moving,
-			// if applying whilst moving makes it hard to have enough friction to stop quickly, without impacting top speed,
-			// arguably could / should have a deceleration amount)
-			if( groundSpeed <= stopSpeed) {
+			// Note: This isn't friction, friction is a constant force for rigidbodies
+			// This is friction : https://sciencing.com/calculate-force-friction-6454395.html  (also https://www.geeksforgeeks.org/problems-on-friction-formula/)
+			// F = mu * N (where mu is friction coefficient, varies by material, and rest or sliding) and N is the normal force
+			// N = mg on flat surfaces (m = mass of object, a = acceleration due to gravity), mg cos A on inclined surfaces (A = angle of incline)  
+			// Wood on wood sliding is ~0.2 * mass * 9.8 ~= 4N  so as F = m * dv / elasped
+			// dv(friction) = 4 * elapsed / mass;
+
+			let slowFactor = 2.5;	// Compeltely arbitary factor
+			if (isSliding) {
+				// Velocities larger than 24 m/s at 60fps (for 60 / slowFactor) are negated immediately when speed reduction proportional to v^2
+				// So for velocities higher than this speed reduction proportional to v. Rationale is controller is "sliding" rather than coming to a 
+				// controlled stop
+				slowFactor *= 2 / groundSpeed;
+			}
+			
+			let deltaV = groundSpeed * groundSpeed * slowFactor * elapsed;
+			if (deltaV > groundSpeed) { 
+				console.log("Warning: Calculated 'friction' greater than speed");
+			}
+			deltaV = Math.min(groundSpeed, deltaV);
+
+			if(groundSpeed <= stopSpeed) {
 				// Stop below a certain speed if not trying to move
 				vec3.zero(velocity);
 			} else if (groundSpeed != 0) {
-				// Apply Friction
-				vec3.scale(velocity, velocity, (groundSpeed - frictionDv) / groundSpeed);
+				// Apply deceleration
+				vec3ScaleXZ(velocity, velocity, (groundSpeed - deltaV) / groundSpeed);
 			} else {
 				vec3.zero(velocity);
 			}
 		}
-		velocity[1] = ySpeed;
 
 		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, velocity[0] * elapsed);
 		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, velocity[2] * elapsed);
@@ -772,13 +796,12 @@ var loop = function(){
 
 		// BUG - FEATURE LOSS - really hard to jump small distance whilst moving, this is probably just due to the instant acceleration
 			// TODO: Add input smoothing / acceleration curve and then test small jumps
-		// BUG / lack of feature: you can't be pushed back from a wall if you shoot above the camera point (i.e. being pushed down)
 
 		// TODO: Also do this in water with much bigger coefficent
 
 		let airSpeed = vec3.length(velocity);
 		let dragDv = (airSpeed * airSpeed * 1.225 * elapsed) / (2 * 100);	// Assumes air and mass of 100kg, drag coefficent of ~1 and surface area ~1 (it's probably less)
-		// ^^ Technically surface area is different based on direction, so maybe should break down vertical against others
+		// ^^ Technically surface area is different based on direction, so a more accurate model would break down vertical against others
 		// Update Air Velocity
 		if (airSpeed !== 0) {
 			vec3.scale(velocity, velocity, (airSpeed - dragDv) / airSpeed);
@@ -786,11 +809,13 @@ var loop = function(){
 			vec3.zero(velocity);
 		}
 		if (airSpeed < dragDv) {
-			// NOT sure if this is possible now but it clearly was when I had a bug in my code! (wasn't multiplying by dt)
-			console.error("Drag higher than air speed!");
+			// This happens when elasped > 200 / 1.225 * airSpeed * airSpeed 
+			// i.e. air speed > sqrt(200 * 60 / 1.225) ~= 99 m/s
+			console.log("Warning: Calculated drag higher than air speed!");
 		}
-		airSpeed = airSpeed - dragDv;
+		airSpeed = Math.min(0, airSpeed - dragDv);
 
+		// Apply air movement (only deceleration allowed above maximum air movement speed)
 		// Convert inputX and inputZ into global X / Z velocity delta
 		vec3.zero(inputVector);
 		vec3.scaleAndAdd(inputVector, inputVector, localX, inputX);
@@ -799,7 +824,6 @@ var loop = function(){
 		let targetX = velocity[0] + airAcceleration * elapsed * inputVector[0];
 		let targetZ = velocity[2] + airAcceleration * elapsed * inputVector[2];
 
-		// Lets try a much more simple, can only decelerate if above airMovementSpeed
 		let canAccelerate = targetX * targetX + targetZ * targetZ < airMovementSpeed * airMovementSpeed;
 		if (canAccelerate || Math.abs(targetX) < Math.abs(velocity[0])) {
 			velocity[0] = targetX;
@@ -810,7 +834,6 @@ var loop = function(){
 
 		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, velocity[0] * elapsed);
 		vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, velocity[2] * elapsed);
-		// Note air velocity is set to moved distance later (post collision checks)
 	}
 
 	// XZ Move
