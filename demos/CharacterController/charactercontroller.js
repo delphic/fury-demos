@@ -502,18 +502,11 @@ let temp2 = vec3.create(); // TODO: vec3 Pool
 
 // let debugCube = createDebugCube(vec3.fromValues(0.1,0.1,0.1), hitPoint);	// Using hitpoint so it moves to where-ever last hit!
 
-// Mouse look / pointer lock
+// Mouse look 
 let mouseLookSpeed = 0.1;
-let pointerLocked = false;
 let verticalLookAngle = 0;
 
-let canvas = document.getElementById("fury");
-canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
-// ^^ TODO: Query Fury for canvs or move pointer lock requests to Fury.Input
-document.addEventListener('pointerlockchange', (event) => {
-	pointerLocked = !!(document.pointerLockElement || document.mozPointerLockElement);
-});
-
+// Game Loop
 let lastTime = 0;
 
 let start = function(){
@@ -540,14 +533,14 @@ let loop = function(){
 	}
 	elapsed /= 1000;
 
+	// Rotation around axis
 	let ry = 0, rx = 0;
 
-	if (!pointerLocked) {
+	if (!Fury.Input.isPointerLocked()) {
 		if (Fury.Input.mouseDown(0)) {
-			canvas.requestPointerLock();
+			Fury.Input.requestPointerLock();
 		}
 	} else {
-		// Add the movement to rotations and clear the cache of movement delta
 		ry -= mouseLookSpeed * elapsed * Fury.Input.MouseDelta[0];
 		rx -= mouseLookSpeed * elapsed * Fury.Input.MouseDelta[1];
 	}
@@ -1053,7 +1046,7 @@ let characterMoveY = (elapsed) => {
 	}
 };
 
-// Create Texture
+// Asset Loading
 let lockCount = 0;
 let loadCallback = () => {
 	lockCount--;
