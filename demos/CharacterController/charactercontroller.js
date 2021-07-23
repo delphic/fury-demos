@@ -687,11 +687,15 @@ let loop = function(){
 		}
 
 		let groundSpeed = Math.sqrt(velocity[0] * velocity[0] + velocity[2] * velocity[2]);
+		let anyInput = inputX || inputZ;
 
-		if (groundSpeed > movementSpeed && !isSliding) {
-			// Clamp to movementSpeed if not isSliding
+		if (groundSpeed > movementSpeed && !isSliding && anyInput) {
+			// Clamp to movementSpeed if not isSliding && anyInput down 
+			// NOTE: groundSpeed can be greater than movement speed before any slowdown is applied as 
+			// scaling by movementSpeed / groundSpeed is has precision issue, adding a threshold for the comparison
+			// as with isSliding check can also resolve this without checking anyInput.
 			vec3ScaleXZ(velocity, velocity, movementSpeed / groundSpeed);
-		} else if (groundSpeed > 0 && ((!inputX && !inputZ) || isSliding)) {
+		} else if (groundSpeed > 0 && (!anyInput || isSliding)) {
 			// Apply slow down force
 			// This tries to model someone at a run deciding to stop if in the 0 to max movement speed range
 			// Greater than this they are considered sliding and a different formula is used.
