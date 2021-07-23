@@ -4,38 +4,6 @@
 // globalize glMatrix
 Fury.Maths.globalize();
 
-// Extend Maths
-// See https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
-Fury.Maths.calculateRoll = function(q) {
-	// x-axis rotation
-	let w = q[3], x = q[0], y = q[1], z = q[2];
-	return Math.atan2(2 * (w*x + y*z), 1 - 2 * (x*x + y*y));
-};
-
-Fury.Maths.calculatePitch = function(q) {
-	// y-axis rotation
-	let w = q[3], x = q[0], y = q[1], z = q[2];
-	let sinp = 2 * (w*y - z*x);
-	return Math.asin(sinp);
-	// returns pi/2 -> - pi/2 range only
-	// which is not helpful at all.
-};
-
-Fury.Maths.calculateYaw = function(q) {
-	// z-axis rotation
-	let w = q[3], x = q[0], y = q[1], z = q[2];
-	return Math.atan2(2 * (w*z + x*y), 1 - 2 * (y*y + z*z));
-};
-
-Fury.Maths.getRoll = function(q) {
-	// Used to avoid gimbal lock
-	let sinr_cosp = 2 * (q[3] * q[0] + q[1] * q[2]);
-	let cosr_cosp = 1 - 2 * (q[0] * q[0] + q[1] * q[1]);
-	return Math.atan(sinr_cosp / cosr_cosp);
-	// If you want to know sector you need atan2(sinr_cosp, cosr_cosp)
-	// but we don't in this case.
-};
-
 // Init Fury
 Fury.init("fury");
 
@@ -540,16 +508,11 @@ let temp2 = vec3.create(); // TODO: vec3 Pool
 // Mouse look / pointer lock
 let mouseLookSpeed = 0.1;
 let pointerLocked = false;
-let mdx = 0, mdy = 0; // Store accumulating deltas
-let handleMouseMove = function(event) {
-	mdx += event.movementX;
-	mdy += event.movementY;
-};
+let verticalLookAngle = 0;
+
 let canvas = document.getElementById("fury");
 canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
-// ^^ TODO: Query Fury for canvs or move pointer lock requets to Fury.Input
-// Requires use of fury game loop though to make input work, need to consume events end of frame
-canvas.addEventListener("mousemove", handleMouseMove);
+// ^^ TODO: Query Fury for canvs or move pointer lock requests to Fury.Input
 document.addEventListener('pointerlockchange', (event) => {
 	pointerLocked = !!(document.pointerLockElement || document.mozPointerLockElement);
 });
@@ -591,10 +554,8 @@ var loop = function(){
 		}
 	} else {
 		// Add the movement to rotations and clear the cache of movement delta
-		ry -= mouseLookSpeed * elapsed * mdx;
-		rx -= mouseLookSpeed * elapsed * mdy;
-		mdx = 0;
-		mdy = 0;
+		ry -= mouseLookSpeed * elapsed * Fury.Input.MouseDelta[0];
+		rx -= mouseLookSpeed * elapsed * Fury.Input.MouseDelta[1];
 	}
 
 	if (Fury.Input.keyDown("Left")) {
@@ -613,12 +574,10 @@ var loop = function(){
 	// Directly rotate camera
 	Maths.quatRotate(camera.rotation, camera.rotation, ry, Maths.vec3Y);
 
-	// TODO: Check this against vorld-decay
-	let roll = Fury.Maths.getRoll(camera.rotation); // Note doesn't lock in the right place if you're using atan2 version
-	let clampAngle = 10 * Math.PI/180;
-	if (Math.sign(roll) == Math.sign(-rx) || Math.abs(roll - rx) < 0.5 * Math.PI - clampAngle) {
-		quat.rotateX(camera.rotation, camera.rotation, rx);
-	}
+	let clampAngle = 0.5 * Math.PI - 10 * Math.PI/180;
+	let lastVerticalLookAngle = verticalLookAngle;
+	verticalLookAngle = Fury.Maths.clamp(verticalLookAngle + rx, -clampAngle, clampAngle);
+	quat.rotateX(camera.rotation, camera.rotation, verticalLookAngle - lastVerticalLookAngle);
 
 	// TODO: Add smoothing?
 	let inputX = 0, inputZ = 0;
