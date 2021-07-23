@@ -208,11 +208,8 @@ var createCuboidMesh = function(width, height, depth, x, y, z) {
 var camera = Fury.Camera.create({ near: 0.1, far: 1000000.0, fov: Fury.Maths.toRadian(60), ratio: cameraRatio, position: vec3.fromValues(0.0, 1.0, 0.0) });
 var scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
 
-// Physics
-let world = { boxes: [], spheres: [] };
-// As these currently aren't polymorphic separate colldiers by type
-// However with sensible prototype methods -> insterectType(other, self)
-// we could use a single array
+// Physics world
+let world = { boxes: [] };
 
 let Maths = Fury.Maths;
 let Physics = Fury.Physics;
@@ -517,34 +514,31 @@ document.addEventListener('pointerlockchange', (event) => {
 	pointerLocked = !!(document.pointerLockElement || document.mozPointerLockElement);
 });
 
-let lostFocus;
 let lastTime = 0;
 
-var loop = function(){
-	if (lastTime == 0 || lostFocus) {
-		// Better for first frame to have an elapsed time of 0 than Date.now eh?
-		lastTime = Date.now();
-		// If focus was lost we don't want to perform a huge update, set to 0.
-		lostFocus = false;
-	}
+let start = function(){
+	lastTime = Date.now();
+	requestAnimationFrame(loop); 
+};
+
+let loop = function(){
 	var elapsed = Date.now() - lastTime;
 	lastTime += elapsed;
+
+	if (elapsed == 0) {
+		console.error("elapsed time of 0, skipping frame");
+		requestAnimationFrame(loop);
+		return;
+	}
 
 	if (elapsed > 66) {
 		// Low FPS or huge elapsed from alt-tabs cause
 		// physics issues so clamp elapsed for sanity
-		// Ideally we'd note when we paused but need to find the correct events for that
 		elapsed = 66;
+		// Could run multiple logic updates, however would
+		// have to pause timer and resume when lost focus
 	}
 	elapsed /= 1000;
-
-	// Need to pause the timer when you blur to that this doesn't end up huge and you clip through the floor
-	// :thinking: I wonder what happens to websockets when you alt tab.
-	if (elapsed == 0) {
-		// HACK: Stop FUBAR due to 0 elapsed in movement calculations
-		requestAnimationFrame(loop);
-		return;
-	}
 
 	let ry = 0, rx = 0;
 
@@ -1064,7 +1058,7 @@ let lockCount = 0;
 let loadCallback = () => {
 	lockCount--;
 	if (lockCount <= 0) {
-		loop();
+		start();
 	}
 };
 
