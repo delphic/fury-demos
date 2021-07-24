@@ -589,7 +589,6 @@ let loop = function(){
 	verticalLookAngle = Fury.Maths.clamp(verticalLookAngle + rx, -clampAngle, clampAngle);
 	quat.rotateX(camera.rotation, camera.rotation, verticalLookAngle - lastVerticalLookAngle);
 
-	// TODO: Add smoothing?
 	let inputX = 0, inputZ = 0;
 	inputZ = getInputAxis("s", "w", 0.05, Fury.Maths.Ease.inQuad);
 	inputX = getInputAxis("d", "a", 0.05, Fury.Maths.Ease.inQuad);
@@ -756,9 +755,6 @@ let loop = function(){
 		// Q: Is the force you experience in 'hitting' water, entirely difference in F(drag) or is there surface tension to add?
 		// dv = pvvC(d)A * dt / 2m (with A ~= 1 and C(d) ~= 1, p(air) = 1.225 (one atmosphere at 15 degrees C), p(water) = 997)
 		// dv = (v*v*1.225*dt)/2m
-
-		// BUG - FEATURE LOSS - really hard to jump small distance whilst moving, this is probably just due to the instant acceleration
-			// TODO: Add input smoothing / acceleration curve and then test small jumps
 
 		// TODO: Also do this in water with much bigger coefficent
 
