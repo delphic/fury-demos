@@ -494,6 +494,29 @@ let launchVelocity = vec3.create();
 
 let velocity = vec3.create();
 
+let getInputAxis = (plusKey, minusKey, smoothTime, ease) => {
+	let  result = 0;
+	let now = Date.now();
+	if (Fury.Input.keyDown(plusKey)) {
+		let pressedTime = now - Fury.Input.keyDownTime(plusKey);
+		let r = Maths.clamp01(pressedTime / (smoothTime * 1000));
+		if (ease) {
+			result += ease(r);
+		} else {
+			result += r;
+		}
+	} 
+	if (Fury.Input.keyDown(minusKey)) {
+		let pressedTime = now - Fury.Input.keyDownTime(minusKey);
+		let r = Maths.clamp01(pressedTime / (smoothTime * 1000));
+		if (ease) {
+			result -= ease(r);
+		} else {
+			result -= r;
+		}
+	}
+	return result;
+};
 let inputVector = vec3.create();
 let localForward = vec3.create();
 let hitPoint = vec3.create();
@@ -568,18 +591,8 @@ let loop = function(){
 
 	// TODO: Add smoothing?
 	let inputX = 0, inputZ = 0;
-	if (Fury.Input.keyDown("w")) {
-		inputZ -= 1;
-	}
-	if (Fury.Input.keyDown("s")) {
-		inputZ += 1;
-	}
-	if (Fury.Input.keyDown("a")) {
-		inputX -= 1;
-	}
-	if (Fury.Input.keyDown("d")) {
-		inputX += 1;
-	}
+	inputZ = getInputAxis("s", "w", 0.05, Fury.Maths.Ease.inQuad);
+	inputX = getInputAxis("d", "a", 0.05, Fury.Maths.Ease.inQuad);
 
 	// Calculate local axes for camera - ignoring roll
 	// This would be easier with a character transform

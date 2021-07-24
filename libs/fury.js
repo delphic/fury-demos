@@ -377,6 +377,8 @@ let Ease = module.exports = (function() {
     // Comparison: easeBack has more terms when from haiyang.me,
     // formulation of bounce has been rearranged but is probably the same.
 
+    let exports = {};
+
     // Ease Back Consts
     const c1 = 1.70158;
     const c2 = c1 * 1.525;
@@ -398,7 +400,7 @@ let Ease = module.exports = (function() {
             return n1 * (t - 2.625) / d1 * (t - 2.625) + 0.984375;
         }
     };
-
+    exports.smoothStep = t => t * t * (3 - 2 * t);
     exports.inQuad = t => t * t;
     exports.outQuad = t =>  t * ( 2 - t ); // 1 - (1 - t) * (1 - t)
     exports.inOutQuad = t => t < 0.5 
@@ -447,6 +449,8 @@ let Ease = module.exports = (function() {
     exports.inOutBounce = t => t < 0.5 
         ? (1 - bounce(1 - 2 * t)) * 0.5
         : (1 + bounce(2 * t - 1)) * 0.5;
+
+    return exports;
 })();
 },{}],6:[function(require,module,exports){
 // Fury Module can be used with 'require'
@@ -554,8 +558,13 @@ var Input = module.exports = function() {
 	var pointerLocked = false;
 	var mouseState = [], currentlyPressedKeys = [];	// probably shouldn't use arrays lots of empty space
 	var downMouse = [], upMouse = [];
+	var downMouseTimes = [], upMouseTimes = [];
 	var downKeys = [], upKeys = []; // Keys pressed or released this frame
+	var downKeyTimes = [], upKeyTimes = []; // Time key was last pressed or released
 	var canvas;
+
+	let defaultTime = Date.now(); // Just return start of program rather than start of epoch if keys never pressed
+
 	var init = exports.init = function(targetCanvas) {
 			canvas = targetCanvas;
 			canvas.addEventListener("mousemove", handleMouseMove);
@@ -586,10 +595,6 @@ var Input = module.exports = function() {
 
 	var MouseDelta = exports.MouseDelta = [0, 0];
 	var MousePosition = exports.MousePosition = [0, 0];
-
-	// TODO: Add signalEndFrame and store keyDown [] and keyUp[] array for
-	// querying as well, although the option of just subscribing to the events
-	// in game code is also there but need to use DescriptionToKeyCode
 
 	var keyPressed = function(key) {
 		if (!isNaN(key) && !key.length) {
@@ -633,6 +638,28 @@ var Input = module.exports = function() {
 			}
 		}
 	};
+
+	exports.keyDownTime = function(key) {
+		if (!isNaN(key) && !key.length) {
+			return downKeyTimes[key];
+		} else if (key) {
+			var map = DescriptionToKeyCode[key];
+			return map ? downKeyTimes[map] : defaultTime;
+		} else {
+			return defaultTime;
+		}
+	}
+
+	exports.keyUpTime = function(key) {
+		if (!isNaN(key) && !key.length) {
+			return upKeyTimes[key];
+		} else if (key) {
+			var map = DescriptionToKeyCode[key];
+			return map ? upKeyTimes[map] : defaultTime;
+		} else {
+			return defaultTime;
+		}
+	}
 
 	var mousePressed = function(button) {
 		if (!isNaN(button) && !button.length) {
@@ -690,12 +717,14 @@ var Input = module.exports = function() {
 		// keyDown event can get called multiple times after a short delay
 		if (!currentlyPressedKeys[event.keyCode]) {
 			downKeys[event.keyCode] = true;
+			downKeyTimes[event.keyCode] = Date.now();
 		}
 		currentlyPressedKeys[event.keyCode] = true;
 	};
 
 	var handleKeyUp = function(event) {
 		currentlyPressedKeys[event.keyCode] = false;
+		upKeyTimes[event.keyCode] = Date.now();
 		upKeys[event.keyCode] = true;
 	};
 
@@ -719,6 +748,7 @@ var Input = module.exports = function() {
 	var handleMouseDown = function(event) {
 		if (!mouseState[event.button]) {
 			downMouse[event.button] = true;
+			downMouseTimes[event.button] = Date.now();
 		}
 		mouseState[event.button] = true;
 		return false;
@@ -726,6 +756,7 @@ var Input = module.exports = function() {
 
 	var handleMouseUp = function(event) {
 		mouseState[event.button] = false;
+		upMouseTimes[event.button] = Date.now();
 		upMouse[event.button] = true;
 	};
 
@@ -985,9 +1016,10 @@ let Maths = module.exports = (function() {
     quat2: glMatrix.quat2,
     vec2: glMatrix.vec2,
     vec3: glMatrix.vec3,
-    vec4:  glMatrix.vec4,
-    Ease: require('./ease')
+    vec4:  glMatrix.vec4
   };
+
+  exports.Ease = require('./ease');
 
   // TODO: Add plane 'class' - it's a vec4 with 0-2 being the normal vector and 3 being the distance to the origin from the plane along the normal vector
   // I.e. the dot product of the offset point?
