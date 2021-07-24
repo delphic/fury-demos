@@ -487,10 +487,9 @@ let lookSpeed = 1;
 // They make no sense over multiple frames
 let rocketDeltaV = 30;
 let grounded = true, jumpDeltaV = 5, stepHeight = 0.3; // Might be easier to configure jump as desired jump height against gravity rather than deltaV
-let gravity = 2 * 9.8;
-
-let initialLaunchXZSpeed = 0;
-let launchVelocity = vec3.create();
+let lastGroundedTime = 0, coyoteTime = 0.1, canCoyote = true, lastJumpAttemptTime = 0;
+// coyoteTime used both as the time after leaving an edge you can still jump and the time beyond hitting the ground you can press the jump button and jump on landing
+let gravity = 2 * 9.8;  // Increased gravity because games
 
 let velocity = vec3.create();
 
@@ -605,7 +604,7 @@ let loop = function(){
 	vec3.normalize(localZ, localZ);	// This should be unnecessary
 
 	if (inputX !== 0 && inputZ !== 0) {
-		// Normalize input vector in moving in more than one direction
+		// Normalize input vector if moving in more than one direction
 		inputX /= Math.SQRT2;
 		inputZ /= Math.SQRT2;
 	}
@@ -623,9 +622,6 @@ let loop = function(){
 				closestDistance = Math.abs(s);
 				vec3.copy(hitPoint, temp);
 			}
-			//if (s) {
-			//	console.log("HIT!: " + Maths.vec3ToString(temp) + " origin: " + Maths.vec3ToString(camera.position) + " direction: " + Maths.vec3ToString(localForward) + " s: " + s);
-			//}
 		}
 		vec3.negate(localForward, localForward); // point it away from facing direction again
 
@@ -637,9 +633,6 @@ let loop = function(){
 			vec3.zero(temp);
 			vec3.scaleAndAdd(temp, temp, localForward, velocityDelta);
 			vec3.add(velocity, velocity, temp);
-
-			vec3.add(launchVelocity, launchVelocity, temp);
-			initialLaunchXZSpeed = Math.sqrt(launchVelocity[0] * launchVelocity[0] + launchVelocity[2] * launchVelocity[2]);
 
 			if (grounded && velocity[1] > 0) {
 				grounded = false;
@@ -661,9 +654,6 @@ let loop = function(){
 			vec3.scaleAndAdd(velocity, velocity, temp2, dot);
 			vec3.add(velocity, velocity, temp); 
 			// TODO: Potentially should arrest rather than zero velocity in launch direction in XZ plane
-
-			vec3.add(launchVelocity, launchVelocity, temp);
-			initialLaunchXZSpeed = Math.sqrt(launchVelocity[0] * launchVelocity[0] + launchVelocity[2] * launchVelocity[2]);
 
 			if (grounded && velocity[1] > 0) {
 				grounded = false;
@@ -802,14 +792,15 @@ let loop = function(){
 	velocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
 	velocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
 
-	if (grounded && Fury.Input.keyDown("Space", true)) {	// TODO: Grace time (both if you land soon after and soon after you've left the ground)
-		grounded = false;
-		vec3.zero(launchVelocity);
-		// Apply Jump Velocity!
-		velocity[1] = jumpDeltaV;
 
-	} else {	// Attempt to move down anyway (basically check for grounded if not grounded || jumping)
-		velocity[1] -= gravity * elapsed; // Increased gravity because games
+	velocity[1] -= gravity * elapsed;
+
+	if (Fury.Input.keyDown("Space", true)) {
+		if (grounded || canCoyote && (Date.now() - lastGroundedTime < 1000 * coyoteTime)) {
+			jump();
+		} else {
+			lastJumpAttemptTime = Date.now();
+		}
 	}
 
 	// So the entered checks allow you to move out of objects you're clipping with
@@ -839,6 +830,13 @@ let loop = function(){
 
 	Fury.Input.handleFrameFinished();
 	window.requestAnimationFrame(loop);
+};
+
+let jump = () => {
+	grounded = false;
+	canCoyote = false;
+	// Apply Jump Velocity!
+	velocity[1] = jumpDeltaV;
 };
 
 let movePlayer = (targetPosition) => {
@@ -1034,24 +1032,19 @@ let characterMoveY = (elapsed) => {
 
 		vec3.copy(playerPosition, lastPosition);
 		if (velocity[1] <= 0) {
-			// Only external forces currently set initial launch speed
-			// so if we're grounded ensure launch speed is zero (another event could)
-			// set it to a non-zero value even if we're grounded
-
-			// TODO: Try putting in the ability to be pushed along the floor by
-			// decaying initial launch speed by friction instead of zeroing and
-			// add it to normal to normal XZ movement (will need to cache launch direction too)
-			initialLaunchXZSpeed = 0;
-			vec3.zero(launchVelocity);
+			lastGroundedTime = Date.now();
+			if (!grounded && lastGroundedTime - lastJumpAttemptTime < 1000 * coyoteTime) {
+				jump();
+			} else {
+				grounded = true;
+				canCoyote = true;	
+				// ^^ TODO: Need to convert this into isGrounded check, and will need to
+				// change dx / dz to be against slopes if/when we introduce them
+			}
 
 			// NOTE: this is called multiple times as we reach the point where we can't move the minimum
 			// distance as implied by acceleration by gravity from 0, because we don't move up to the object
 			// we just stop.. as stated above we should move *upto* the object.
-			grounded = true;
-			// ^^ TODO: Need to convert this into isGrounded check, and will need to
-			// change dx / dz to be against slopes if/when we introduce them
-
-			// BUG: This isn't always being set to true
 		}
 		velocity[1] = 0;
 	} else if (grounded && velocity[1] < 0) {
