@@ -110,7 +110,6 @@ var unlitColorShader = Fury.Shader.create({
 	}
 });
 
-var material = Fury.Material.create({ shader : shader });
 var redMaterial = Fury.Material.create({ shader: unlitColorShader });
 redMaterial.color = vec3.fromValues(1,0,0);
 
@@ -159,29 +158,30 @@ var createCuboidMesh = function(width, height, depth, x, y, z) {
 			-sx,  sy,  sz,
 			-sx,  sy, -sz],
 		textureCoordinates: [
-			// Front face
-			x-sx, y-sy,
+			// Updated uvs as noted from naive to match trenchbroom's texture mapping
+			// Front face - swapped x direction
 			x+sx, y-sy,
-			x+sx, y+sy,
-			x-sx, y+sy,
-
-			// Back face
 			x-sx, y-sy,
 			x-sx, y+sy,
 			x+sx, y+sy,
+
+			// Back face - swapped x direction
 			x+sx, y-sy,
+			x+sx, y+sy,
+			x-sx, y+sy,
+			x-sx, y-sy,
 
-			// Top face
-			x-sx, z+sz,
-			x-sx, z-sz,
-			x+sx, z-sz,
-			x+sx, z+sz,
+			// Top face - swapped x and z
+			z+sz, x-sx,
+			z-sz, x-sx,
+			z-sz, x+sx,
+			z+sz, x+sx,
 
-			// Bottom face
-			x+sx, z+sz,
-			x-sx, z+sz,
-			x-sx, z-sz,
-			x+sx, z-sz,
+			// Bottom face - swapped x and z
+			z+sz, x+sx,
+			z+sz, x-sx,
+			z-sz, x-sx,
+			z-sz, x+sx,
 
 			// Right face
 			z+sz, y-sy,
@@ -189,11 +189,11 @@ var createCuboidMesh = function(width, height, depth, x, y, z) {
 			z-sz, y+sy,
 			z-sz, y-sy,
 
-			// Left face
-			z-sz, y-sy,
+			// Left face - swaped z direction
 			z+sz, y-sy,
-			z+sz, y+sy,
-			z-sz, y+sy ],
+			z-sz, y-sy,
+			z-sz, y+sy,
+			z+sz, y+sy ],
 		indices: [
 			0, 1, 2,      0, 2, 3,    // Front face
 			4, 5, 6,      4, 6, 7,    // Back face
@@ -1079,14 +1079,6 @@ let loadMapTextures = function() {
 		images[textureName].src = textureName + ".png";
 	}
 };
-
-lockCount++;
-let image = new Image();
-image.onload = function() {
-	material.textures["uSampler"] = Fury.Renderer.createTexture(image, "high");
-	loadCallback();
-};
-image.src = "debug.png";
 
 lockCount++
 fetch("test.map").then(function(response) {
