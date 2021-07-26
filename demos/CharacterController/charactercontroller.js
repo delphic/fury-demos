@@ -457,7 +457,7 @@ let TriggerVolume = (function(){
 })();
 
 let playerPosition = vec3.clone(camera.position);
-let playerBox = Physics.Box.create({ center: playerPosition, size: vec3.fromValues(0.5, 2, 0.5) });
+let playerBox = Physics.Box.create({ center: playerPosition, size: vec3.fromValues(1, 2, 1) });
 
 let debugText = createDebugText();
 
