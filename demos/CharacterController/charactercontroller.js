@@ -1013,30 +1013,81 @@ let characterMoveXZ = (elapsed) => {
 	let resolvedX = minIndex[0] == -1, resolvedZ = minIndex[2] == -1;
 
 	if (!resolvedX && !resolvedZ) {
-		// NOTE: Not bothering with step logic if entering both x and z boxes
-		// because frankly I can't be bothered with the number of permutations
-
 		let fca = minTime[0] < minTime[2] ? 0 : 2; // First Collision Axis
 		let sca = minTime[0] < minTime[2] ? 2 : 0; // Second Collision Axis
  
-		// Try moving along fca first
-		let targetPosCache = targetPosition[fca];
-		targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], fca, targetPosition[fca] - lastPosition[fca]);
-		
-		checkForPlayerCollisions(playerCollisionInfo, elapsed);
-		
-		if (minIndex[sca] != -1) {
-			// No sliding along in second collision axis
-			targetPosition[sca] = getTouchPointTarget(collisionsBuffer[minIndex[sca]], sca, targetPosition[sca] - lastPosition[sca]);
-
-			// Try sliding the first collisation axis instead (with minimal movement in second collision axis)
-			targetPosition[fca] = targetPosCache;
-			checkForPlayerCollisions(playerCollisionInfo, elapsed);
-			if (minIndex[fca] != -1) {
-				// No dice really in a corner
-				targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], fca, targetPosition[fca] - lastPosition[fca]);
+		let stepSuccess = false;
+		if (collisionsBuffer[minIndex[fca]].max[1] < maxStepHeight) {
+			// Try step!
+			let targetY = targetPosition[1];
+			targetPosition[1] = playerPosition[1] + collisionsBuffer[minIndex[fca]].max[1] - playerBox.min[1];
+			playerCollisionInfo.cache();
+			if (checkForPlayerCollisions(playerCollisionInfo, elapsed) == 0) {
+				stepSuccess = true;
+				// Only step if it's completely clear to move to the target spot for ease
+			} else {
+				targetPosition[1] = targetY;
+				playerCollisionInfo.restore();
 			}
 		}
+
+		if (!stepSuccess) {
+			// Try moving along sca first
+			// This might feel like it's the wrong way around, however this allows you to slide into narrow doorways more easily
+			let targetPosCache = targetPosition[fca];
+			targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], fca, targetPosition[fca] - lastPosition[fca]);
+			
+			checkForPlayerCollisions(playerCollisionInfo, elapsed);
+			
+			if (minIndex[sca] != -1) {
+				// Still impacting second collision axis
+				if (collisionsBuffer[minIndex[sca]].max[1] < maxStepHeight) {
+					// Try step!
+					let targetY = targetPosition[1];
+					targetPosition[1] = playerPosition[1] + collisionsBuffer[minIndex[sca]].max[1] - playerBox.min[1];
+					playerCollisionInfo.cache();
+					if (checkForPlayerCollisions(playerCollisionInfo, elapsed) == 0) {
+						stepSuccess = true;
+						// Only step if it's completely clear to move to the target spot for ease
+					} else {
+						targetPosition[1] = targetY;
+						playerCollisionInfo.restore();
+					}
+				}
+
+				if (!stepSuccess) {
+					// Step did not resolve all collision
+					// No more sliding along in second collision axis
+					targetPosition[sca] = getTouchPointTarget(collisionsBuffer[minIndex[sca]], sca, targetPosition[sca] - lastPosition[sca]);
+
+					// Try sliding the first collisation axis instead (with minimal movement in second collision axis)
+					targetPosition[fca] = targetPosCache;
+					checkForPlayerCollisions(playerCollisionInfo, elapsed);
+
+					if (minIndex[fca] != -1) {
+						if (collisionsBuffer[minIndex[fca]].max[1] < maxStepHeight) {
+							// Try step!
+							let targetY = targetPosition[1];
+							targetPosition[1] = playerPosition[1] + collisionsBuffer[minIndex[fca]].max[1] - playerBox.min[1];
+							playerCollisionInfo.cache();
+							if (checkForPlayerCollisions(playerCollisionInfo, elapsed) == 0) {
+								stepSuccess = true;
+								// Only step if it's completely clear to move to the target spot for ease
+							} else {
+								targetPosition[1] = targetY;
+								playerCollisionInfo.restore();
+							}
+						}
+
+						if (!stepSuccess) {
+							// No dice really in a corner
+							targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], fca, targetPosition[fca] - lastPosition[fca]);
+						}
+					}
+				}
+			}
+		}
+
 	} else if (!resolvedX || !resolvedZ) {
 		let fca = resolvedZ ? 0 : 2; // First Collision Axis
 		let sca = resolvedZ ? 2 : 0; // Second Collision Axis (though there's no collision initially)
