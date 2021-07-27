@@ -464,11 +464,43 @@ let debugText = createDebugText();
 let triggerVolumes = [];
 
 // Used to store collisions, with minimum times and indices
-let playerCollisionInfo = {
-	collisionsBuffer: [],	// used to store reference to the world boxes which were collided with
-	minTime: [],
-	minIndex: []
-};
+let playerCollisionInfo = (() => {
+	let collisionsBuffer = []; 	// used to store reference to the world boxes which were collided with
+	let minTime = [];
+	let minIndex = [];
+
+	let bufferCache = [];
+	let timeCache = [];
+	let indexCache = [];
+	let overlapCache = 0;
+	return {
+		collisionsBuffer: collisionsBuffer,
+		minTime: minTime,
+		minIndex: minIndex,
+		overlapCount: 0,
+		cache: function() {
+			overlapCache = this.overlapCount;
+			for(let i = 0; i < overlapCache; i++) { // Only stores relevant elements from buffer
+				bufferCache[i] = collisionsBuffer[i];
+			}
+			for (let i = 0; i < 3; i++) {
+				timeCache[i] = minTime[i];
+				indexCache[i] = minIndex[i]; 
+			}
+		},
+		restore: function() {
+			this.overlapCount = overlapCache;
+			for (let i = 0; i < overlapCache; i++) {
+				collisionsBuffer[i] = bufferCache[i];
+			}
+			for (let i = 0; i < 3; i++) {
+				minTime[i] = timeCache[i];
+				minIndex[i] = indexCache[i];
+			}
+		}
+	};
+})();
+
 
 let localX = vec3.create(), localZ = vec3.create();
 let lastPosition = vec3.create();
@@ -865,195 +897,223 @@ let checksEnteredAxis = (out, box, axis, collisionIndex, elapsed) => {
 	return false;
 };
 
-let checkForPlayerCollisions = (out, elapsed) => {
-	let overlapCount = 0;
-	
-	out.minIndex[0] = out.minIndex[1] = out.minIndex[2] = -1;
-	out.minTime[0] = out.minTime[1] = out.minTime[2] = elapsed + 1;
-
-	for (let i = 0, l = world.boxes.length; i < l; i++) {
-		if (Physics.Box.intersect(playerBox, world.boxes[i])) {
-			out.collisionsBuffer[overlapCount] = world.boxes[i];
-
-			// Calculate collision time and which axis
-			checksEnteredAxis(out, world.boxes[i], 0, overlapCount, elapsed);
-			checksEnteredAxis(out, world.boxes[i], 1, overlapCount, elapsed);
-			checksEnteredAxis(out, world.boxes[i], 2, overlapCount, elapsed);
-
-			overlapCount += 1;
-			// Could record if you actually collided or were stuck here
-		}
-	}
-
-	out.overlapCount = overlapCount;
-
-	return overlapCount; // TODO: this should return collision count, not overlap count (although it's useful to have overlap count)
-};
-
-
-let checksEntersAxis = (out, box, axis, collisionIndex, elapsed) => {
+let checksEntersAxis = (out, box, axis, collisionBufferIndex, elapsed) => {
 	let delta = targetPosition[axis] - playerPosition[axis];
 	if (Math.abs(delta) > 0 && Physics.Box.entersAxis(box, playerBox, axis, delta)) {
-		let distance = 0;
-		if (delta > 0) {
-			// player max will cross box min
-			distance = playerBox.max[axis] - box.min[axis];
-		} else {
-			// player min will cross box max
-			distance = playerBox.min[axis] - box.max[axis];
-		}
-		let time = distance / Math.abs(delta / elapsed);
-		if (time < out.minTime[axis]) {
-			out.minTime[axis] = time;
-			out.minIndex[axis] = collisionIndex;
-		}
+		checkMinTime(out, box, axis, collisionBufferIndex, elapsed, delta);
 		return true;
 	}
 	return false;
 };
 
-// Like checks for player collisions but uses enters rather than entered 
-// i.e. checks target position against boxes rather than current position
-// also only checks Y axis 
-let checkForPlayerCollisionsY = (out, elapsed) => {
+let checkMinTime = (out, box, axis, collisionBufferIndex, elapsed, delta) => {
+	let distance = 0;
+	if (delta > 0) {
+		// player max will cross box min
+		distance = playerBox.max[axis] - box.min[axis];
+	} else {
+		// player min will cross box max
+		distance = playerBox.min[axis] - box.max[axis];
+	}
+	let time = distance / Math.abs(delta / elapsed);
+	if (time < out.minTime[axis]) {
+		out.minTime[axis] = time;
+		out.minIndex[axis] = collisionBufferIndex;
+	}
+};
+
+let checkForPlayerCollisions = (out, elapsed) => {
+	let overlapCount = 0;
 	let collisionCount = 0;
 	
 	out.minIndex[0] = out.minIndex[1] = out.minIndex[2] = -1;
 	out.minTime[0] = out.minTime[1] = out.minTime[2] = elapsed + 1;
 
 	for (let i = 0, l = world.boxes.length; i < l; i++) {
-		if (checksEntersAxis(out, world.boxes[i], 1, collisionCount, elapsed) 
-			&& Physics.Box.intersectsAxis(world.boxes[i], playerBox, 0)
-			&& Physics.Box.intersectsAxis(world.boxes[i], playerBox, 2)) {
-			out.collisionsBuffer[collisionCount] = world.boxes[i];			
+		let box = world.boxes[i];
+
+		let deltaX = targetPosition[0] - playerPosition[0];
+		let deltaY = targetPosition[1] - playerPosition[1];
+		let deltaZ = targetPosition[2] - playerPosition[2];
+		let intersectsX = Physics.Box.intersectsAxisOffset(box, playerBox, 0, deltaX);
+		let entersX = deltaX && Physics.Box.entersAxis(box, playerBox, 0, deltaX);
+		let intersectsY = Physics.Box.intersectsAxisOffset(box, playerBox, 1, deltaY);
+		let entersY = deltaY && Physics.Box.entersAxis(box, playerBox, 1, targetPosition[1] - playerPosition[1]);
+		let intersectsZ = Physics.Box.intersectsAxisOffset(box, playerBox, 2, deltaZ);
+		let entersZ = deltaZ && Physics.Box.entersAxis(box, playerBox, 2, targetPosition[2] - playerPosition[2]);
+
+		if ((intersectsX || entersX) && (intersectsY || entersY) && (intersectsZ || entersZ)) {
+			if (entersX) checkMinTime(out, box, 0, overlapCount, elapsed, deltaX);
+			if (entersY) checkMinTime(out, box, 1, overlapCount, elapsed, deltaY);
+			if (entersZ) checkMinTime(out, box, 2, overlapCount, elapsed, deltaZ);
+
+			out.collisionsBuffer[overlapCount] = box;
 			collisionCount += 1;
+			overlapCount += 1;
+		} else if (intersectsX && intersectsY && intersectsZ) {
+			out.collisionsBuffer[overlapCount] = box;
+			overlapCount += 1;
 		}
 	}
 
-	out.overlapCount = collisionCount; // Not checking for existing overlaps 
+	out.overlapCount = overlapCount;
 
 	return collisionCount;
 };
 
+// Like checks for player collisions but uses enters rather than entered 
+// i.e. checks target position against boxes rather than current position
+// also only checks Y axis (assumes no movement in x or z)
+let checkForPlayerCollisionsY = (out, elapsed) => {
+	let collisionCount = 0;
+	let overlapCount = 0;
+	
+	out.minIndex[0] = out.minIndex[1] = out.minIndex[2] = -1;
+	out.minTime[0] = out.minTime[1] = out.minTime[2] = elapsed + 1;
+
+	// Note enters axis does not do a box cast, merely checks current against new
+	// i.e. you can move through boxes at high enough speed - TODO: box cast 
+	for (let i = 0, l = world.boxes.length; i < l; i++) {
+		if (Physics.Box.intersectsAxis(world.boxes[i], playerBox, 0) && Physics.Box.intersectsAxis(world.boxes[i], playerBox, 2)) {
+			if (checksEntersAxis(out, world.boxes[i], 1, overlapCount, elapsed)) {
+				out.collisionsBuffer[overlapCount] = world.boxes[i];			
+				collisionCount += 1;
+				overlapCount += 1;
+			} else if (Physics.Box.intersectsAxis(world.boxes[i], playerBox, 1)) {
+				out.collisionsBuffer[overlapCount] = world.boxes[i];
+				overlapCount += 1;
+			}
+		}
+	}
+
+	out.overlapCount = overlapCount;
+
+	return collisionCount;
+};
+
+let getTouchPointTarget = (closestBox, axis, delta, stepAttempt) => {
+	if (delta <= 0) {
+		// new target position max + extents
+		return closestBox.max[axis] + playerBox.extents[axis];
+	} else {
+		// new target position min - extents
+		return closestBox.min[axis] - playerBox.extents[axis];
+	}
+};
+
 let characterMoveXZ = (elapsed) => {
-	movePlayer(targetPosition);
 	checkForPlayerCollisions(playerCollisionInfo, elapsed);
 
-	let minXTime = playerCollisionInfo.minTime[0];
-	let minZTime = playerCollisionInfo.minTime[2];
-	let minXIndex = playerCollisionInfo.minIndex[0];
-	let minZIndex = playerCollisionInfo.minIndex[2];
+	// Local variables to arrays for less typing
 	let collisionsBuffer = playerCollisionInfo.collisionsBuffer;
+	let minTime = playerCollisionInfo.minTime;
+	let minIndex = playerCollisionInfo.minIndex;
 
 	let maxStepHeight = playerBox.min[1] + stepHeight; 
-	let resolvedX = minXIndex == -1, resolvedZ = minZIndex == -1;
+	let resolvedX = minIndex[0] == -1, resolvedZ = minIndex[2] == -1;
 
-	// Note with all of these we're just stopping rather than 
-	// moving 'up to' the collision.
 	if (!resolvedX && !resolvedZ) {
 		// NOTE: Not bothering with step logic if entering both x and z boxes
 		// because frankly I can't be bothered with the number of permutations
-		if (minXTime < minZTime) {
+		if (minTime[0] < minTime[2]) {
 			// Try resolve X first
 			let targetX = targetPosition[0];
-			targetPosition[0] = lastPosition[0];
-			movePlayer(targetPosition);
+			targetPosition[0] = getTouchPointTarget(collisionsBuffer[minIndex[0]], 0, targetPosition[0] - lastPosition[0]);
+			
 			checkForPlayerCollisions(playerCollisionInfo, elapsed);
-	
-			if (playerCollisionInfo.minIndex[2] != -1) {
+			
+			if (minIndex[2] != -1) {
 				// No sliding along in z direction
-				targetPosition[2] = lastPosition[2];
+				targetPosition[2] = getTouchPointTarget(collisionsBuffer[minIndex[2]], 2, targetPosition[2] - lastPosition[2]);
 	
-				// Try sliding the x instead with no z movement
+				// Try sliding the x direction instead (with minimal z movement)
 				targetPosition[0] = targetX;
-				movePlayer(targetPosition);
 				checkForPlayerCollisions(playerCollisionInfo, elapsed);
-				if (playerCollisionInfo.minIndex[0] != -1) {
+				if (minIndex[0] != -1) {
 					// No dice really in a corner
-					targetPosition[0] = lastPosition[0];
-					movePlayer(targetPosition);
+					targetPosition[0] = getTouchPointTarget(collisionsBuffer[minIndex[0]], 0, targetPosition[0] - lastPosition[0]);
 				}
 			}
 		} else {
 			// Try resolve Z first
 			let targetZ = targetPosition[2];
-			targetPosition[2] = lastPosition[2];
-			movePlayer(targetPosition);
+			targetPosition[2] = getTouchPointTarget(collisionsBuffer[minIndex[2]], 2, targetPosition[2] - lastPosition[2]);
 			checkForPlayerCollisions(playerCollisionInfo, elapsed);
 
-			if (playerCollisionInfo.minIndex[0] != -1) {
+			if (minIndex[0] != -1) {
 				// No sliding along in x direction
-				targetPosition[0] = lastPosition[0];
+				targetPosition[0] = getTouchPointTarget(collisionsBuffer[minIndex[0]], 0, targetPosition[0] - lastPosition[0]);
 
-				// Try sliding along z direction instead
+				// Try sliding along z direction instead (with minimal x movement)
 				targetPosition[2] = targetZ;
-				movePlayer(targetPosition);
 				checkForPlayerCollisions(playerCollisionInfo, elapsed);
-				if (playerCollisionInfo.minIndex[2] != -1) {
+
+				if (minIndex[2] != -1) {
 					// No dice really in a corner
-					targetPosition[2] = lastPosition[2];
-					movePlayer(targetPosition);
+					targetPosition[2] = getTouchPointTarget(collisionsBuffer[minIndex[2]], 2, targetPosition[2] - lastPosition[2]);
 				}
 			}
 		}
 	} else if (!resolvedX) {
 		let stepSuccess = false;
-		if (collisionsBuffer[minXIndex].max[1] < maxStepHeight) {
+		if (collisionsBuffer[minIndex[0]].max[1] < maxStepHeight) {
 			// Try step!
-			playerPosition[1] += collisionsBuffer[minXIndex].max[1] - playerBox.min[1];
-			movePlayer(playerPosition); // Update bounds
+			let targetY = targetPosition[1];
+			targetPosition[1] = playerPosition[1] + collisionsBuffer[minIndex[0]].max[1] - playerBox.min[1];
+			playerCollisionInfo.cache();
 			if (checkForPlayerCollisions(playerCollisionInfo, elapsed) == 0) {
 				stepSuccess = true;
 				// Only step if it's completely clear to move to the target spot for ease
 			} else {
-				playerPosition[1] = lastPosition[1];
+				targetPosition[1] = targetY;
+				playerCollisionInfo.restore();
 			}
 		}
 		
 		if (!stepSuccess) {
-			targetPosition[0] = lastPosition[0];		
-			movePlayer(targetPosition);
+			targetPosition[0] = getTouchPointTarget(collisionsBuffer[minIndex[0]], 0, targetPosition[0] - lastPosition[0]);
 			checkForPlayerCollisions(playerCollisionInfo, elapsed);
-			if (playerCollisionInfo.minIndex[2] != -1) {
+			
+			if (minIndex[2] != -1) {
 				// Oh no now that we're not moving in x we're hitting something in z
-				targetPosition[2] = lastPosition[2];
-				movePlayer(targetPosition);
+				targetPosition[2] = getTouchPointTarget(collisionsBuffer[minIndex[2]], 2, targetPosition[2] - lastPosition[2]);
 			}
 		}
 	} else if (!resolvedZ) {
 		let stepSuccess = false;
-		if (collisionsBuffer[minZIndex].max[1] < maxStepHeight) {
+		if (collisionsBuffer[minIndex[2]].max[1] < maxStepHeight) {
 			// Try step!
-			playerPosition[1] += collisionsBuffer[minZIndex].max[1] - playerBox.min[1];
-			movePlayer(playerPosition); // Update bounds
+			let targetY = targetPosition[1];
+			targetPosition[1] = playerPosition[1] + collisionsBuffer[minIndex[2]].max[1] - playerBox.min[1];
+			playerCollisionInfo.cache();
 			if (checkForPlayerCollisions(playerCollisionInfo, elapsed) == 0) {
 				stepSuccess = true;
 				// Only step if it's completely clear to move to the target spot for ease
 			} else {
-				playerPosition[1] = lastPosition[1];
+				targetPosition[1] = targetY;
+				playerCollisionInfo.restore();
 			}
 		}
 
 		if (!stepSuccess) {
-			targetPosition[2] = lastPosition[2];
-			movePlayer(targetPosition);
+			targetPosition[2] = getTouchPointTarget(collisionsBuffer[minIndex[2]], 2, targetPosition[2] - lastPosition[2]);
 			checkForPlayerCollisions(playerCollisionInfo, elapsed);
-			if (playerCollisionInfo.minIndex[0] != -1) {
+			if (minIndex[0] != -1) {
 				// Oh no now that we're not moving in z we're hitting something in x
-				targetPosition[0] = lastPosition[0];
-				movePlayer(targetPosition);
+				targetPosition[0] = getTouchPointTarget(collisionsBuffer[minIndex[0]], 0, targetPosition[0] - lastPosition[0]);
 			}
 		}
 	}
+	// Finally move the player to the approved target position
+	movePlayer(targetPosition);
 };
 
 let characterMoveY = (elapsed) => {
 	// Now lets do it again for gravity / grounded
 	vec3.copy(lastPosition, playerPosition);
-	
+
 	vec3.scaleAndAdd(targetPosition, playerPosition, Maths.vec3Y, velocity[1] * elapsed);
 	
-	// TODO: Use a box cast instead of a box for high speeds
 	let collision = checkForPlayerCollisionsY(playerCollisionInfo, elapsed) > 0;
 
 	if (collision) {
