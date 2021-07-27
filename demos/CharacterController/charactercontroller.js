@@ -1015,51 +1015,37 @@ let characterMoveXZ = (elapsed) => {
 	if (!resolvedX && !resolvedZ) {
 		// NOTE: Not bothering with step logic if entering both x and z boxes
 		// because frankly I can't be bothered with the number of permutations
-		if (minTime[0] < minTime[2]) {
-			// Try resolve X first
-			let targetX = targetPosition[0];
-			targetPosition[0] = getTouchPointTarget(collisionsBuffer[minIndex[0]], 0, targetPosition[0] - lastPosition[0]);
-			
+
+		let fca = minTime[0] < minTime[2] ? 0 : 2; // First Collision Axis
+		let sca = minTime[0] < minTime[2] ? 2 : 0; // Second Collision Axis
+ 
+		// Try moving along fca first
+		let targetPosCache = targetPosition[fca];
+		targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], fca, targetPosition[fca] - lastPosition[fca]);
+		
+		checkForPlayerCollisions(playerCollisionInfo, elapsed);
+		
+		if (minIndex[sca] != -1) {
+			// No sliding along in second collision axis
+			targetPosition[sca] = getTouchPointTarget(collisionsBuffer[minIndex[sca]], sca, targetPosition[sca] - lastPosition[sca]);
+
+			// Try sliding the first collisation axis instead (with minimal movement in second collision axis)
+			targetPosition[fca] = targetPosCache;
 			checkForPlayerCollisions(playerCollisionInfo, elapsed);
-			
-			if (minIndex[2] != -1) {
-				// No sliding along in z direction
-				targetPosition[2] = getTouchPointTarget(collisionsBuffer[minIndex[2]], 2, targetPosition[2] - lastPosition[2]);
-	
-				// Try sliding the x direction instead (with minimal z movement)
-				targetPosition[0] = targetX;
-				checkForPlayerCollisions(playerCollisionInfo, elapsed);
-				if (minIndex[0] != -1) {
-					// No dice really in a corner
-					targetPosition[0] = getTouchPointTarget(collisionsBuffer[minIndex[0]], 0, targetPosition[0] - lastPosition[0]);
-				}
-			}
-		} else {
-			// Try resolve Z first
-			let targetZ = targetPosition[2];
-			targetPosition[2] = getTouchPointTarget(collisionsBuffer[minIndex[2]], 2, targetPosition[2] - lastPosition[2]);
-			checkForPlayerCollisions(playerCollisionInfo, elapsed);
-
-			if (minIndex[0] != -1) {
-				// No sliding along in x direction
-				targetPosition[0] = getTouchPointTarget(collisionsBuffer[minIndex[0]], 0, targetPosition[0] - lastPosition[0]);
-
-				// Try sliding along z direction instead (with minimal x movement)
-				targetPosition[2] = targetZ;
-				checkForPlayerCollisions(playerCollisionInfo, elapsed);
-
-				if (minIndex[2] != -1) {
-					// No dice really in a corner
-					targetPosition[2] = getTouchPointTarget(collisionsBuffer[minIndex[2]], 2, targetPosition[2] - lastPosition[2]);
-				}
+			if (minIndex[fca] != -1) {
+				// No dice really in a corner
+				targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], fca, targetPosition[fca] - lastPosition[fca]);
 			}
 		}
-	} else if (!resolvedX) {
+	} else if (!resolvedX || !resolvedZ) {
+		let fca = resolvedZ ? 0 : 2; // First Collision Axis
+		let sca = resolvedZ ? 2 : 0; // Second Collision Axis (though there's no collision initially)
+
 		let stepSuccess = false;
-		if (collisionsBuffer[minIndex[0]].max[1] < maxStepHeight) {
+		if (collisionsBuffer[minIndex[fca]].max[1] < maxStepHeight) {
 			// Try step!
 			let targetY = targetPosition[1];
-			targetPosition[1] = playerPosition[1] + collisionsBuffer[minIndex[0]].max[1] - playerBox.min[1];
+			targetPosition[1] = playerPosition[1] + collisionsBuffer[minIndex[fca]].max[1] - playerBox.min[1];
 			playerCollisionInfo.cache();
 			if (checkForPlayerCollisions(playerCollisionInfo, elapsed) == 0) {
 				stepSuccess = true;
@@ -1071,39 +1057,15 @@ let characterMoveXZ = (elapsed) => {
 		}
 		
 		if (!stepSuccess) {
-			targetPosition[0] = getTouchPointTarget(collisionsBuffer[minIndex[0]], 0, targetPosition[0] - lastPosition[0]);
+			targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], fca, targetPosition[fca] - lastPosition[fca]);
 			checkForPlayerCollisions(playerCollisionInfo, elapsed);
 			
-			if (minIndex[2] != -1) {
-				// Oh no now that we're not moving in x we're hitting something in z
-				targetPosition[2] = getTouchPointTarget(collisionsBuffer[minIndex[2]], 2, targetPosition[2] - lastPosition[2]);
+			if (minIndex[sca] != -1) {
+				// Oh no now that we're not moving in fca we're hitting something in sca
+				targetPosition[sca] = getTouchPointTarget(collisionsBuffer[minIndex[sca]], sca, targetPosition[sca] - lastPosition[sca]);
 			}
 		}
-	} else if (!resolvedZ) {
-		let stepSuccess = false;
-		if (collisionsBuffer[minIndex[2]].max[1] < maxStepHeight) {
-			// Try step!
-			let targetY = targetPosition[1];
-			targetPosition[1] = playerPosition[1] + collisionsBuffer[minIndex[2]].max[1] - playerBox.min[1];
-			playerCollisionInfo.cache();
-			if (checkForPlayerCollisions(playerCollisionInfo, elapsed) == 0) {
-				stepSuccess = true;
-				// Only step if it's completely clear to move to the target spot for ease
-			} else {
-				targetPosition[1] = targetY;
-				playerCollisionInfo.restore();
-			}
-		}
-
-		if (!stepSuccess) {
-			targetPosition[2] = getTouchPointTarget(collisionsBuffer[minIndex[2]], 2, targetPosition[2] - lastPosition[2]);
-			checkForPlayerCollisions(playerCollisionInfo, elapsed);
-			if (minIndex[0] != -1) {
-				// Oh no now that we're not moving in z we're hitting something in x
-				targetPosition[0] = getTouchPointTarget(collisionsBuffer[minIndex[0]], 0, targetPosition[0] - lastPosition[0]);
-			}
-		}
-	}
+	} 
 	// Finally move the player to the approved target position
 	movePlayer(targetPosition);
 };
