@@ -945,7 +945,7 @@ let characterMoveXZ = (elapsed) => {
 				// Try sliding along z direction instead
 				targetPosition[2] = targetZ;
 				movePlayer(targetPosition);
-				checkForPlayerCollisions(playerCollisionInfo, elapsed, targetPosition);
+				checkForPlayerCollisions(playerCollisionInfo, elapsed);
 				if (playerCollisionInfo.minIndex[2] != -1) {
 					// No dice really in a corner
 					targetPosition[2] = lastPosition[2];
@@ -994,7 +994,7 @@ let characterMoveXZ = (elapsed) => {
 		if (!stepSuccess) {
 			targetPosition[2] = lastPosition[2];
 			movePlayer(targetPosition);
-			checkForPlayerCollisions(playerCollisionInfo, elapsed, targetPosition);
+			checkForPlayerCollisions(playerCollisionInfo, elapsed);
 			if (playerCollisionInfo.minIndex[0] != -1) {
 				// Oh no now that we're not moving in z we're hitting something in x
 				targetPosition[0] = lastPosition[0];
@@ -1014,37 +1014,29 @@ let characterMoveY = (elapsed) => {
 	// playerBox.center has changed because it's set to the playerPosition ref
 	playerBox.calculateMinMax(playerBox.center, playerBox.extents);
 	
-	for (let i = 0, l = world.boxes.length; i < l; i++) {
-		// TODO: Use a box cast instead of a box for high speeds
-		if (Physics.Box.intersect(playerBox, world.boxes[i])) {
-			collision = true;
-			// Only moving on one axis don't need to do the slide checks
-			break;
-		}
-	}
+	// TODO: Use a box cast instead of a box for high speeds
+	collision = checkForPlayerCollisions(playerCollisionInfo, elapsed) > 0 && playerCollisionInfo.minIndex[1] != -1;
+	// ^^ It's possible for minIndex.y to still be negative if you were overlapping the box before moving, 
+	// in this case ignore the collision.
 
 	if (collision) {
-		// TODO: Would be nice to move up to the object instead
-		// To do this figure out which axes you moved in on - and move out to touch point
-		// in order of which would would have entered first - ratio of move to overlap
-		// Penetration vector.
-		// need list of overlapping colliders though
-
-		vec3.copy(playerPosition, lastPosition);
+		let closestBox = playerCollisionInfo.collisionsBuffer[playerCollisionInfo.minIndex[1]];
 		if (velocity[1] <= 0) {
+			// Moving down, move playerPosition so player is extents above closestBox.max[1]
+			vec3.copy(playerPosition, lastPosition);
+			playerPosition[1] = closestBox.max[1] + playerBox.extents[1];
+
 			lastGroundedTime = Date.now();
 			if (!grounded && lastGroundedTime - lastJumpAttemptTime < 1000 * coyoteTime) {
 				jump();
 			} else {
 				grounded = true;
-				canCoyote = true;	
-				// ^^ TODO: Need to convert this into isGrounded check, and will need to
-				// change dx / dz to be against slopes if/when we introduce them
+				canCoyote = true;
 			}
-
-			// NOTE: this is called multiple times as we reach the point where we can't move the minimum
-			// distance as implied by acceleration by gravity from 0, because we don't move up to the object
-			// we just stop.. as stated above we should move *upto* the object.
+		} else {
+			// Moving up, move playerPosition so player is extents below  closestBox.min[1]
+			vec3.copy(playerPosition, lastPosition);
+			playerPosition[1] = closestBox.min[1] - playerBox.extents[1];
 		}
 		velocity[1] = 0;
 	} else if (grounded && velocity[1] < 0) {
