@@ -803,9 +803,6 @@ let loop = function(){
 		}
 	}
 
-	// So the entered checks allow you to move out of objects you're clipping with
-	// the lack here means that if you're overlapping with something you fall through the floor
-
 	// Y Move
 	characterMoveY(elapsed);
 
@@ -846,10 +843,10 @@ let movePlayer = (targetPosition) => {
 	playerBox.calculateMinMax(playerBox.center, playerBox.extents);
 };
 
-let checksEnteredAxis = (out, box, axis, collisionIndex, elapsed, enteredPredicate) => {
+let checksEnteredAxis = (out, box, axis, collisionIndex, elapsed) => {
 	// Checks for minimum against out and writes to it
 	let delta = playerPosition[axis] - lastPosition[axis];
-	if (Math.abs(delta) > 0 && enteredPredicate(box, playerBox, delta)) {
+	if (Math.abs(delta) > 0 && Physics.Box.enteredAxis(box, playerBox, axis, delta)) {
 		let distance = 0;
 		if (delta > 0) {
 			// player max crossed box min
@@ -863,7 +860,9 @@ let checksEnteredAxis = (out, box, axis, collisionIndex, elapsed, enteredPredica
 			out.minTime[axis] = time;
 			out.minIndex[axis] = collisionIndex;
 		}
+		return true;
 	}
+	return false;
 };
 
 let checkForPlayerCollisions = (out, elapsed) => {
@@ -877,10 +876,9 @@ let checkForPlayerCollisions = (out, elapsed) => {
 			out.collisionsBuffer[overlapCount] = world.boxes[i];
 
 			// Calculate collision time and which axis
-			// TODO: Update Physics.Box to have an enteredAxis function
-			checksEnteredAxis(out, world.boxes[i], 0, overlapCount, elapsed, Physics.Box.enteredX);
-			checksEnteredAxis(out, world.boxes[i], 1, overlapCount, elapsed, Physics.Box.enteredY);
-			checksEnteredAxis(out, world.boxes[i], 2, overlapCount, elapsed, Physics.Box.enteredZ);
+			checksEnteredAxis(out, world.boxes[i], 0, overlapCount, elapsed);
+			checksEnteredAxis(out, world.boxes[i], 1, overlapCount, elapsed);
+			checksEnteredAxis(out, world.boxes[i], 2, overlapCount, elapsed);
 
 			overlapCount += 1;
 			// Could record if you actually collided or were stuck here
@@ -889,7 +887,52 @@ let checkForPlayerCollisions = (out, elapsed) => {
 
 	out.overlapCount = overlapCount;
 
-	return overlapCount;
+	return overlapCount; // TODO: this should return collision count, not overlap count (although it's useful to have overlap count)
+};
+
+
+let checksEntersAxis = (out, box, axis, collisionIndex, elapsed) => {
+	let delta = targetPosition[axis] - playerPosition[axis];
+	if (Math.abs(delta) > 0 && Physics.Box.entersAxis(box, playerBox, axis, delta)) {
+		let distance = 0;
+		if (delta > 0) {
+			// player max will cross box min
+			distance = playerBox.max[axis] - box.min[axis];
+		} else {
+			// player min will cross box max
+			distance = playerBox.min[axis] - box.max[axis];
+		}
+		let time = distance / Math.abs(delta / elapsed);
+		if (time < out.minTime[axis]) {
+			out.minTime[axis] = time;
+			out.minIndex[axis] = collisionIndex;
+		}
+		return true;
+	}
+	return false;
+};
+
+// Like checks for player collisions but uses enters rather than entered 
+// i.e. checks target position against boxes rather than current position
+// also only checks Y axis 
+let checkForPlayerCollisionsY = (out, elapsed) => {
+	let collisionCount = 0;
+	
+	out.minIndex[0] = out.minIndex[1] = out.minIndex[2] = -1;
+	out.minTime[0] = out.minTime[1] = out.minTime[2] = elapsed + 1;
+
+	for (let i = 0, l = world.boxes.length; i < l; i++) {
+		if (checksEntersAxis(out, world.boxes[i], 1, collisionCount, elapsed) 
+			&& Physics.Box.intersectsAxis(world.boxes[i], playerBox, 0)
+			&& Physics.Box.intersectsAxis(world.boxes[i], playerBox, 2)) {
+			out.collisionsBuffer[collisionCount] = world.boxes[i];			
+			collisionCount += 1;
+		}
+	}
+
+	out.overlapCount = collisionCount; // Not checking for existing overlaps 
+
+	return collisionCount;
 };
 
 let characterMoveXZ = (elapsed) => {
@@ -1006,24 +1049,17 @@ let characterMoveXZ = (elapsed) => {
 
 let characterMoveY = (elapsed) => {
 	// Now lets do it again for gravity / grounded
-	let collision = false;
-
 	vec3.copy(lastPosition, playerPosition);
 	
-	vec3.scaleAndAdd(playerPosition, playerPosition, Maths.vec3Y, velocity[1] * elapsed);
-	// playerBox.center has changed because it's set to the playerPosition ref
-	playerBox.calculateMinMax(playerBox.center, playerBox.extents);
+	vec3.scaleAndAdd(targetPosition, playerPosition, Maths.vec3Y, velocity[1] * elapsed);
 	
 	// TODO: Use a box cast instead of a box for high speeds
-	collision = checkForPlayerCollisions(playerCollisionInfo, elapsed) > 0 && playerCollisionInfo.minIndex[1] != -1;
-	// ^^ It's possible for minIndex.y to still be negative if you were overlapping the box before moving, 
-	// in this case ignore the collision.
+	let collision = checkForPlayerCollisionsY(playerCollisionInfo, elapsed) > 0;
 
 	if (collision) {
 		let closestBox = playerCollisionInfo.collisionsBuffer[playerCollisionInfo.minIndex[1]];
 		if (velocity[1] <= 0) {
 			// Moving down, move playerPosition so player is extents above closestBox.max[1]
-			vec3.copy(playerPosition, lastPosition);
 			playerPosition[1] = closestBox.max[1] + playerBox.extents[1];
 
 			lastGroundedTime = Date.now();
@@ -1035,12 +1071,14 @@ let characterMoveY = (elapsed) => {
 			}
 		} else {
 			// Moving up, move playerPosition so player is extents below  closestBox.min[1]
-			vec3.copy(playerPosition, lastPosition);
 			playerPosition[1] = closestBox.min[1] - playerBox.extents[1];
 		}
 		velocity[1] = 0;
-	} else if (grounded && velocity[1] < 0) {
-		grounded = false;
+	} else {
+		vec3.copy(playerPosition, targetPosition);
+		if (grounded && velocity[1] < 0) {
+			grounded = false;
+		}
 	}
 };
 
