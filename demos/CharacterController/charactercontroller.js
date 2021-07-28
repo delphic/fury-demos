@@ -1061,31 +1061,37 @@ let characterMoveXZ = (elapsed) => {
 
 	if (!resolvedX && !resolvedZ) {
 		let fca = minTime[0] < minTime[2] ? 0 : 2; // First Collision Axis
-		let sca = minTime[0] < minTime[2] ? 2 : 0; // Second Collision Axis
+
+		// Prioritise moving along the axis with the highest delta 
+		// (for inanimate objects should prioritse move along first collision axis, however for a character intent is important)
+		// (this allow us to slide into tight spaces more easily)
+		let absDeltaZ = Math.abs(targetPosition[2] - lastPosition[0]);
+		let absDeltaX = Math.abs(targetPosition[0] - lastPosition[0]);
+		let pca = absDeltaZ < absDeltaX ? 0 : 2; // Prioritised collision axis
+		let dca = absDeltaZ < absDeltaX ? 2 : 0; // Deprioritised collision axis
  
 		if (!tryStep(fca, maxStepHeight, elapsed)) {
-			// Try moving along sca first
-			// This might feel like it's the wrong way around, however this allows you to slide into narrow doorways more easily
-			let targetPosCache = targetPosition[fca];
-			targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], fca, targetPosition[fca] - lastPosition[fca]);
+			// Try moving along pca first
+			let targetPosCache = targetPosition[dca];
+			targetPosition[dca] = getTouchPointTarget(collisionsBuffer[minIndex[dca]], dca, targetPosition[dca] - lastPosition[dca]);
 			
 			checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
 			
-			if (minIndex[sca] != -1) {
-				// Still impacting second collision axis
-				if (!tryStep(sca, maxStepHeight, elapsed)) {
+			if (minIndex[pca] != -1) {
+				// Still impacting on prioritised collision axis
+				if (!tryStep(pca, maxStepHeight, elapsed)) {
 					// Step did not resolve all collision
-					// No more sliding along in second collision axis
-					targetPosition[sca] = getTouchPointTarget(collisionsBuffer[minIndex[sca]], sca, targetPosition[sca] - lastPosition[sca]);
+					// No more sliding along in prioritised collision axis
+					targetPosition[pca] = getTouchPointTarget(collisionsBuffer[minIndex[pca]], pca, targetPosition[pca] - lastPosition[pca]);
 
-					// Try sliding the first collisation axis instead (with minimal movement in second collision axis)
-					targetPosition[fca] = targetPosCache;
+					// Try sliding the deprioritised collisation axis instead (with minimal movement in prioritised collision axis)
+					targetPosition[dca] = targetPosCache;
 					checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
 
-					if (minIndex[fca] != -1) {
-						if (!tryStep(fca, maxStepHeight, elapsed)) {
+					if (minIndex[dca] != -1) {
+						if (!tryStep(dca, maxStepHeight, elapsed)) {
 							// No dice really in a corner
-							targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], fca, targetPosition[fca] - lastPosition[fca]);
+							targetPosition[dca] = getTouchPointTarget(collisionsBuffer[minIndex[dca]], dca, targetPosition[dca] - lastPosition[dca]);
 						}
 					}
 				}
