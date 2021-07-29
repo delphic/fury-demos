@@ -91,45 +91,6 @@ let shader = Fury.Shader.create({
 	}
 });
 
-let unlitColorShader = Fury.Shader.create({
-	vsSource: [
-		"attribute vec3 aVertexPosition;",
-
-		"uniform mat4 uMVMatrix;",
-		"uniform mat4 uPMatrix;",
-
-		"void main(void) {",
-			"gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
-		"}"
-	].join('\n'),
-	fsSource: [
-		"precision mediump float;",
-
-		"uniform vec3 uColor;",
-
-		"void main(void) {",
-			"gl_FragColor = vec4(uColor, 1.0);",
-		"}"
-	].join('\n'),
-	attributeNames: [ "aVertexPosition", ],
-	uniformNames: [ "uMVMatrix", "uPMatrix", "uColor" ],
-	pMatrixUniformName: "uPMatrix",
-	mvMatrixUniformName: "uMVMatrix",
-	bindMaterial: function(material) {
-		this.enableAttribute("aVertexPosition");
-		this.setUniformFloat3("uColor", material.color[0], material.color[1], material.color[2]);
-		// TOOD: ^^ A method to call when creating materials from the shader definition
-		// to ensure they have any additional properties might be nice
-	},
-	bindBuffers: function(mesh) {
-		this.setAttribute("aVertexPosition", mesh.vertexBuffer);
-		this.setIndexedAttribute(mesh.indexBuffer);
-	}
-});
-
-let redMaterial = Fury.Material.create({ shader: unlitColorShader });
-redMaterial.color = vec3.fromValues(1,0,0);
-
 let namedMaterials = [];
 
 // Creates a cuboid origin in centre of specifed width / height / depth
@@ -220,11 +181,6 @@ let createCuboidMesh = function(width, height, depth, x, y, z) {
 			20, 21, 22,   20, 22, 23  // Left face
 		] };
 };
-
-let createDebugCube = function(size, position) {
-	let mesh = Fury.Mesh.create(createCuboidMesh(size[0], size[1], size[2], position[0], position[1], position[2]));
-	return scene.add({ material: redMaterial, mesh: mesh, position: position });
-}
 
 let createCuboid = function(w, h, d, x, y, z, material) {
 	let position = vec3.fromValues(x, y, z);
@@ -835,8 +791,6 @@ let localForward = vec3.create();
 let hitPoint = vec3.create();
 let temp = vec3.create();
 let temp2 = vec3.create(); // TODO: vec3 Pool
-
-// let debugCube = createDebugCube(vec3.fromValues(0.1,0.1,0.1), hitPoint);	// Using hitpoint so it moves to where-ever last hit!
 
 // Mouse look 
 let mouseLookSpeed = 0.1;
