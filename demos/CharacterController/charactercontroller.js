@@ -378,13 +378,12 @@ let MapLoader = (function(){
 		};
 	};
 
-	exports.instantiate = (data, instantiationDelegate) => {
+	exports.instantiate = (data, scaleFactor, instantiationDelegate) => {
 		let playerSpawn = {
 			origin: [0, 0, 0],
 			angle: 0
 		};
 
-		let scaleFactor = 1/32; // TODO: Pass as arguement (although as 32 not 1/32)
 		for (let i = 0, l = data.entities.length; i < l; i++) {
 			let entity = data.entities[i];
 			switch (entity.classname) {
@@ -1126,7 +1125,7 @@ let loadCallback = () => {
 	}
 };
 
-let loadMapTextures = function(namedMaterials) {
+let loadMapTextures = function(namedMaterials, texelsPerUnit) {
 	let images = [];
 	let keys = Object.keys(namedMaterials);
 	for (let i = 0, l = keys.length; i < l; i++) {
@@ -1135,9 +1134,8 @@ let loadMapTextures = function(namedMaterials) {
 		images[textureName] = new Image();
 		images[textureName].onload = function() {
 			namedMaterials[textureName].textures["uSampler"] = Fury.Renderer.createTexture(images[textureName], "pixel", false, true);
-			// Scale should be 32 texels per unit
-			namedMaterials[textureName].sScale *= 32 / images[textureName].width;
-			namedMaterials[textureName].tScale *= 32 / images[textureName].height;
+			namedMaterials[textureName].sScale *= texelsPerUnit / images[textureName].width;
+			namedMaterials[textureName].tScale *= texelsPerUnit / images[textureName].height;
 
 			loadCallback();
 		};
@@ -1166,14 +1164,14 @@ fetch("test.map").then(function(response) {
 			namedMaterials[textureName]);
 	};
 
-	let playerSpawn = MapLoader.instantiate(map, instantiateAABB);
+	let playerSpawn = MapLoader.instantiate(map, 1/32, instantiateAABB);
 
 	vec3.set(camera.position, playerSpawn.origin[0], playerSpawn.origin[1], playerSpawn.origin[2]);
 	quat.fromEuler(camera.rotation, 0, playerSpawn.angle, 0);
 	vec3.copy(playerPosition, camera.position);
 	vec3.scaleAndAdd(camera.position, camera.position, Maths.vec3Y, 0.5);	// 0.5 offset for camera
 
-	loadMapTextures(namedMaterials);
+	loadMapTextures(namedMaterials, 32);
 	lockCount--;
 }).catch(function(error) {
 	console.log("Failed to load test.map: " + error.message);
