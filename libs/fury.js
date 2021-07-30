@@ -34,11 +34,11 @@ var vec3 = require('./maths').vec3;
 var Bounds = module.exports = (function() {
 	let exports = {};
 	let prototype = {
-		calculateMinMax: function(center, extents) {
+		calculateMinMax: function(center, extents) { // This should either use this.center and this.extents and be called recalculate or should set this.center and this.extents
 			vec3.subtract(this.min, center, extents);
 			vec3.add(this.max, center, extents);
 		},
-		calculateExtents: function(min, max) {
+		calculateExtents: function(min, max) { // This should either use this.min this.max and be called recalculate or should set this.min and this.max
 			vec3.subtract(this.size, max, min);
 			// If we had a vec3.zero vector could use scale and add
 			this.extents[0] = 0.5 * this.size[0];
@@ -633,7 +633,7 @@ var Input = module.exports = function() {
 		}
 	};
 
-	exports.keyDownTime = function(key) {
+	var keyDownTime = exports.keyDownTime = function(key) {
 		if (!isNaN(key) && !key.length) {
 			return downKeyTimes[key];
 		} else if (key) {
@@ -644,7 +644,7 @@ var Input = module.exports = function() {
 		}
 	}
 
-	exports.keyUpTime = function(key) {
+	var keyUpTime = exports.keyUpTime = function(key) {
 		if (!isNaN(key) && !key.length) {
 			return upKeyTimes[key];
 		} else if (key) {
@@ -654,6 +654,30 @@ var Input = module.exports = function() {
 			return defaultTime;
 		}
 	}
+
+	exports.getAxis = function(plusKey, minusKey, smoothTime, ease) {
+		let  result = 0;
+		let now = Date.now();
+		if (keyPressed(plusKey)) {
+			let pressedTime = now - keyDownTime(plusKey);
+			let r = Maths.clamp01(pressedTime / (smoothTime * 1000));
+			if (ease) {
+				result += ease(r);
+			} else {
+				result += r;
+			}
+		} 
+		if (keyPressed(minusKey)) {
+			let pressedTime = now - keyDownTime(minusKey);
+			let r = Maths.clamp01(pressedTime / (smoothTime * 1000));
+			if (ease) {
+				result -= ease(r);
+			} else {
+				result -= r;
+			}
+		}
+		return result;
+	};
 
 	var mousePressed = function(button) {
 		if (!isNaN(button) && !button.length) {

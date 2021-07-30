@@ -754,7 +754,7 @@ let lookSpeed = 1;
 let rocketDeltaV = 30;
 let grounded = true, jumpDeltaV = 5, stepHeight = 0.3; // Might be easier to configure jump as desired jump height against gravity rather than deltaV
 let lastGroundedTime = 0, coyoteTime = 0.1, canCoyote = true, lastJumpAttemptTime = 0;
-// coyoteTime used both as the time after leaving an edge you can still jump and the time beyond hitting the ground you can press the jump button and jump on landing
+// coyoteTime used both as the time after leaving an edge you can still jump and the time before hitting the ground you can press the jump button and jump on landing
 let gravity = 2 * 9.8;  // Increased gravity because games
 
 let playerPosition = vec3.clone(camera.position);
@@ -762,29 +762,6 @@ let playerBox = Physics.Box.create({ center: playerPosition, size: vec3.fromValu
 let playerVelocity = vec3.create();
 let characterController = CharacterController.create(world, playerPosition, playerBox, stepHeight); // TODO: Pass player object instead of multiple parameters
 
-let getInputAxis = (plusKey, minusKey, smoothTime, ease) => {
-	let  result = 0;
-	let now = Date.now();
-	if (Fury.Input.keyDown(plusKey)) {
-		let pressedTime = now - Fury.Input.keyDownTime(plusKey);
-		let r = Maths.clamp01(pressedTime / (smoothTime * 1000));
-		if (ease) {
-			result += ease(r);
-		} else {
-			result += r;
-		}
-	} 
-	if (Fury.Input.keyDown(minusKey)) {
-		let pressedTime = now - Fury.Input.keyDownTime(minusKey);
-		let r = Maths.clamp01(pressedTime / (smoothTime * 1000));
-		if (ease) {
-			result -= ease(r);
-		} else {
-			result -= r;
-		}
-	}
-	return result;
-};
 let inputVector = vec3.create();
 let localForward = vec3.create();
 let hitPoint = vec3.create();
@@ -856,8 +833,8 @@ let loop = function(){
 	quat.rotateX(camera.rotation, camera.rotation, verticalLookAngle - lastVerticalLookAngle);
 
 	let inputX = 0, inputZ = 0;
-	inputZ = getInputAxis("s", "w", 0.05, Fury.Maths.Ease.inQuad);
-	inputX = getInputAxis("d", "a", 0.05, Fury.Maths.Ease.inQuad);
+	inputZ = Fury.Input.getAxis("s", "w", 0.05, Fury.Maths.Ease.inQuad);
+	inputX = Fury.Input.getAxis("d", "a", 0.05, Fury.Maths.Ease.inQuad);
 
 	// Calculate local axes for camera - ignoring roll
 	// This would be easier with a character transform
