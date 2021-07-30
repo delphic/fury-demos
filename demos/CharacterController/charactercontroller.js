@@ -635,7 +635,7 @@ let CharacterController = (() => {
 			vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, velocity[2] * elapsed);
 
 			// As we might be checking collision repeatedly sweep out maximal set first
-			sweepWorldForRevelantBoxes(relevantBoxes, targetPosition, lastPosition);
+			sweepWorldForRevelantBoxes(relevantBoxes, targetPosition, playerPosition);
 			checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
 		
 			// Local variables to arrays for less typing
@@ -652,15 +652,15 @@ let CharacterController = (() => {
 				// Prioritise moving along the axis with the highest delta 
 				// (for inanimate objects should prioritse move along first collision axis, however for a character intent is important)
 				// (this allow us to slide into tight spaces more easily)
-				let absDeltaZ = Math.abs(targetPosition[2] - lastPosition[0]);
-				let absDeltaX = Math.abs(targetPosition[0] - lastPosition[0]);
+				let absDeltaZ = Math.abs(targetPosition[2] - playerPosition[0]);
+				let absDeltaX = Math.abs(targetPosition[0] - playerPosition[0]);
 				let pca = absDeltaZ < absDeltaX ? 0 : 2; // Prioritised collision axis
 				let dca = absDeltaZ < absDeltaX ? 2 : 0; // Deprioritised collision axis
 		
 				if (!tryStep(fca, maxStepHeight, elapsed)) {
 					// Try moving along pca first
 					let targetPosCache = targetPosition[dca];
-					targetPosition[dca] = getTouchPointTarget(collisionsBuffer[minIndex[dca]], dca, targetPosition[dca] - lastPosition[dca]);
+					targetPosition[dca] = getTouchPointTarget(collisionsBuffer[minIndex[dca]], dca, targetPosition[dca] - playerPosition[dca]);
 					
 					checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
 					
@@ -669,7 +669,7 @@ let CharacterController = (() => {
 						if (!tryStep(pca, maxStepHeight, elapsed)) {
 							// Step did not resolve all collision
 							// No more sliding along in prioritised collision axis
-							targetPosition[pca] = getTouchPointTarget(collisionsBuffer[minIndex[pca]], pca, targetPosition[pca] - lastPosition[pca]);
+							targetPosition[pca] = getTouchPointTarget(collisionsBuffer[minIndex[pca]], pca, targetPosition[pca] - playerPosition[pca]);
 		
 							// Try sliding the deprioritised collisation axis instead (with minimal movement in prioritised collision axis)
 							targetPosition[dca] = targetPosCache;
@@ -678,7 +678,7 @@ let CharacterController = (() => {
 							if (minIndex[dca] != -1) {
 								if (!tryStep(dca, maxStepHeight, elapsed)) {
 									// No dice really in a corner
-									targetPosition[dca] = getTouchPointTarget(collisionsBuffer[minIndex[dca]], dca, targetPosition[dca] - lastPosition[dca]);
+									targetPosition[dca] = getTouchPointTarget(collisionsBuffer[minIndex[dca]], dca, targetPosition[dca] - playerPosition[dca]);
 								}
 							}
 						}
@@ -690,12 +690,12 @@ let CharacterController = (() => {
 				let sca = resolvedZ ? 2 : 0; // Second Collision Axis (though there's no collision initially)
 				
 				if (!tryStep(fca, maxStepHeight, elapsed)) {
-					targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], fca, targetPosition[fca] - lastPosition[fca]);
+					targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], fca, targetPosition[fca] - playerPosition[fca]);
 					checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
 					
 					if (minIndex[sca] != -1) {
 						// Oh no now that we're not moving in fca we're hitting something in sca
-						targetPosition[sca] = getTouchPointTarget(collisionsBuffer[minIndex[sca]], sca, targetPosition[sca] - lastPosition[sca]);
+						targetPosition[sca] = getTouchPointTarget(collisionsBuffer[minIndex[sca]], sca, targetPosition[sca] - playerPosition[sca]);
 					}
 				}
 			} 
@@ -720,13 +720,13 @@ let CharacterController = (() => {
 					// Moving down, move playerPosition so player is extents above closestBox.max[1]
 					playerPosition[1] = closestBox.max[1] + playerBox.extents[1];
 					playerBox.calculateMinMax(playerBox.center, playerBox.extents);
-					velocity[1] = 0; // TODO: Arguably this should be distance moved
+					velocity[1] = (playerPosition[1] - lastPosition[1]) / elapsed;
 					return true; // Hit Ground
 				} else {
 					// Moving up, move playerPosition so player is extents below  closestBox.min[1]
 					playerPosition[1] = closestBox.min[1] - playerBox.extents[1];
 					playerBox.calculateMinMax(playerBox.center, playerBox.extents);
-					velocity[1] = 0; // TODO: Arguably this should be distance moved
+					velocity[1] = (playerPosition[1] - lastPosition[1]) / elapsed;
 					return false; // TODO: Contact point top would be nice to differentitate from no collision
 				}
 			} else {
