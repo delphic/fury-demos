@@ -449,54 +449,55 @@ let Ease = module.exports = (function() {
 },{}],6:[function(require,module,exports){
 // Fury Module can be used with 'require'
 var Fury = module.exports = (function() {
-  let Fury = {};
-  let canvas;
+	let Fury = {};
+	let canvas;
 
-  // Modules
-  Fury.Bounds = require('./bounds');
-  Fury.Camera = require('./camera');
-  Fury.Input = require('./input');
-  Fury.Material = require('./material');
-  Fury.Maths = require('./maths');
-  Fury.Mesh = require('./mesh');
-  Fury.Model = require('./model');
-  Fury.Physics = require('./physics');
-  Fury.Renderer = require('./renderer');
-  Fury.Scene = require('./scene');
-  Fury.Shader = require('./shader');
-  Fury.Transform = require('./transform');
+	// Modules
+	Fury.Bounds = require('./bounds');
+	Fury.Camera = require('./camera');
+	Fury.Input = require('./input');
+	Fury.Material = require('./material');
+	Fury.Maths = require('./maths');
+	Fury.Mesh = require('./mesh');
+	Fury.Model = require('./model');
+	Fury.Physics = require('./physics');
+	Fury.Renderer = require('./renderer');
+	Fury.Scene = require('./scene');
+	Fury.Shader = require('./shader');
+	Fury.Shaders = require('./shaders');
+	Fury.Transform = require('./transform');
 
-  Fury.prefabs = { keys: "Can't touch this, doo doo doo, do do, do do" };
+	Fury.prefabs = { keys: "Can't touch this, doo doo doo, do do, do do" };
 
-  Fury.createPrefab = function(parameters) {
-  	var prefabs = Fury.prefabs;
-  	if(!parameters || !parameters.name || prefabs[parameters.name]) {
-  		throw new Error("Please provide a valid and unique name parameter for your prefab");
-  	} else {
-  		prefabs[parameters.name] = parameters;
-  		// TODO: If we move to using a component system will need to transfer from parameter flat structure to a gameobject like structure, for now these are the same.
-  		// Note that each component class should deal with setting up that component instance from supplied parameters itself
-  	}
-  };
+	Fury.createPrefab = function(parameters) {
+		var prefabs = Fury.prefabs;
+		if(!parameters || !parameters.name || prefabs[parameters.name]) {
+			throw new Error("Please provide a valid and unique name parameter for your prefab");
+		} else {
+			prefabs[parameters.name] = parameters;
+			// TODO: If we move to using a component system will need to transfer from parameter flat structure to a gameobject like structure, for now these are the same.
+			// Note that each component class should deal with setting up that component instance from supplied parameters itself
+		}
+	};
 
-  // Public functions
-  Fury.init = function(canvasId, contextAttributes) {
-  	canvas = document.getElementById(canvasId);
-  	try {
-  		Fury.Renderer.init(canvas, contextAttributes);
-  	} catch (error) {
-  		// TODO: debug.error(error.message)
-  		console.log(error.message);
-  		return false;
-  	}
-  	Fury.Input.init(canvas);
-  	return true;
-  };
+	// Public functions
+	Fury.init = function(canvasId, contextAttributes, preloadShaders) {
+		canvas = document.getElementById(canvasId);
+		try {
+			Fury.Renderer.init(canvas, contextAttributes);
+		} catch (error) {
+			console.log(error.message);
+			return false;
+		}
+		Fury.Input.init(canvas);
+		Fury.Shaders.createShaders();
+		return true;
+	};
 
-  return Fury;
+	return Fury;
 })();
 
-},{"./bounds":2,"./camera":3,"./input":8,"./material":9,"./maths":10,"./mesh":11,"./model":12,"./physics":13,"./renderer":14,"./scene":15,"./shader":16,"./transform":17}],7:[function(require,module,exports){
+},{"./bounds":2,"./camera":3,"./input":8,"./material":9,"./maths":10,"./mesh":11,"./model":12,"./physics":13,"./renderer":14,"./scene":15,"./shader":16,"./shaders":17,"./transform":18}],7:[function(require,module,exports){
 var IndexedMap = module.exports = function(){
 	// This creates a dictionary that provides its own keys
 	// It also contains an array of keys for quick enumeration
@@ -982,8 +983,8 @@ var Material = module.exports = function(){
 			material._properties = keys; // Store custom properties for the copy method
 		}
 
-		if (shader.validateMaterial) {
-			shader.validateMaterial(material);
+		if (material.shader.validateMaterial) {
+			material.shader.validateMaterial(material);
 		}
 
 		return material;
@@ -1881,7 +1882,6 @@ var setTextureQuality = function(glTextureType, quality, disableAniso) {
 			
 			// Could investigate using multiple samplers in a version 300 ES Shader and blending between them,
 			// or using multiple texture with different settings, potentially using dFdx and dFdy to determine / estimate MIPMAP level
-			// TODO: arguement to enable or disable anisotropy for pixel 
 			gl.texParameterf(glTextureType, anisotropyExt.TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
 		}
 		gl.generateMipmap(glTextureType);
@@ -2496,7 +2496,7 @@ var Scene = module.exports = function() {
 	return exports;
 }();
 
-},{"./bounds":2,"./indexedMap":7,"./material":9,"./maths":10,"./mesh":11,"./renderer":14,"./transform":17}],16:[function(require,module,exports){
+},{"./bounds":2,"./indexedMap":7,"./material":9,"./maths":10,"./mesh":11,"./renderer":14,"./transform":18}],16:[function(require,module,exports){
 // Shader Class for use with Fury Scene
 var r = require('./renderer');
 
@@ -2569,6 +2569,111 @@ var Shader = module.exports = function() {
 }();
 
 },{"./renderer":14}],17:[function(require,module,exports){
+let Shader = require('./shader');
+
+let Shaders = module.exports = (function() {
+	let exports = {};
+
+	let unlitColor = {
+		vsSource: [
+			"attribute vec3 aVertexPosition;",
+	
+			"uniform mat4 uMVMatrix;",
+			"uniform mat4 uPMatrix;",
+	
+			"void main(void) {",
+				"gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
+			"}"
+		].join('\n'),
+		fsSource: [
+			"precision mediump float;",
+	
+			"uniform vec3 uColor;",
+	
+			"void main(void) {",
+				"gl_FragColor = vec4(uColor, 1.0);",
+			"}"
+		].join('\n'),
+		attributeNames: [ "aVertexPosition", ],
+		uniformNames: [ "uMVMatrix", "uPMatrix", "uColor" ],
+		pMatrixUniformName: "uPMatrix",
+		mvMatrixUniformName: "uMVMatrix",
+		bindMaterial: function(material) {
+			this.enableAttribute("aVertexPosition");
+			this.setUniformFloat3("uColor", material.color[0], material.color[1], material.color[2]);
+		},
+		bindBuffers: function(mesh) {
+			this.setAttribute("aVertexPosition", mesh.vertexBuffer);
+			this.setIndexedAttribute(mesh.indexBuffer);
+		},
+		validateMaterial: function(material) {
+			if (!material.color) {
+				console.error("No color property specified on material using UnlitColor shader");
+			} else if (material.color.length < 3) {
+				console.error("Color property on material using UnlitColor shader must be a vec3");
+			}
+		}
+	};
+	
+	let sprite = {
+		vsSource: [
+		"attribute vec3 aVertexPosition;",
+		"attribute vec2 aTextureCoord;",
+	
+		"uniform mat4 uMVMatrix;",
+		"uniform mat4 uPMatrix;",
+	
+		"varying vec2 vTextureCoord;",
+		"void main(void) {",
+			"gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
+			"vTextureCoord = aTextureCoord;",
+		"}"].join('\n'),
+		fsSource: [
+		"precision mediump float;",
+	
+		"varying vec2 vTextureCoord;",
+	
+		"uniform vec2 uOffset;",
+		"uniform vec2 uScale;",
+	
+		"uniform sampler2D uSampler;",
+	
+		"void main(void) {",
+			"gl_FragColor = texture2D(uSampler, vec2(uOffset.x + (uScale.x * vTextureCoord.s), uOffset.y + (uScale.y * vTextureCoord.t)));",
+		"}"].join('\n'),
+	
+		attributeNames: [ "aVertexPosition", "aTextureCoord" ],
+		uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler", "uOffset", "uScale" ],
+		textureUniformNames: [ "uSampler" ],
+		pMatrixUniformName: "uPMatrix",
+		mvMatrixUniformName: "uMVMatrix",
+		bindMaterial: function(material) {
+			this.setUniformVector2("uOffset", material.offset);
+			this.setUniformVector2("uScale", material.scale);
+		},
+		bindBuffers: function(mesh) {
+			this.enableAttribute("aVertexPosition");
+			this.enableAttribute("aTextureCoord");
+			this.setAttribute("aVertexPosition", mesh.vertexBuffer);
+			this.setAttribute("aTextureCoord", mesh.textureBuffer);
+			this.setIndexedAttribute(mesh.indexBuffer);
+		},
+		validateMaterial: function(material) {
+			if (material.offset === undefined || material.offset.length != 2)
+				console.error("Material using Sprite shader must have a offset property set to a vec2");
+			if (material.scale === undefined || material.scale.length != 2)
+				console.error("Material using Sprite shader must have scale property set to a vec2");
+		}
+	};
+
+	exports.createShaders = () => {
+		exports.UnlitColor = Shader.create(unlitColor);
+		exports.Sprite = Shader.create(sprite);
+	};
+
+	return exports;
+})();
+},{"./shader":16}],18:[function(require,module,exports){
 var Maths = require('./maths');
 var quat = Maths.quat, vec3 = Maths.vec3;
 

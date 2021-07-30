@@ -88,60 +88,9 @@ var setMaterialOffset = function(frameIndex) {
 // Init Fury
 Fury.init("fury");
 
-// Create shader
-var shader = Fury.Shader.create({
-	vsSource: [
-	"attribute vec3 aVertexPosition;",
-    "attribute vec2 aTextureCoord;",
-
-    "uniform mat4 uMVMatrix;",
-    "uniform mat4 uPMatrix;",
-
-    "varying vec2 vTextureCoord;",
-    "void main(void) {",
-        "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
-        "vTextureCoord = aTextureCoord;",
-    "}"].join('\n'),
-	fsSource: [
-	"precision mediump float;",
-
-    "varying vec2 vTextureCoord;",
-
-    "uniform vec2 uOffset;",
-    "uniform vec2 uScale;",
-
-    "uniform sampler2D uSampler;",
-
-    "void main(void) {",
-        "gl_FragColor = texture2D(uSampler, vec2(uOffset.x + (uScale.x * vTextureCoord.s), uOffset.y + (uScale.y * vTextureCoord.t)));",
-    "}"].join('\n'),
-
-	attributeNames: [ "aVertexPosition", "aTextureCoord" ],
-	uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler", "uOffset", "uScale" ],
-	textureUniformNames: [ "uSampler" ],
-	pMatrixUniformName: "uPMatrix",
-	mvMatrixUniformName: "uMVMatrix",
-	bindMaterial: function(material) {
-		this.setUniformVector2("uOffset", material.offset);
-		this.setUniformVector2("uScale", material.scale);
-	},
-	bindBuffers: function(mesh) {
-		this.enableAttribute("aVertexPosition");
-		this.enableAttribute("aTextureCoord");
-		this.setAttribute("aVertexPosition", mesh.vertexBuffer);
-		this.setAttribute("aTextureCoord", mesh.textureBuffer);
-		this.setIndexedAttribute(mesh.indexBuffer);
-	},
-	validateMaterial: function(material) {
-		if (material.offset === undefined || material.offset.length != 2)
-			console.log("Warning material must have scale set to a vec2");
-		if (material.scale === undefined || material.scale.length != 2)
-			console.log("Warning material must have scale set to a vec2");
-	}
-});
-
+// Create material
 var material = Fury.Material.create({ 
-	shader : shader, 
+	shader : Fury.Shaders.Sprite, 
 	properties: { 
 		alpha: true,
 		offset: vec2.fromValues(0, 0),
