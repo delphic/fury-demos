@@ -974,6 +974,18 @@ var Material = module.exports = function(){
 			}
 		}
 
+		if (parameters.properties) {
+			let keys = Object.keys(parameters.properties);
+			for (let i = 0, l = keys.length; i < l; i++) {
+				material[keys[i]] = parameters.properties[keys[i]];
+			}
+			material._properties = keys; // Store custom properties for the copy method
+		}
+
+		if (shader.validateMaterial) {
+			shader.validateMaterial(material);
+		}
+
 		return material;
 	};
 
@@ -989,7 +1001,16 @@ var Material = module.exports = function(){
 				}
 			}
 		}
-		// TODO: Need to copy other properties for this to be useful could use Object.assign?
+
+		if (material._properties) {
+			// Note this will assign the same to the copy for reference types, rather than performing a deep clone
+			// additionally it will not copy across any dynamically added properties 
+			// TODO: Support dynamic properties via Object.assign ? 
+			for (let i = 0, l = material._properties.length; i < l; i++) {
+				copy[material._properties[i]] = material[material._properties[i]];
+			}
+		}
+	
 		return copy;
 	};
 
@@ -2529,6 +2550,10 @@ var Shader = module.exports = function() {
 			throw new Error("You must provide a mesh binding function 'bindBuffers'");
 		}
 		shader.bindBuffers = parameters.bindBuffers;
+
+		if (parameters.validateMaterial && typeof(parameters.validateMaterial) === 'function') {
+			shader.validateMaterial = parameters.validateMaterial;
+		}
 
 		shader.pMatrixUniformName = parameters.pMatrixUniformName || "pMatrix";
 		shader.mvMatrixUniformName = parameters.mvMatrixUniformName || "mvMatrix";

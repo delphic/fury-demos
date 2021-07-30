@@ -88,6 +88,14 @@ let shader = Fury.Shader.create({
 		this.setAttribute("aVertexPosition", mesh.vertexBuffer);
 		this.setAttribute("aTextureCoord", mesh.textureBuffer);
 		this.setIndexedAttribute(mesh.indexBuffer);
+	},
+	validateMaterial: function(material) {
+		if (!material.sScale) {
+			console.log("Warning: material does not have sScale property set");
+		}
+		if (!material.tScale) {
+			console.log("Warning: material does not have tScale property set");
+		}
 	}
 });
 
@@ -376,20 +384,21 @@ let MapLoader = (function(){
 			angle: 0
 		};
 
+		let scaleFactor = 1/32; // TODO: Pass as arguement (although as 32 not 1/32)
 		for (let i = 0, l = data.entities.length; i < l; i++) {
 			let entity = data.entities[i];
 			switch (entity.classname) {
 				case "worldspawn":
-					instanitateWorldBrushes(entity.brushes, 1/32, instantiationDelegate);
+					instanitateWorldBrushes(entity.brushes, scaleFactor, instantiationDelegate);
 					break;
 				case "info_player_start":
-					parseVector(playerSpawn.origin, entity.origin, 1/32);
+					parseVector(playerSpawn.origin, entity.origin, scaleFactor);
 					playerSpawn.angle = parseInt(entity.angle, 10);
 					break;
 				case "trigger_push": // Game Specific
 					// relying on globals
 					entity.aabb = {};
-					parseAABBFromBrush(entity.aabb, entity.brushes[0], 1/32);
+					parseAABBFromBrush(entity.aabb, entity.brushes[0], scaleFactor);
 					triggerVolumes.push(TriggerVolume.create(entity));
 					break;
 			}
@@ -1127,8 +1136,8 @@ let loadMapTextures = function(namedMaterials) {
 		images[textureName].onload = function() {
 			namedMaterials[textureName].textures["uSampler"] = Fury.Renderer.createTexture(images[textureName], "pixel", false, true);
 			// Scale should be 32 texels per unit
-			namedMaterials[textureName].sScale = 32 / images[textureName].width;
-			namedMaterials[textureName].tScale = 32 / images[textureName].height;
+			namedMaterials[textureName].sScale *= 32 / images[textureName].width;
+			namedMaterials[textureName].tScale *= 32 / images[textureName].height;
 
 			loadCallback();
 		};
@@ -1144,7 +1153,7 @@ fetch("test.map").then(function(response) {
 
 	let instantiateAABB = (aabb, textureName) => {
 		if (textureName && !namedMaterials.hasOwnProperty(textureName)) {
-			namedMaterials[textureName] = Fury.Material.create({ shader: shader });
+			namedMaterials[textureName] = Fury.Material.create({ shader: shader, properties: { tScale: 1, sScale: 1 } });
 		}
 
 		createCuboid(

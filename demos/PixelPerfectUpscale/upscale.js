@@ -56,13 +56,23 @@ var shader = Fury.Shader.create({
 		this.setAttribute("aVertexPosition", mesh.vertexBuffer);
 		this.setAttribute("aTextureCoord", mesh.textureBuffer);
 		this.setIndexedAttribute(mesh.indexBuffer);
+	},
+	validateMaterial: function(material) {
+		if (material.offset === undefined || material.offset.length != 2)
+			console.log("Warning material must have scale set to a vec2");
+		if (material.scale === undefined || material.scale.length != 2)
+			console.log("Warning material must have scale set to a vec2");
 	}
 });
 
-var material = Fury.Material.create({ shader : shader });
-material.alpha = true;
-material.scale = vec2.fromValues(1, 1);
-material.offset = vec2.fromValues(0, 0);
+var material = Fury.Material.create({ 
+	shader : shader,
+	properties: { 
+		alpha: true,
+		scale: vec2.fromValues(1, 1),
+		offset: vec2.fromValues(0, 0)
+	}
+});
 
 var camera = Fury.Camera.create({
 	type: Fury.Camera.Type.Orthonormal,
@@ -86,12 +96,13 @@ var loop = function() {
 	time += elapsed;
 
 	// TODO: Alternate between rotation and translation - a JS coroutine could work here
-	var rotation = sprite.transform.rotation;
 	var position = sprite.transform.position;
-	//quat.rotateZ(rotation, rotation, 0.0025);
 	position[0] = 32 * Math.sin(time);
 	position[1] = 32 * Math.cos(time/2);
 
+	//var rotation = sprite.transform.rotation;
+	//quat.rotateZ(rotation, rotation, 0.0025);
+	
 	scene.render();
 
 	window.requestAnimationFrame(loop);
@@ -102,7 +113,7 @@ var init = function() {
 	var image = new Image();
 	image.onload = function() {
 		material.textures["uSampler"] = Fury.Renderer.createTexture(image, "low", true);
-		var rotation = sprite.transform.rotation;
+		//var rotation = sprite.transform.rotation;
 		//quat.rotateZ(rotation, rotation, Math.PI/4);
 		loop();
 	};

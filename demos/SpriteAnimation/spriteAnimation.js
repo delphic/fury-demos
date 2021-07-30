@@ -14,6 +14,14 @@ var createQuad = function(size) {
 	});
 };
 
+// TODO:
+// Change request JSON to use fetch API
+// Replace Zergling with Lena - aseprite json lonading -> image load playback with frame timings
+
+// Something that'd be actually interesting is the ability to read the original binary spritesheets 
+// Rather than this massive exported JSON - reverse engineering the file format from Kirke and this...
+// Maybe an electron app to interface with it might be fun, then the user can specify the sprite files.
+
 // globalize glMatrix
 Fury.Maths.globalize();
 
@@ -123,13 +131,23 @@ var shader = Fury.Shader.create({
 		this.setAttribute("aVertexPosition", mesh.vertexBuffer);
 		this.setAttribute("aTextureCoord", mesh.textureBuffer);
 		this.setIndexedAttribute(mesh.indexBuffer);
+	},
+	validateMaterial: function(material) {
+		if (material.offset === undefined || material.offset.length != 2)
+			console.log("Warning material must have scale set to a vec2");
+		if (material.scale === undefined || material.scale.length != 2)
+			console.log("Warning material must have scale set to a vec2");
 	}
 });
 
-var material = Fury.Material.create({ shader : shader });
-material.alpha = true;
-material.scale = vec2.fromValues(1, 1);
-material.offset = vec2.fromValues(0, 0);
+var material = Fury.Material.create({ 
+	shader : shader, 
+	properties: { 
+		alpha: true,
+		offset: vec2.fromValues(0, 0),
+		scale: vec2.fromValues(1, 1)
+	}
+});
 
 var camera = Fury.Camera.create({
 	type: Fury.Camera.Type.Orthonormal,
