@@ -414,46 +414,38 @@ let TriggerVolume = (function(){
 
 let CharacterController = (() => {
 	let exports = {};
-
+	
 	// Used to store collisions, with minimum times and indices
-	// TODO: Extract to module with create method
-	// Swap cache / restore for copy method
-	let playerCollisionInfo = (() => {
-		let collisionsBuffer = []; 	// used to store reference to the world boxes which were collided with
-		let minTime = [];
-		let minIndex = [];
+	let CollisionInfo = (() => {
+		let exports = {};
 
-		let bufferCache = [];
-		let timeCache = [];
-		let indexCache = [];
-		let overlapCache = 0;
-		return {
-			collisionsBuffer: collisionsBuffer,
-			minTime: minTime,
-			minIndex: minIndex,
-			overlapCount: 0,
-			cache: function() {
-				overlapCache = this.overlapCount;
-				for(let i = 0; i < overlapCache; i++) { // Only stores relevant elements from buffer
-					bufferCache[i] = collisionsBuffer[i];
-				}
-				for (let i = 0; i < 3; i++) {
-					timeCache[i] = minTime[i];
-					indexCache[i] = minIndex[i]; 
-				}
-			},
-			restore: function() {
-				this.overlapCount = overlapCache;
-				for (let i = 0; i < overlapCache; i++) {
-					collisionsBuffer[i] = bufferCache[i];
-				}
-				for (let i = 0; i < 3; i++) {
-					minTime[i] = timeCache[i];
-					minIndex[i] = indexCache[i];
-				}
+		exports.copy = (out, a) => {
+			out.overlapCount = a.overlapCount;
+			out.collisionsBuffer.length = out.overlapCount; 
+			// Only stores relevant elements from buffer - previous matches left in buffer are discarded
+			for(let i = 0; i < out.overlapCount; i++) { 
+				out.collisionsBuffer[i] = a.collisionsBuffer[i];
+			}
+			for (let i = 0; i < 3; i++) {
+				out.minTime[i] = a.minTime[i];
+				out.minIndex[i] = a.minIndex[i]; 
 			}
 		};
+
+		exports.create = () => {
+			return {
+				collisionsBuffer: [],
+				minTime: [],
+				minIndex: [],
+				overlapCount: 0
+			};
+		};
+
+		return exports;
 	})();
+
+	let playerCollisionInfo = CollisionInfo.create();
+	let collisionInfoCache = CollisionInfo.create();
 	let relevantBoxes = []; // Array used to store sub-set of boxes to consider for XZ calculations
 
 	exports.create = (physicsWorld, position, box, stepSize) => {
@@ -608,13 +600,13 @@ let CharacterController = (() => {
 				// Try step!
 				let targetY = targetPosition[1];
 				targetPosition[1] = playerPosition[1] + collisionsBuffer[minIndex[axis]].max[1] - playerBox.min[1];
-				playerCollisionInfo.cache();
+				CollisionInfo.copy(collisionInfoCache, playerCollisionInfo);
 				if (checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed) == 0) {
 					stepSuccess = true;
 					// Only step if it's completely clear to move to the target spot for ease
 				} else {
 					targetPosition[1] = targetY;
-					playerCollisionInfo.restore();
+					CollisionInfo.copy(playerCollisionInfo, collisionInfoCache);
 				}
 			}
 			return stepSuccess;
