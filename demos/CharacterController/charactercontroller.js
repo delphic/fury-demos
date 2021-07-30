@@ -210,162 +210,192 @@ let createDebugText = function() {
 let MapLoader = (function(){
 	let exports = {};
 
-	exports.load = (data, shader, namedMaterials) => {
-		// Map to JSON would probably be a better way to do this, like token read char by char and just parse the data
+	let assertLineStartsWith = (lines, index, startsWith) => {
+		if (!lines[index].startsWith(startsWith)) {
+			throw new Error("Unexpected start to line " + index + " expected '" + startsWith + "' actual '" + lines[index] + "'");
+		}
+	};
 
-		// TODO: Should actually parse worldspawn and then this is just an entity data followed by brushes loop
-		let blocks = data.split("{");
-		let brushStartOffset = 2; // Assume starting comment with format details then worldspawn class details
-		let entityStartOffset = 0;
+	let parseVector = (out, str, scaleFactor) => {
+		// Quake uses different coordinate system
+		let split = str.split(' ');
+		out[0] = scaleFactor * -parseInt(split[1], 10);
+		out[1] = scaleFactor * parseInt(split[2], 10);
+		out[2] = scaleFactor * -parseInt(split[0], 10);
+	};
 
-		let brushData = {};
+	let parseAABBFromBrush = (out, brush, scaleFactor) => {
+		let x1, x2, y1, y2, z1, z2;
+		let xFound = false, yFound = false, zFound = false;
+		for (let i = 0; i < 6; i++) {
+			let plane = brush.planes[i]; 
 
-		let parseBrush = (out, brushLines) => {
-			// First entry is blank, then 6 with position data
-			let x1, x2, y1, y2, z1, z2;
-			let xFound = false, yFound = false, zFound = false;
-			let textureName = ""; // No support for different textures on different planes... yet
-
-			for (let j = 1; j < 7; j++) {
-				let brushInfo = brushLines[j].split(' ');
-				let point1 = [parseInt(brushInfo[1], 10), parseInt(brushInfo[2], 10), parseInt(brushInfo[3], 10)];	// 1-> 3
-				let point2 = [parseInt(brushInfo[6], 10), parseInt(brushInfo[7], 10), parseInt(brushInfo[8], 10)];  // 6 -> 8
-				let point3 = [parseInt(brushInfo[11], 10), parseInt(brushInfo[12], 10), parseInt(brushInfo[13], 10)]; // 11 -> 13
-				// 15 -> 20 contains texture name, x_off, y_off, rot_angle, x_scale, y_scale
-
-				// Convert Points to AABB
-				// These points define a plane, the correct way to solve is determine normal and point and then intersect the defined planes to determine
-				// vertices, however because we're limiting ourselves to AABB we can take a shortcut, which is one axis will have the same value across
-				// all three points, and this is one of that components min or max for the AABB
-				if (point1[0] == point2[0] && point2[0] == point3[0]) {
-					if (!xFound) {
-						x1 = point1[0];
-						xFound = true;
-					} else {
-						x2 = point1[0];
-					}
-				} else if (point1[1] == point2[1] && point2[1] == point3[1]) {
-					if (!yFound) {
-						y1 = point1[1];
-						yFound = true;
-					} else {
-						y2 = point1[1];
-					}
-				} else if (point1[2] == point2[2] && point2[2] == point3[2]) {
-					if (!zFound) {
-						z1 = point2[2];
-						zFound = true;
-					} else {
-						z2 = point2[2];
-					}
+			// Convert Points to AABB
+			// These points define a plane, the correct way to solve is determine normal and point and then intersect the defined planes to determine
+			// vertices, however because we're limiting ourselves to AABB we can take a shortcut, which is one axis will have the same value across
+			// all three points, and this is one of that components min or max for the AABB
+			if (plane.p1[0] == plane.p2[0] && plane.p2[0] == plane.p3[0]) {
+				if (!xFound) {
+					x1 = plane.p1[0];
+					xFound = true;
+				} else {
+					x2 = plane.p1[0];
 				}
-
-				if (!textureName) {
-					// TODO: Support multiple textureNames per brush
-					// To do this would need to detect when this is multiple textures
-					// and then create just quads instead of meshes
-					textureName = brushInfo[15];
+			} else if (plane.p1[1] == plane.p2[1] && plane.p2[1] == plane.p3[1]) {
+				if (!yFound) {
+					y1 = plane.p1[1];
+					yFound = true;
+				} else {
+					y2 = plane.p1[1];
 				}
-			}
-
-			let scaleFactor = 1/32;
-
-			// NOTE: Map coordinate system is +Z is up, +y is right, +x is back
-			// so need to convert to -x = forwards (+z), +y = right (-x), +z = up (+y)
-			let xMin = Math.min(-y1, -y2), xMax = Math.max(-y1, -y2);
-			let yMin = Math.min(z1, z2), yMax = Math.max(z1, z2);
-			let zMin = Math.min(-x1, -x2), zMax = Math.max(-x1, -x2);
-
-			xMin *= scaleFactor;
-			xMax *= scaleFactor;
-			yMin *= scaleFactor;
-			yMax *= scaleFactor;
-			zMin *= scaleFactor;
-			zMax *= scaleFactor;
-
-			out.xMin = xMin;
-			out.xMax = xMax;
-			out.yMin = yMin;
-			out.yMax = yMax;
-			out.zMin = zMin;
-			out.zMax = zMax;
-			out.textureName = textureName;
-		};
-
-		for(let i = brushStartOffset; i < blocks.length; i++) {
-			let brushLines = blocks[i].split('\n');
-			// Size will always be 10 until we get to last entry when it'll be 11 (closing "}")
-
-			parseBrush(brushData, brushLines);
-
-			if (brushData.textureName && !namedMaterials.hasOwnProperty(brushData.textureName)) {
-				namedMaterials[brushData.textureName] = Fury.Material.create({ shader: shader });
-			}
-
-			createCuboid(
-				brushData.xMax-brushData.xMin,
-				brushData.yMax-brushData.yMin,
-				brushData.zMax-brushData.zMin,
-				brushData.xMin + 0.5 * (brushData.xMax-brushData.xMin),
-				brushData.yMin + 0.5 * (brushData.yMax-brushData.yMin),
-				brushData.zMin + 0.5 * (brushData.zMax-brushData.zMin),
-				namedMaterials[brushData.textureName]);
-
-			if (brushLines.length == 11) {
-				// Has closing "}" - have reached the end of world spawn brushes
-				entityStartOffset = i + 1;
-				break;
+			} else if (plane.p1[2] == plane.p2[2] && plane.p2[2] == plane.p3[2]) {
+				if (!zFound) {
+					z1 = plane.p2[2];
+					zFound = true;
+				} else {
+					z2 = plane.p2[2];
+				}
 			}
 		}
 
-		let origin = [];
-		let angle = 0;
+		// Convert Coordinates from Quake Space
+		let xMin = Math.min(-y1, -y2), xMax = Math.max(-y1, -y2);
+		let yMin = Math.min(z1, z2), yMax = Math.max(z1, z2);
+		let zMin = Math.min(-x1, -x2), zMax = Math.max(-x1, -x2);
+
+		xMin *= scaleFactor;
+		xMax *= scaleFactor;
+		yMin *= scaleFactor;
+		yMax *= scaleFactor;
+		zMin *= scaleFactor;
+		zMax *= scaleFactor;
+
+		out.xMin = xMin;
+		out.xMax = xMax;
+		out.yMin = yMin;
+		out.yMax = yMax;
+		out.zMin = zMin;
+		out.zMax = zMax;
+	}; 
+
+	let instanitateWorldBrushes = (brushes, scaleFactor, instantiationDelegate) => {
+		let aabb = {};
+		for (let i = 0, l = brushes.length; i < l; i++) {
+			parseAABBFromBrush(aabb, brushes[i], scaleFactor);
+			// TODO: Support texture name per face
+			instantiationDelegate(aabb, brushes[i].planes[0].texture.name)
+		}
+	};
+
+	exports.parse = (data) => {
+		// Parse line by line
+		let lines = data.split('\n');
+
+		let lineIndex = 0;
+		// Parse Starting Comment Info
+		let properties = {};
+		let colonIndex = lines[lineIndex].indexOf(":"); 
+		while (colonIndex !== -1) {
+			let line = lines[lineIndex];
+			let name = line.substring(3, colonIndex);
+			let value = line.substring(colonIndex + 2).trim();
+			properties[name] = value;
+			lineIndex++;
+			colonIndex = lines[lineIndex].indexOf(":");
+		}
+
 		let entities = [];
+		// Parse Entities
+		while (lines[lineIndex].startsWith("//")) { // Expect comment giving entity name
+			let entity = {};
+			entity.name = lines[lineIndex].substring(3).trim(); 
+			lineIndex += 1;
 
-		for(let i = entityStartOffset; i < blocks.length; i++) {
-			let entityData = blocks[i].split('\n');
-			if (entityData[1][0] == '"') { // Is entity not brush
-				let entity = {};
-				for (let j = 1; j < entityData.length; j++) {
-					if (entityData[j][0] == '"') { // Is property so parse
-						let entityLine = entityData[j].split('"');
-						entity[entityLine[1]] = entityLine[3];
-					}
-				}
-				entities.push(entity);
+			assertLineStartsWith(lines, lineIndex, "{");
+			lineIndex += 1;
 
-				switch (entity.classname) {
-					case "info_player_start":
-						angle = parseInt(entity.angle, 10);
-						let oc = entity.origin.split(' ');
-						let scaleFactor = 1/32;
-						// Coord transform - TODO: Move to method
-						origin = [ scaleFactor * -parseInt(oc[1], 10), scaleFactor * parseInt(oc[2], 10), scaleFactor * -parseInt(oc[0], 10) ];
-						break;
-				}
-			} else {
-				// Brush for previous entity
-				let brush = {}
-				let lastEntity = entities[entities.length - 1];
-				if (!lastEntity.brushes) {
-					lastEntity.brushes = [];
-				}
-				parseBrush(brush, entityData);
-				lastEntity.brushes.push(brush);
+			// Parse Entity Properties
+			while (!lines[lineIndex].startsWith("}") && !lines[lineIndex].startsWith("//")) {
+				assertLineStartsWith(lines, lineIndex, '"');
+				let propertyData = lines[lineIndex].split('"');
+				entity[propertyData[1]] = propertyData[3];
+				lineIndex++;
 			}
+
+			while (lines[lineIndex].startsWith("//")) {	// Expect comment giving brush name
+				// Brushes Incoming!
+				let brush = {};
+				brush.name = lines[lineIndex].substring(3).trim();
+				lineIndex++;
+				assertLineStartsWith(lines, lineIndex, "{");
+				lineIndex++;
+				// Parse Brush Info
+				brush.planes = [];
+				while (!lines[lineIndex].startsWith("}")) {
+					let planeInfo = lines[lineIndex].split(' ');
+					let plane = {
+						p1: [parseInt(planeInfo[1], 10), parseInt(planeInfo[2], 10), parseInt(planeInfo[3], 10)],	// 1-> 3
+						p2: [parseInt(planeInfo[6], 10), parseInt(planeInfo[7], 10), parseInt(planeInfo[8], 10)],  // 6 -> 8
+						p3: [parseInt(planeInfo[11], 10), parseInt(planeInfo[12], 10), parseInt(planeInfo[13], 10)], // 11 -> 13
+						texture: { 
+							name: planeInfo[15],
+							xOffset: planeInfo[16],
+							yOffset: planeInfo[17],
+							angle: planeInfo[18],
+							xScale: planeInfo[19],
+							yScale: planeInfo[20]
+						}
+					};
+					brush.planes.push(plane);
+					lineIndex++;
+				}
+				if (!entity.brushes) {
+					entity.brushes = [];
+				}
+				entity.brushes.push(brush);
+				// Consume brush closing line
+				lineIndex++;
+				// now expect comment for next brush or close
+			}
+			// Assert entity close
+			assertLineStartsWith(lines, lineIndex, "}"); 
+			entities.push(entity);
+			lineIndex++;
 		}
 
-		for (let i = 0, l = entities.length; i < l; i++) {
-			if (entities[i].classname == "trigger_push") {
-				// NOTE: Relying on global
-				triggerVolumes.push(TriggerVolume.create(entities[i]));
-			}
-		}
-
+		// Return Map Object
 		return {
-			origin: origin,
-			angle: angle
+			properties: properties,
+			entities: entities
 		};
+	};
+
+	exports.instantiate = (data, instantiationDelegate) => {
+		let playerSpawn = {
+			origin: [0, 0, 0],
+			angle: 0
+		};
+
+		for (let i = 0, l = data.entities.length; i < l; i++) {
+			let entity = data.entities[i];
+			switch (entity.classname) {
+				case "worldspawn":
+					instanitateWorldBrushes(entity.brushes, 1/32, instantiationDelegate);
+					break;
+				case "info_player_start":
+					parseVector(playerSpawn.origin, entity.origin, 1/32);
+					playerSpawn.angle = parseInt(entity.angle, 10);
+					break;
+				case "trigger_push": // Game Specific
+					// relying on globals
+					entity.aabb = {};
+					parseAABBFromBrush(entity.aabb, entity.brushes[0], 1/32);
+					triggerVolumes.push(TriggerVolume.create(entity));
+					break;
+			}
+		}
+
+		return playerSpawn;
 	};
 
 	return exports;
@@ -378,8 +408,8 @@ let TriggerVolume = (function(){
 	exports.create = (params) => {
 		let triggerVolume = {};
 		triggerVolume.box = Physics.Box.create({
-			min: vec3.fromValues(params.brushes[0].xMin, params.brushes[0].yMin, params.brushes[0].zMin),
-			max: vec3.fromValues(params.brushes[0].xMax, params.brushes[0].yMax, params.brushes[0].zMax)
+			min: vec3.fromValues(params.aabb.xMin, params.aabb.yMin, params.aabb.zMin),
+			max: vec3.fromValues(params.aabb.xMax, params.aabb.yMax, params.aabb.zMax)
 		});
 		triggerVolume.triggered = false;
 		triggerVolume.resetTimer = 0;
@@ -393,11 +423,10 @@ let TriggerVolume = (function(){
 			}
 		};
 		triggerVolume.speed = params.speed;
-		// TODO: Move this to launch_direction for clarity
 		let angleC = params.angle.split(' ');
-		let angleDirection = vec3.fromValues(parseFloat(angleC[0]), parseFloat(angleC[1]), parseFloat(angleC[2]));
-		vec3.normalize(angleDirection, angleDirection);
-		triggerVolume.angle = angleDirection;
+		let launchDirection = vec3.fromValues(parseFloat(angleC[0]), parseFloat(angleC[1]), parseFloat(angleC[2]));
+		vec3.normalize(launchDirection, launchDirection);
+		triggerVolume.launchDirection = launchDirection;
 		triggerVolume.tryIntersectBox = (box) => {
 			if (!triggerVolume.triggered && Physics.Box.intersect(box, triggerVolume.box)) {
 				triggerVolume.triggered = true;
@@ -890,10 +919,10 @@ let loop = function(){
 		triggerVolumes[i].update(elapsed);
 		if (triggerVolumes[i].tryIntersectBox(playerBox)) {
 			vec3.zero(temp);
-			vec3.scaleAndAdd(temp, temp, triggerVolumes[i].angle, triggerVolumes[i].speed);
+			vec3.scaleAndAdd(temp, temp, triggerVolumes[i].launchDirection, triggerVolumes[i].speed);
 
-			// Set velocity in direction of angle and up to 0, keep perpendicular velocity
-			vec3.cross(temp2, triggerVolumes[i].angle, Maths.vec3Y);
+			// Set velocity in direction of launch and up to 0, keep perpendicular velocity
+			vec3.cross(temp2, triggerVolumes[i].launchDirection, Maths.vec3Y);
 			let dot = vec3.dot(temp2, playerVelocity);
 			vec3.zero(playerVelocity);
 			vec3.scaleAndAdd(playerVelocity, playerVelocity, temp2, dot);
@@ -1088,7 +1117,7 @@ let loadCallback = () => {
 	}
 };
 
-let loadMapTextures = function() {
+let loadMapTextures = function(namedMaterials) {
 	let images = [];
 	let keys = Object.keys(namedMaterials);
 	for (let i = 0, l = keys.length; i < l; i++) {
@@ -1111,14 +1140,31 @@ lockCount++
 fetch("test.map").then(function(response) {
 	return response.text();
 }).then(function(text) {
-	let playerSpawn = MapLoader.load(text, shader, namedMaterials);
+	let map = MapLoader.parse(text);
+
+	let instantiateAABB = (aabb, textureName) => {
+		if (textureName && !namedMaterials.hasOwnProperty(textureName)) {
+			namedMaterials[textureName] = Fury.Material.create({ shader: shader });
+		}
+
+		createCuboid(
+			aabb.xMax - aabb.xMin,
+			aabb.yMax - aabb.yMin,
+			aabb.zMax - aabb.zMin,
+			aabb.xMin + 0.5 * (aabb.xMax - aabb.xMin),
+			aabb.yMin + 0.5 * (aabb.yMax - aabb.yMin),
+			aabb.zMin + 0.5 * (aabb.zMax - aabb.zMin),
+			namedMaterials[textureName]);
+	};
+
+	let playerSpawn = MapLoader.instantiate(map, instantiateAABB);
 
 	vec3.set(camera.position, playerSpawn.origin[0], playerSpawn.origin[1], playerSpawn.origin[2]);
 	quat.fromEuler(camera.rotation, 0, playerSpawn.angle, 0);
 	vec3.copy(playerPosition, camera.position);
 	vec3.scaleAndAdd(camera.position, camera.position, Maths.vec3Y, 0.5);	// 0.5 offset for camera
 
-	loadMapTextures();
+	loadMapTextures(namedMaterials);
 	lockCount--;
 }).catch(function(error) {
 	console.log("Failed to load test.map: " + error.message);
