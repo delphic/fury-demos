@@ -202,16 +202,6 @@ let createCuboid = function(w, h, d, x, y, z, material) {
 	return scene.add({ material: material, mesh: mesh, position: position, static: true });
 };
 
-let createDebugText = function() {
-	let p = document.createElement("p");
-	document.body.appendChild(p);
-
-	p.style = "position: absolute; top: 0; right: 0; font-size: 32px; font-family: monospace; color: white; padding: 5px; margin: 0;";
-	p.textContent = "Test!";
-
-	return p;
-};
-
 // Quick and Dirty .map file loader
 // Supports only AABB
 // c.f. http://www.gamers.org/dEngine/quake/QDP/qmapspec.html
@@ -771,8 +761,6 @@ let CharacterController = (() => {
 	return exports;
 })();
 
-let debugText = createDebugText();
-
 let triggerVolumes = [];
 
 let localX = vec3.create(), localZ = vec3.create();
@@ -1096,11 +1084,6 @@ let loop = function(){
 		vec3.copy(camera.position, cameraTargetPosition);
 	} else {
 		vec3.lerp(camera.position, camera.position, cameraTargetPosition, 0.25);
-	}
-
-	if (debugText) {
-		// Show X-Z Velocity
-		debugText.textContent = Math.sqrt(playerVelocity[0] * playerVelocity[0] + playerVelocity[2] * playerVelocity[2]).toFixed(2);
 	}
 
 	scene.render();
