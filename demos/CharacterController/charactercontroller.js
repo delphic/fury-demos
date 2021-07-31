@@ -528,7 +528,7 @@ let CharacterController = (() => {
 				max[0] = Math.max(playerBox.max[0] + delta[0], playerBox.max[0]);
 				max[1] = Math.max(playerBox.max[1] + delta[1], playerBox.max[1]) + stepHeight;  
 				max[2] = Math.max(playerBox.max[2] + delta[2], playerBox.max[2]);
-				sweepBox.calculateExtents(min, max);
+				sweepBox.recalculateExtents();
 		
 				let overlapCount = 0;
 				for (let i = 0, l = world.boxes.length; i < l; i++) {
@@ -644,7 +644,7 @@ let CharacterController = (() => {
 			vec3.copy(playerPosition, targetPosition);
 			// playerBox.center has changed because it's set to the playerPosition ref
 			// TODO: Ensure this is the case currently it's up to consuming code to set it up correctly
-			playerBox.calculateMinMax(playerBox.center, playerBox.extents);
+			playerBox.recalculateMinMax();
 		};
 
 		controller.moveXZ = (velocity, elapsed) => {
@@ -738,19 +738,19 @@ let CharacterController = (() => {
 				if (velocity[1] <= 0) {
 					// Moving down, move playerPosition so player is extents above closestBox.max[1]
 					playerPosition[1] = closestBox.max[1] + playerBox.extents[1];
-					playerBox.calculateMinMax(playerBox.center, playerBox.extents);
+					playerBox.recalculateMinMax();
 					velocity[1] = (playerPosition[1] - lastPosition[1]) / elapsed;
 					return true; // Hit Ground
 				} else {
 					// Moving up, move playerPosition so player is extents below  closestBox.min[1]
 					playerPosition[1] = closestBox.min[1] - playerBox.extents[1];
-					playerBox.calculateMinMax(playerBox.center, playerBox.extents);
+					playerBox.recalculateMinMax();
 					velocity[1] = (playerPosition[1] - lastPosition[1]) / elapsed;
 					return false; // TODO: Contact point top would be nice to differentitate from no collision
 				}
 			} else {
 				playerPosition[1] = targetPosition[1];
-				playerBox.calculateMinMax(playerBox.center, playerBox.extents);
+				playerBox.recalculateMinMax();
 				return false;
 			}
 		};

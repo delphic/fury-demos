@@ -34,17 +34,17 @@ var vec3 = require('./maths').vec3;
 var Bounds = module.exports = (function() {
 	let exports = {};
 	let prototype = {
-		calculateMinMax: function(center, extents) { // This should either use this.center and this.extents and be called recalculate or should set this.center and this.extents
-			vec3.subtract(this.min, center, extents);
-			vec3.add(this.max, center, extents);
+		recalculateMinMax: function() {
+			vec3.subtract(this.min, this.center, this.extents);
+			vec3.add(this.max, this.center, this.extents);
 		},
-		calculateExtents: function(min, max) { // This should either use this.min this.max and be called recalculate or should set this.min and this.max
-			vec3.subtract(this.size, max, min);
+		recalculateExtents: function() {
+			vec3.subtract(this.size, this.max, this.min);
 			// If we had a vec3.zero vector could use scale and add
 			this.extents[0] = 0.5 * this.size[0];
 			this.extents[1] = 0.5 * this.size[1];
 			this.extents[2] = 0.5 * this.size[2];
-			vec3.add(this.center, min, this.extents);
+			vec3.add(this.center, this.min, this.extents);
 		}
 	};
 
@@ -159,7 +159,7 @@ var Bounds = module.exports = (function() {
 				aabb.min = vec3.create();
 				aabb.max = vec3.create();
 
-				aabb.calculateMinMax(aabb.center, aabb.extents);
+				aabb.recalculateMinMax();
 			} else {
 				// Could check min < max on all axes to make this easier to use
 				aabb.min = parameters.min;
@@ -167,7 +167,7 @@ var Bounds = module.exports = (function() {
 				aabb.center = vec3.create();
 				aabb.size = vec3.create();
 				aabb.extents = vec3.create();
-				aabb.calculateExtents(aabb.min, aabb.max);
+				aabb.recalculateExtents();
 			}
 
 			return aabb;
@@ -1371,7 +1371,7 @@ var Mesh = module.exports = function(){
 			this.boundingRadius = calculateBoundingRadius(this.vertices);
 			calculateMinVertex(this.bounds.min, this.vertices);
 			calculateMaxVertex(this.bounds.max, this.vertices);
-			this.bounds.calculateExtents(this.bounds.min, this.bounds.max);
+			this.bounds.recalculateExtents();
 		},
 		calculateNormals: function() {
 			// TODO: Calculate Normals from Vertex information
@@ -2203,7 +2203,7 @@ var Scene = module.exports = function() {
 				// Need to recalculate extents as well as center if rotation is not identity
 				// => need to transform all mesh vertices in order to recalculate accurate AABB
 				vec3.add(object.bounds.center, object.mesh.bounds.center, object.transform.position);
-				object.bounds.calculateMinMax(object.bounds.center, object.bounds.extents)
+				object.bounds.recalculateMinMax();
 			}
 		};
 
