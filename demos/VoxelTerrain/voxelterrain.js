@@ -259,7 +259,8 @@ var generateMeshes = function(vorld) {
 	mesher.onmessage = function(e) {
 		if (e.data.mesh) {
 			var mesh = Fury.Mesh.create(e.data.mesh);
-			mesh.tileBuffer = Fury.Renderer.createBuffer(e.data.mesh.tileIndices, 1); // Hmm should probably make it easier to add arbitary buffers?
+			mesh.tileBuffer = Fury.Renderer.createBuffer(e.data.mesh.tileIndices, 1);
+			// TODO: Use customBuffer parameter - will require update to shader see model demo for reference
 
 			var meshObject = scene.add({ mesh: mesh, material: atlasMaterial, position: vec3.clone(e.data.offset), static: true });
 			meshes.push(meshObject);
@@ -301,8 +302,6 @@ var loop = function(){
 var localx = vec3.create();
 var localy = vec3.create();
 var localz = vec3.create();
-var prevX = 0;
-var prevY = 0;
 
 // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
 var getRoll = function(q) {
@@ -318,20 +317,13 @@ var handleInput = function(elapsed) {
 	var q = camera.rotation;
 	var p = camera.position;
 	Fury.Maths.quatLocalAxes(q, localx, localy, localz);
-
-	var mousePos = Input.MousePosition;
-	var deltaX = mousePos[0] - prevX;
-	var deltaY = mousePos[1] - prevY;
-	prevX = mousePos[0];
-	prevY = mousePos[1];
-	// TODO: Should have mouseDelta array using movementX and movementY
-
+	
 	if (Input.mouseDown(2)) {
-	    let xRotation = deltaX*rotateRate*elapsed;
+	    let xRotation = Input.MouseDelta[0] * rotateRate*elapsed;
 	    if (Math.abs(xRotation) > maxRotatePerFrame) {
             xRotation = Math.sign(xRotation) * maxRotatePerFrame;
 	    }
-	    let yRotation = deltaY*rotateRate*elapsed;
+	    let yRotation = Input.MouseDelta[1] * rotateRate*elapsed;
 	    if (Math.abs(yRotation) > maxRotatePerFrame) {
 	        yRotation = Math.sign(yRotation) * maxRotatePerFrame;
 	    }
@@ -362,6 +354,8 @@ var handleInput = function(elapsed) {
 	if (Input.keyDown("e")) {
 		vec3.scaleAndAdd(p, p, localy, zoomRate*elapsed);
 	}
+
+	Input.handleFrameFinished();
 };
 
 // Create Texture
