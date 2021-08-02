@@ -482,16 +482,17 @@ var Fury = module.exports = (function() {
 	};
 
 	Fury.init = function(parameters) {
-		let lightWeightInit = false;
+		let disableShaderPreload = false;
 		let canvasId = null;
 		let contextAttributes = null;
 
 		if (typeof(parameters) == 'string') {
-			lightWeightInit = true;
+			disableShaderPreload = true;
 			canvasId = parameters;
 		} else {
 			canvasId = parameters.canvasId;
 			contextAttributes = parameters.glContextAttributes;
+			disableShaderPreload = !!parameters.disableShaderPreload;
 		}
 
 		canvas = document.getElementById(canvasId);
@@ -503,12 +504,14 @@ var Fury = module.exports = (function() {
 		}
 		Fury.Input.init(canvas);
 
-		if (!lightWeightInit) {
+		if (!disableShaderPreload) {
 			Fury.Shaders.createShaders();
-			if (parameters.gameLoop) {
-				Fury.GameLoop.init(parameters.gameLoop);
-			}
 		}
+		
+		if (parameters.gameLoop) {
+			Fury.GameLoop.init(parameters.gameLoop);
+		}
+
 		return true;
 	};
 
