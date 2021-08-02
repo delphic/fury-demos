@@ -5,7 +5,7 @@
 Fury.Maths.globalize();
 
 // Init Fury
-Fury.init("fury");
+Fury.init({ canvasId: "fury" });
 
 // Create Camera & Scene
 let camera = Fury.Camera.create({ near: 0.1, far: 1000000.0, fov: Fury.Maths.toRadian(60), ratio: 1.0, position: vec3.fromValues(0.0, 1.0, 0.0) });
@@ -798,32 +798,7 @@ let mouseLookSpeed = 0.1;
 let verticalLookAngle = 0;
 
 // Game Loop
-let lastTime = 0;
-
-let start = function(){
-	lastTime = Date.now();
-	requestAnimationFrame(loop); 
-};
-
-let loop = function(){
-	let elapsed = Date.now() - lastTime;
-	lastTime += elapsed;
-
-	if (elapsed == 0) {
-		console.error("elapsed time of 0, skipping frame");
-		requestAnimationFrame(loop);
-		return;
-	}
-
-	if (elapsed > 66) {
-		// Low FPS or huge elapsed from alt-tabs cause
-		// physics issues so clamp elapsed for sanity
-		elapsed = 66;
-		// Could run multiple logic updates, however would
-		// have to pause timer and resume when lost focus
-	}
-	elapsed /= 1000;
-
+let loop = function(elapsed) {
 	// Rotation around axis
 	let ry = 0, rx = 0;
 
@@ -1087,9 +1062,6 @@ let loop = function(){
 	}
 
 	scene.render();
-
-	Fury.Input.handleFrameFinished();
-	window.requestAnimationFrame(loop);
 };
 
 let jump = () => {
@@ -1104,7 +1076,8 @@ let lockCount = 0;
 let loadCallback = () => {
 	lockCount--;
 	if (lockCount <= 0) {
-		start();
+		Fury.GameLoop.init({ loop: loop,  maxFrameTimeMs: 66 });
+		Fury.GameLoop.start();
 	}
 };
 

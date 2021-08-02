@@ -11,7 +11,7 @@ var createQuad = function(size) {
 Fury.Maths.globalize();
 
 // Init Fury
-Fury.init("fury", { antialias: false });
+Fury.init({ canvasId: "fury", glContextAttributes: { antialias: false } });
 
 // Create shader & material
 var material = Fury.Material.create({ 

@@ -176,7 +176,7 @@ var Bounds = module.exports = (function() {
 	return exports;
 })();
 
-},{"./maths":10}],3:[function(require,module,exports){
+},{"./maths":11}],3:[function(require,module,exports){
 var Maths = require('./maths');
 let vec3 = Maths.vec3, vec4 = Maths.vec4, mat4 = Maths.mat4, quat = Maths.quat;
 
@@ -354,7 +354,7 @@ var Camera = module.exports = function() {
 	return exports;
 }();
 
-},{"./maths":10}],4:[function(require,module,exports){
+},{"./maths":11}],4:[function(require,module,exports){
 // Client.js - for using Fury old school style as a JS file which adds a
 // global which you can use. 
 
@@ -455,6 +455,7 @@ var Fury = module.exports = (function() {
 	// Modules
 	Fury.Bounds = require('./bounds');
 	Fury.Camera = require('./camera');
+	Fury.GameLoop = require('./gameLoop');
 	Fury.Input = require('./input');
 	Fury.Material = require('./material');
 	Fury.Maths = require('./maths');
@@ -480,8 +481,19 @@ var Fury = module.exports = (function() {
 		}
 	};
 
-	// Public functions
-	Fury.init = function(canvasId, contextAttributes, preloadShaders) {
+	Fury.init = function(parameters) {
+		let lightWeightInit = false;
+		let canvasId = null;
+		let contextAttributes = null;
+
+		if (typeof(parameters) == 'string') {
+			lightWeightInit = true;
+			canvasId = parameters;
+		} else {
+			canvasId = parameters.canvasId;
+			contextAttributes = parameters.glContextAttributes;
+		}
+
 		canvas = document.getElementById(canvasId);
 		try {
 			Fury.Renderer.init(canvas, contextAttributes);
@@ -490,14 +502,103 @@ var Fury = module.exports = (function() {
 			return false;
 		}
 		Fury.Input.init(canvas);
-		Fury.Shaders.createShaders();
+
+		if (!lightWeightInit) {
+			Fury.Shaders.createShaders();
+			if (parameters.gameLoop) {
+				Fury.GameLoop.init(parameters.gameLoop);
+			}
+		}
 		return true;
 	};
 
 	return Fury;
 })();
 
-},{"./bounds":2,"./camera":3,"./input":8,"./material":9,"./maths":10,"./mesh":11,"./model":12,"./physics":13,"./renderer":14,"./scene":15,"./shader":16,"./shaders":17,"./transform":18}],7:[function(require,module,exports){
+},{"./bounds":2,"./camera":3,"./gameLoop":7,"./input":9,"./material":10,"./maths":11,"./mesh":12,"./model":13,"./physics":14,"./renderer":15,"./scene":16,"./shader":17,"./shaders":18,"./transform":19}],7:[function(require,module,exports){
+let Input = require('./input');
+
+let GameLoop = module.exports = (function() {
+    let exports = {};
+
+    let State = {
+        Paused: 0,
+        Running: 1,
+        RequestPause: 2
+    };
+
+    let state = State.Paused;
+
+    let maxFrameTimeMs = null;
+    let loopDelegate = null;
+
+    let lastTime = 0;
+
+    exports.init = (parameters) => {
+        if (parameters.maxFrameTimeMs && typeof(parameters.maxFrameTimeMs) === 'number') {
+            // Optional max frame time to keep physics calculations sane
+            maxFrameTimeMs = parameters.maxFrameTimeMs;
+        }
+
+        if (parameters.loop && typeof(parameters.loop) === 'function') {
+            loopDelegate = parameters.loop;
+        } else {
+            console.error("You must provide GameLoop.init with a loop parameter of type function");
+        }
+    };
+
+    exports.start = () => {
+        switch (state) {
+            case State.Paused:
+                state = State.Running;
+                window.requestAnimationFrame(loop);
+                break;
+            case State.RequestPause:
+                state = State.Running;
+                break;
+        }
+    };
+
+    exports.stop = () => {
+        if (state != State.Paused) {
+            state = State.RequestPause;
+        }
+    };
+
+    
+    let loop = () => {
+        if (state == State.RequestPause) {
+            state = State.Paused;
+            return;
+        }
+
+        let elapsed = Date.now() - lastTime;
+		lastTime += elapsed;
+
+		if (elapsed == 0) {
+			console.error("elapsed time of 0, skipping frame");
+			requestAnimationFrame(update);
+			return;
+		}
+
+		if (maxFrameTimeMs && elapsed > maxFrameTimeMs) {
+			elapsed = maxFrameTimeMs;
+			// Arguably could run multiple logic updates,
+            // however that would require tracking window focus 
+            // and ensuring update length < maxFrameTime
+		}
+
+		elapsed /= 1000; // Convert elapsed to seconds
+
+		loopDelegate(elapsed);
+
+		Input.handleFrameFinished();
+		window.requestAnimationFrame(loop);
+    };
+
+    return exports;
+})();
+},{"./input":9}],8:[function(require,module,exports){
 var IndexedMap = module.exports = function(){
 	// This creates a dictionary that provides its own keys
 	// It also contains an array of keys for quick enumeration
@@ -546,7 +647,7 @@ var IndexedMap = module.exports = function(){
 
 	return exports;
 }();
-},{}],8:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 var Input = module.exports = function() {
 	var exports = {};
 
@@ -946,7 +1047,7 @@ var Input = module.exports = function() {
 	return exports;
 }();
 
-},{}],9:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 var Material = module.exports = function(){
 	var exports = {};
 	var prototype = {
@@ -1018,7 +1119,7 @@ var Material = module.exports = function(){
 	return exports;
 }();
 
-},{}],10:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 // This is a centralised point for importing glMatrix
 // Also provides a helper for globalizing for ease of use
 let glMatrix = require('../libs/gl-matrix-min');
@@ -1321,7 +1422,7 @@ let Maths = module.exports = (function() {
   return exports;
 })();
 
-},{"../libs/gl-matrix-min":1,"./ease":5}],11:[function(require,module,exports){
+},{"../libs/gl-matrix-min":1,"./ease":5}],12:[function(require,module,exports){
 var r = require('./renderer');
 var Bounds = require('./bounds');
 var vec3 = require('./maths').vec3;
@@ -1506,7 +1607,7 @@ var Mesh = module.exports = function(){
 	return exports;
 }();
 
-},{"./bounds":2,"./maths":10,"./renderer":14}],12:[function(require,module,exports){
+},{"./bounds":2,"./maths":11,"./renderer":15}],13:[function(require,module,exports){
 var Model = module.exports = (function() {
     var exports = {};
 
@@ -1644,7 +1745,7 @@ var Model = module.exports = (function() {
     return exports;
 })();
 
-},{}],13:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 var Physics = module.exports = (function(){
   // https://developer.mozilla.org/en-US/docs/Games/Techniques/3D_collision_detection
 
@@ -1696,7 +1797,7 @@ var Physics = module.exports = (function(){
   return exports;
 })();
 
-},{"./bounds":2}],14:[function(require,module,exports){
+},{"./bounds":2}],15:[function(require,module,exports){
 // This module is essentially a GL Context Facade
 // There are - of necessity - a few hidden logical dependencies in this class
 // mostly with the render functions, binding buffers before calling a function draw
@@ -2084,7 +2185,7 @@ exports.draw = function(renderMode, count, indexed, offset) {
 	}
 };
 
-},{"./maths":10}],15:[function(require,module,exports){
+},{"./maths":11}],16:[function(require,module,exports){
 var r = require('./renderer');
 var indexedMap = require('./indexedMap');
 var Material = require('./material');
@@ -2496,7 +2597,7 @@ var Scene = module.exports = function() {
 	return exports;
 }();
 
-},{"./bounds":2,"./indexedMap":7,"./material":9,"./maths":10,"./mesh":11,"./renderer":14,"./transform":18}],16:[function(require,module,exports){
+},{"./bounds":2,"./indexedMap":8,"./material":10,"./maths":11,"./mesh":12,"./renderer":15,"./transform":19}],17:[function(require,module,exports){
 // Shader Class for use with Fury Scene
 var r = require('./renderer');
 
@@ -2568,7 +2669,7 @@ var Shader = module.exports = function() {
 	return exports;
 }();
 
-},{"./renderer":14}],17:[function(require,module,exports){
+},{"./renderer":15}],18:[function(require,module,exports){
 let Shader = require('./shader');
 
 let Shaders = module.exports = (function() {
@@ -2673,7 +2774,7 @@ let Shaders = module.exports = (function() {
 
 	return exports;
 })();
-},{"./shader":16}],18:[function(require,module,exports){
+},{"./shader":17}],19:[function(require,module,exports){
 var Maths = require('./maths');
 var quat = Maths.quat, vec3 = Maths.vec3;
 
@@ -2702,4 +2803,4 @@ var Transform = module.exports = function() {
 	return exports;
 }();
 
-},{"./maths":10}]},{},[4]);
+},{"./maths":11}]},{},[4]);

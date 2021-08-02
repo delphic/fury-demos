@@ -86,7 +86,7 @@ var setMaterialOffset = function(frameIndex) {
 }
 
 // Init Fury
-Fury.init("fury");
+Fury.init({ canvasId: "fury" });
 
 // Create material
 var material = Fury.Material.create({ 
