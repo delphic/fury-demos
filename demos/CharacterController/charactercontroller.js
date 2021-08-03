@@ -475,16 +475,16 @@ let CharacterController = (() => {
 	let collisionInfoCache = CollisionInfo.create();
 	let relevantBoxes = []; // Array used to store sub-set of boxes to consider for XZ calculations
 
-	exports.create = (physicsWorld, position, box, stepSize) => {
+	exports.create = (parameters) => {
 		let controller = {};
 	
 		// private variables
 		let targetPosition = vec3.create();	
 		let lastPosition = vec3.create();
-		let world = physicsWorld;
-		let playerPosition = position;
-		let playerBox = box;
-		let stepHeight = stepSize;
+		let world = parameters.world;
+		let playerPosition = parameters.playerPosition;
+		let playerBox = parameters.playerBox;
+		let stepHeight = parameters.stepHeight;
 
 		// private methods 
 		// TODO: Some of these probably could be made static by increasing the number of arguments they take
@@ -777,15 +777,22 @@ let lookSpeed = 1;
 // DeltaVs need to be instanteously applied (impulse / mass)
 // They make no sense over multiple frames
 let rocketDeltaV = 30;
-let grounded = true, jumpDeltaV = 5, stepHeight = 0.3; // Might be easier to configure jump as desired jump height against gravity rather than deltaV
+let grounded = true, jumpDeltaV = 5; // Might be easier to configure jump as desired jump height against gravity rather than deltaV
 let lastGroundedTime = 0, coyoteTime = 0.1, canCoyote = true, lastJumpAttemptTime = 0;
 // coyoteTime used both as the time after leaving an edge you can still jump and the time before hitting the ground you can press the jump button and jump on landing
 let gravity = 2 * 9.8;  // Increased gravity because games
 
+// TODO: A player object with position, box and velocity might be preferable
 let playerPosition = vec3.clone(camera.position);
 let playerBox = Physics.Box.create({ center: playerPosition, size: vec3.fromValues(1, 2, 1) });
 let playerVelocity = vec3.create();
-let characterController = CharacterController.create(world, playerPosition, playerBox, stepHeight); // TODO: Pass player object instead of multiple parameters
+
+let characterController = CharacterController.create({ 
+	world: world,
+	playerPosition: playerPosition,
+	playerBox: playerBox,
+	stepHeight: 0.3
+});
 
 let inputVector = vec3.create();
 let localForward = vec3.create();
