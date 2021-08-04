@@ -475,6 +475,70 @@ let CharacterController = (() => {
 	let collisionInfoCache = CollisionInfo.create();
 	let relevantBoxes = []; // Array used to store sub-set of boxes to consider for XZ calculations
 
+	let checksEntersAxis = (out, box, playerBox, axis, collisionBufferIndex, targetPosition, playerPosition, elapsed) => {
+		let delta = targetPosition[axis] - playerPosition[axis];
+		if (Math.abs(delta) > 0 && Physics.Box.entersAxis(box, playerBox, axis, delta)) {
+			checkMinTime(out, box, playerBox, axis, collisionBufferIndex, elapsed, delta);
+			return true;
+		}
+		return false;
+	};
+
+	let checkMinTime = (out, box, playerBox, axis, collisionBufferIndex, elapsed, delta) => {
+		let distance = 0;
+		if (delta > 0) {
+			// player max will cross box min
+			distance = playerBox.max[axis] - box.min[axis];
+		} else {
+			// player min will cross box max
+			distance = playerBox.min[axis] - box.max[axis];
+		}
+		let time = distance / Math.abs(delta / elapsed);
+		if (time < out.minTime[axis]) {
+			out.minTime[axis] = time;
+			out.minIndex[axis] = collisionBufferIndex;
+		}
+	};
+
+	let sweepForRevelantBoxes = (() => {
+		let min = vec3.create();
+		let max = vec3.create();
+		let delta = vec3.create();
+		let sweepBox = Physics.Box.create({ min: min, max: max });
+
+		return (out, boxes, playerBox, targetPosition, currentPosition, stepHeight) => {
+			// This could probably be broken into 2 util methods and moved to Fury
+			// box.expand (by delta) & world.getAllOverlaps (box)
+			vec3.subtract(delta, targetPosition, currentPosition);
+			min[0] = Math.min(playerBox.min[0] + delta[0], playerBox.min[0]);
+			min[1] = Math.min(playerBox.min[1] + delta[1], playerBox.min[1]);  
+			min[2] = Math.min(playerBox.min[2] + delta[2], playerBox.min[2]);
+			max[0] = Math.max(playerBox.max[0] + delta[0], playerBox.max[0]);
+			max[1] = Math.max(playerBox.max[1] + delta[1], playerBox.max[1]) + stepHeight;  
+			max[2] = Math.max(playerBox.max[2] + delta[2], playerBox.max[2]);
+			sweepBox.recalculateExtents();
+	
+			let overlapCount = 0;
+			for (let i = 0, l = boxes.length; i < l; i++) {
+				if (Physics.Box.intersect(boxes[i], sweepBox)) {
+					out[overlapCount] = boxes[i];
+					overlapCount += 1;
+				}
+			}
+			out.length = overlapCount;
+		}; 
+	})();
+
+	let getTouchPointTarget = (closestBox, playerBox, axis, delta) => {
+		if (delta <= 0) {
+			// new target position max + extents
+			return closestBox.max[axis] + playerBox.extents[axis];
+		} else {
+			// new target position min - extents
+			return closestBox.min[axis] - playerBox.extents[axis];
+		}
+	};
+
 	exports.create = (parameters) => {
 		let controller = {};
 	
@@ -487,59 +551,25 @@ let CharacterController = (() => {
 		let stepHeight = parameters.stepHeight;
 
 		// private methods 
-		// TODO: Some of these probably could be made static by increasing the number of arguments they take
-		let checksEntersAxis = (out, box, axis, collisionBufferIndex, elapsed) => {
-			let delta = targetPosition[axis] - playerPosition[axis];
-			if (Math.abs(delta) > 0 && Physics.Box.entersAxis(box, playerBox, axis, delta)) {
-				checkMinTime(out, box, axis, collisionBufferIndex, elapsed, delta);
-				return true;
-			}
-			return false;
-		};
-
-		let checkMinTime = (out, box, axis, collisionBufferIndex, elapsed, delta) => {
-			let distance = 0;
-			if (delta > 0) {
-				// player max will cross box min
-				distance = playerBox.max[axis] - box.min[axis];
-			} else {
-				// player min will cross box max
-				distance = playerBox.min[axis] - box.max[axis];
-			}
-			let time = distance / Math.abs(delta / elapsed);
-			if (time < out.minTime[axis]) {
-				out.minTime[axis] = time;
-				out.minIndex[axis] = collisionBufferIndex;
-			}
-		};
-
-		// This could probably be broken into 2 util methods and moved to Fury
-		// box.expand (by delta) & world.getAllOverlaps (box)
-		let sweepWorldForRevelantBoxes = (() => {
-			let min = vec3.create();
-			let max = vec3.create();
-			let delta = vec3.create();
-			let sweepBox = Physics.Box.create({ min: min, max: max });
-			return (out, targetPosition, currentPosition) => {
-				vec3.subtract(delta, targetPosition, currentPosition);
-				min[0] = Math.min(playerBox.min[0] + delta[0], playerBox.min[0]);
-				min[1] = Math.min(playerBox.min[1] + delta[1], playerBox.min[1]);  
-				min[2] = Math.min(playerBox.min[2] + delta[2], playerBox.min[2]);
-				max[0] = Math.max(playerBox.max[0] + delta[0], playerBox.max[0]);
-				max[1] = Math.max(playerBox.max[1] + delta[1], playerBox.max[1]) + stepHeight;  
-				max[2] = Math.max(playerBox.max[2] + delta[2], playerBox.max[2]);
-				sweepBox.recalculateExtents();
-		
-				let overlapCount = 0;
-				for (let i = 0, l = world.boxes.length; i < l; i++) {
-					if (Physics.Box.intersect(world.boxes[i], sweepBox)) {
-						out[overlapCount] = world.boxes[i];
-						overlapCount += 1;
-					}
+		let tryStep = (axis, maxStepHeight, elapsed) => {
+			let stepSuccess = false;
+			let collisionsBuffer = playerCollisionInfo.collisionsBuffer;
+			let minIndex = playerCollisionInfo.minIndex;
+			if (collisionsBuffer[minIndex[axis]].max[1] < maxStepHeight) {
+				// Try step!
+				let targetY = targetPosition[1];
+				targetPosition[1] = playerPosition[1] + collisionsBuffer[minIndex[axis]].max[1] - playerBox.min[1];
+				CollisionInfo.copy(collisionInfoCache, playerCollisionInfo);
+				if (checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed) == 0) {
+					stepSuccess = true;
+					// Only step if it's completely clear to move to the target spot for ease
+				} else {
+					targetPosition[1] = targetY;
+					CollisionInfo.copy(playerCollisionInfo, collisionInfoCache);
 				}
-				out.length = overlapCount;
-			}; 
-		})();
+			}
+			return stepSuccess;
+		};
 
 		let checkForPlayerCollisions = (out, boxes, elapsed) => {
 			let overlapCount = 0;
@@ -563,9 +593,9 @@ let CharacterController = (() => {
 		
 				if ((intersectsX || entersX) && (intersectsY || entersY) && (intersectsZ || entersZ)
 					&& (entersX || entersY || entersZ)) {
-					if (entersX) checkMinTime(out, box, 0, overlapCount, elapsed, deltaX);
-					if (entersY) checkMinTime(out, box, 1, overlapCount, elapsed, deltaY);
-					if (entersZ) checkMinTime(out, box, 2, overlapCount, elapsed, deltaZ);
+					if (entersX) checkMinTime(out, box, playerBox, 0, overlapCount, elapsed, deltaX);
+					if (entersY) checkMinTime(out, box, playerBox, 1, overlapCount, elapsed, deltaY);
+					if (entersZ) checkMinTime(out, box, playerBox, 2, overlapCount, elapsed, deltaZ);
 		
 					out.collisionsBuffer[overlapCount] = box;
 					collisionCount += 1;
@@ -594,7 +624,7 @@ let CharacterController = (() => {
 			// i.e. you can move through boxes at high enough speed - TODO: box cast 
 			for (let i = 0, l = boxes.length; i < l; i++) {
 				if (Physics.Box.intersectsAxis(boxes[i], playerBox, 0) && Physics.Box.intersectsAxis(boxes[i], playerBox, 2)) {
-					if (checksEntersAxis(out, boxes[i], 1, overlapCount, elapsed)) {
+					if (checksEntersAxis(out, boxes[i], playerBox, 1, overlapCount, targetPosition, playerPosition, elapsed)) {
 						out.collisionsBuffer[overlapCount] = boxes[i];
 						collisionCount += 1;
 						overlapCount += 1;
@@ -608,36 +638,6 @@ let CharacterController = (() => {
 			out.overlapCount = overlapCount;
 		
 			return collisionCount;
-		};
-		
-		let getTouchPointTarget = (closestBox, axis, delta, stepAttempt) => {
-			if (delta <= 0) {
-				// new target position max + extents
-				return closestBox.max[axis] + playerBox.extents[axis];
-			} else {
-				// new target position min - extents
-				return closestBox.min[axis] - playerBox.extents[axis];
-			}
-		};
-		
-		let tryStep = (axis, maxStepHeight, elapsed) => {
-			let stepSuccess = false;
-			let collisionsBuffer = playerCollisionInfo.collisionsBuffer;
-			let minIndex = playerCollisionInfo.minIndex;
-			if (collisionsBuffer[minIndex[axis]].max[1] < maxStepHeight) {
-				// Try step!
-				let targetY = targetPosition[1];
-				targetPosition[1] = playerPosition[1] + collisionsBuffer[minIndex[axis]].max[1] - playerBox.min[1];
-				CollisionInfo.copy(collisionInfoCache, playerCollisionInfo);
-				if (checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed) == 0) {
-					stepSuccess = true;
-					// Only step if it's completely clear to move to the target spot for ease
-				} else {
-					targetPosition[1] = targetY;
-					CollisionInfo.copy(playerCollisionInfo, collisionInfoCache);
-				}
-			}
-			return stepSuccess;
 		};
 
 		// Public Methods
@@ -655,7 +655,9 @@ let CharacterController = (() => {
 			vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, velocity[2] * elapsed);
 
 			// As we might be checking collision repeatedly sweep out maximal set first
-			sweepWorldForRevelantBoxes(relevantBoxes, targetPosition, playerPosition);
+			sweepForRevelantBoxes(relevantBoxes, world.boxes, playerBox, targetPosition, playerPosition, stepHeight);
+			// TODO: ^^ This could be replaced by a World partitioning system and a method to retrieve locally revelant collision boxes 
+
 			checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
 		
 			// Local variables to arrays for less typing
@@ -680,7 +682,7 @@ let CharacterController = (() => {
 				if (!tryStep(fca, maxStepHeight, elapsed)) {
 					// Try moving along pca first
 					let targetPosCache = targetPosition[dca];
-					targetPosition[dca] = getTouchPointTarget(collisionsBuffer[minIndex[dca]], dca, targetPosition[dca] - playerPosition[dca]);
+					targetPosition[dca] = getTouchPointTarget(collisionsBuffer[minIndex[dca]], playerBox, dca, targetPosition[dca] - playerPosition[dca]);
 					
 					checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
 					
@@ -689,7 +691,7 @@ let CharacterController = (() => {
 						if (!tryStep(pca, maxStepHeight, elapsed)) {
 							// Step did not resolve all collision
 							// No more sliding along in prioritised collision axis
-							targetPosition[pca] = getTouchPointTarget(collisionsBuffer[minIndex[pca]], pca, targetPosition[pca] - playerPosition[pca]);
+							targetPosition[pca] = getTouchPointTarget(collisionsBuffer[minIndex[pca]], playerBox, pca, targetPosition[pca] - playerPosition[pca]);
 		
 							// Try sliding the deprioritised collisation axis instead (with minimal movement in prioritised collision axis)
 							targetPosition[dca] = targetPosCache;
@@ -698,7 +700,7 @@ let CharacterController = (() => {
 							if (minIndex[dca] != -1) {
 								if (!tryStep(dca, maxStepHeight, elapsed)) {
 									// No dice really in a corner
-									targetPosition[dca] = getTouchPointTarget(collisionsBuffer[minIndex[dca]], dca, targetPosition[dca] - playerPosition[dca]);
+									targetPosition[dca] = getTouchPointTarget(collisionsBuffer[minIndex[dca]], playerBox, dca, targetPosition[dca] - playerPosition[dca]);
 								}
 							}
 						}
@@ -710,12 +712,12 @@ let CharacterController = (() => {
 				let sca = resolvedZ ? 2 : 0; // Second Collision Axis (though there's no collision initially)
 				
 				if (!tryStep(fca, maxStepHeight, elapsed)) {
-					targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], fca, targetPosition[fca] - playerPosition[fca]);
+					targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], playerBox, fca, targetPosition[fca] - playerPosition[fca]);
 					checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
 					
 					if (minIndex[sca] != -1) {
 						// Oh no now that we're not moving in fca we're hitting something in sca
-						targetPosition[sca] = getTouchPointTarget(collisionsBuffer[minIndex[sca]], sca, targetPosition[sca] - playerPosition[sca]);
+						targetPosition[sca] = getTouchPointTarget(collisionsBuffer[minIndex[sca]], playerBox, sca, targetPosition[sca] - playerPosition[sca]);
 					}
 				}
 			} 
