@@ -561,7 +561,8 @@ let CharacterController = (() => {
 				let intersectsZ = Physics.Box.intersectsAxisOffset(box, playerBox, 2, deltaZ);
 				let entersZ = deltaZ && Physics.Box.entersAxis(box, playerBox, 2, targetPosition[2] - playerPosition[2]);
 		
-				if ((intersectsX || entersX) && (intersectsY || entersY) && (intersectsZ || entersZ)) {
+				if ((intersectsX || entersX) && (intersectsY || entersY) && (intersectsZ || entersZ)
+					&& (entersX || entersY || entersZ)) {
 					if (entersX) checkMinTime(out, box, 0, overlapCount, elapsed, deltaX);
 					if (entersY) checkMinTime(out, box, 1, overlapCount, elapsed, deltaY);
 					if (entersZ) checkMinTime(out, box, 2, overlapCount, elapsed, deltaZ);
