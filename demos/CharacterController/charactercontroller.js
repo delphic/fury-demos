@@ -471,8 +471,25 @@ let CharacterController = (() => {
 		return exports;
 	})();
 
+	let useSideStep = false;
+	let allowSideStepSlide = false;
+	let sideStepDistance = 0.5;
+	exports.useSideStep = (value) => {
+		useSideStep = value;
+		return "Use Side Step " + value;
+	};
+	exports.allowSideStepSlide = (value) => {
+		allowSideStepSlide = value;
+		return "Allow Side Step Slide " + value;
+	};
+	exports.setSideStepDistance = (value) => {
+		sideStepDistance = Math.abs(sideStepDistance);
+		return "Slide Step Distance " + value;
+	};
+
 	let playerCollisionInfo = CollisionInfo.create();
 	let collisionInfoCache = CollisionInfo.create();
+	let collisionInfoCache2 = CollisionInfo.create();
 	let relevantBoxes = []; // Array used to store sub-set of boxes to consider for XZ calculations
 
 	let checksEntersAxis = (out, box, playerBox, axis, collisionBufferIndex, targetPosition, playerPosition, elapsed) => {
@@ -558,17 +575,73 @@ let CharacterController = (() => {
 			if (collisionsBuffer[minIndex[axis]].max[1] < maxStepHeight) {
 				// Try step!
 				let targetY = targetPosition[1];
-				targetPosition[1] = playerPosition[1] + collisionsBuffer[minIndex[axis]].max[1] - playerBox.min[1];
+				targetPosition[1] = collisionsBuffer[minIndex[axis]].max[1] + playerBox.extents[1]; 
+				// alt ^^: playerPosition[1] + collisionsBuffer[minIndex[axis]].max[1] - playerBox.min[1];
 				CollisionInfo.copy(collisionInfoCache, playerCollisionInfo);
 				if (checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed) == 0) {
 					stepSuccess = true;
 					// Only step if it's completely clear to move to the target spot for ease
 				} else {
+					// TODO: If collision is only in axis of primary movement, consider sidestep 
 					targetPosition[1] = targetY;
 					CollisionInfo.copy(playerCollisionInfo, collisionInfoCache);
 				}
 			}
 			return stepSuccess;
+		};
+
+		let trySideStep = (box, pma, sma, maxSideStepDistance, delta, elapsed) => {
+			let sideStepSuccess = false;
+			let targetPosSma = targetPosition[sma];
+			let targetPosPma = targetPosition[pma];
+			let tryStep = false;
+			
+			if (!allowSideStepSlide) {
+				// Only side step as far as you would move anyway
+				maxSideStepDistance = Math.min(maxSideStepDistance, Math.abs(delta));
+			}
+			
+			let sideStepToMinDistance = Math.abs(box.min[sma] - playerBox.max[sma]);
+			let sideStepToMaxDistance = Math.abs(box.max[sma] - playerBox.min[sma]);
+
+			if (sideStepToMinDistance < maxSideStepDistance && sideStepToMinDistance < sideStepToMaxDistance) {
+				if (box.min[sma] > playerBox.max[sma]) throw new Error("Box min was greater than player box max during side step calculation");
+				// Redirect movement to sidestep towards box min (i.e. -ve)
+				let sideStepDistance = Math.min(sideStepToMinDistance, Math.abs(delta));
+				if (sideStepToMinDistance < Math.abs(delta)) {
+					// Can full sidestep so use precise position
+					targetPosition[sma] = box.min[sma] - playerBox.extents[sma];
+				} else {
+					targetPosition[sma] = playerPosition[sma] - sideStepDistance;	
+				}
+				targetPosition[pma] = playerPosition[pma] + Math.sign(delta) * (Math.abs(delta) - sideStepDistance);
+				tryStep = true;
+			} else if (sideStepToMaxDistance < maxSideStepDistance) {
+				if (box.max[sma] < playerBox.min[sma]) throw new Error("Box max was less than player box min during side step calculation");
+				// Redirect movement to sidestep towards box max (i.e. +ve)
+				let sideStepDistance = Math.min(sideStepToMaxDistance, Math.abs(delta));
+				if (sideStepToMaxDistance < Math.abs(delta)) {
+					// Can full sidestep so use precise position
+					targetPosition[sma] = box.max[sma] + playerBox.extents[sma];
+				} else {
+					targetPosition[sma] = playerPosition[sma] + sideStepDistance;  
+				}
+				targetPosition[pma] = playerPosition[pma] + Math.sign(delta) * (Math.abs(delta) - sideStepDistance);
+				tryStep = true;
+			}
+
+			if (tryStep) {
+				CollisionInfo.copy(collisionInfoCache2, playerCollisionInfo);
+				if (checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed) == 0) {
+					sideStepSuccess = true;
+				} else {
+					targetPosition[sma] = targetPosSma;
+					targetPosition[pma] = targetPosPma;
+					CollisionInfo.copy(playerCollisionInfo, collisionInfoCache2);
+				}
+			}
+
+			return sideStepSuccess;
 		};
 
 		let checkForPlayerCollisions = (out, boxes, elapsed) => {
@@ -654,6 +727,9 @@ let CharacterController = (() => {
 			vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, velocity[0] * elapsed);
 			vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, velocity[2] * elapsed);
 
+			let requestedVx = velocity[0];
+			let requestedVz = velocity[2];
+
 			// As we might be checking collision repeatedly sweep out maximal set first
 			sweepForRevelantBoxes(relevantBoxes, world.boxes, playerBox, targetPosition, playerPosition, stepHeight);
 			// TODO: ^^ This could be replaced by a World partitioning system and a method to retrieve locally revelant collision boxes 
@@ -676,31 +752,31 @@ let CharacterController = (() => {
 				// (this allow us to slide into tight spaces more easily)
 				let absDeltaZ = Math.abs(targetPosition[2] - playerPosition[0]);
 				let absDeltaX = Math.abs(targetPosition[0] - playerPosition[0]);
-				let pca = absDeltaZ < absDeltaX ? 0 : 2; // Prioritised collision axis
-				let dca = absDeltaZ < absDeltaX ? 2 : 0; // Deprioritised collision axis
+				let pma = absDeltaZ < absDeltaX ? 0 : 2; // Primary movement axis
+				let sma = absDeltaZ < absDeltaX ? 2 : 0; // Secondary movement axis
 		
 				if (!tryStep(fca, maxStepHeight, elapsed)) {
-					// Try moving along pca first
-					let targetPosCache = targetPosition[dca];
-					targetPosition[dca] = getTouchPointTarget(collisionsBuffer[minIndex[dca]], playerBox, dca, targetPosition[dca] - playerPosition[dca]);
+					// Try moving along pma first
+					let targetPosCache = targetPosition[sma];
+					targetPosition[sma] = getTouchPointTarget(collisionsBuffer[minIndex[sma]], playerBox, sma, targetPosition[sma] - playerPosition[sma]);
 					
 					checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
 					
-					if (minIndex[pca] != -1) {
+					if (minIndex[pma] != -1) {
 						// Still impacting on prioritised collision axis
-						if (!tryStep(pca, maxStepHeight, elapsed)) {
+						if (!tryStep(pma, maxStepHeight, elapsed)) {
 							// Step did not resolve all collision
 							// No more sliding along in prioritised collision axis
-							targetPosition[pca] = getTouchPointTarget(collisionsBuffer[minIndex[pca]], playerBox, pca, targetPosition[pca] - playerPosition[pca]);
+							targetPosition[pma] = getTouchPointTarget(collisionsBuffer[minIndex[pma]], playerBox, pma, targetPosition[pma] - playerPosition[pma]);
 		
 							// Try sliding the deprioritised collisation axis instead (with minimal movement in prioritised collision axis)
-							targetPosition[dca] = targetPosCache;
+							targetPosition[sma] = targetPosCache;
 							checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
 		
-							if (minIndex[dca] != -1) {
-								if (!tryStep(dca, maxStepHeight, elapsed)) {
+							if (minIndex[sma] != -1) {
+								if (!tryStep(sma, maxStepHeight, elapsed)) {
 									// No dice really in a corner
-									targetPosition[dca] = getTouchPointTarget(collisionsBuffer[minIndex[dca]], playerBox, dca, targetPosition[dca] - playerPosition[dca]);
+									targetPosition[sma] = getTouchPointTarget(collisionsBuffer[minIndex[sma]], playerBox, sma, targetPosition[sma] - playerPosition[sma]);
 								}
 							}
 						}
@@ -711,13 +787,20 @@ let CharacterController = (() => {
 				let fca = resolvedZ ? 0 : 2; // First Collision Axis
 				let sca = resolvedZ ? 2 : 0; // Second Collision Axis (though there's no collision initially)
 				
-				if (!tryStep(fca, maxStepHeight, elapsed)) {
-					targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], playerBox, fca, targetPosition[fca] - playerPosition[fca]);
-					checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
-					
-					if (minIndex[sca] != -1) {
-						// Oh no now that we're not moving in fca we're hitting something in sca
-						targetPosition[sca] = getTouchPointTarget(collisionsBuffer[minIndex[sca]], playerBox, sca, targetPosition[sca] - playerPosition[sca]);
+				// Check if collision is in larger axis of movement, if so should consider attempting to sidestep the object
+				let shouldConsiderSidestep = useSideStep && Math.abs(targetPosition[fca] - playerPosition[fca]) > Math.abs(targetPosition[sca] - playerPosition[sca]);
+
+				if (!tryStep(fca, maxStepHeight, elapsed)) { 					
+					if (!shouldConsiderSidestep 
+						|| !trySideStep(collisionsBuffer[minIndex[fca]], fca, sca, sideStepDistance, targetPosition[fca] - playerPosition[fca], elapsed)) {
+						// Try step and try side step failed, move up to object instead
+						targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], playerBox, fca, targetPosition[fca] - playerPosition[fca]);
+						checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
+						
+						if (minIndex[sca] != -1) {
+							// Oh no now that we're not moving in fca we're hitting something in sca
+							targetPosition[sca] = getTouchPointTarget(collisionsBuffer[minIndex[sca]], playerBox, sca, targetPosition[sca] - playerPosition[sca]);
+						}
 					}
 				}
 			} 
@@ -727,7 +810,19 @@ let CharacterController = (() => {
 			
 			// Cache Velocity
 			velocity[0] = (playerPosition[0] - lastPosition[0]) / elapsed;
-			velocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;
+			velocity[2] = (playerPosition[2] - lastPosition[2]) / elapsed;	
+			if (useSideStep) {
+				// We actually want velocity to consider for next frame which if using sidestep is not necessarily the same
+				// If using sidestep, compare to magnitude and direction of requested velocity
+				if (Math.abs(velocity[0]) > Math.abs(requestedVx) || Math.sign(velocity[0]) != Math.abs(requestedVx)) {
+					// Sidestepped larger than requested velocity or wrong direction - use the requested magnitude but in the direction of actual travel
+					velocity[0] = Math.sign(velocity[0]) * Math.abs(requestedVx);
+				}
+				if (Math.abs(velocity[2]) > Math.abs(requestedVz) || Math.sign(velocity[2]) != Math.abs(requestedVz)) {
+					// Sidestepped larger than requested velocity or wrong direction - use the requested magnitude but in the direction of actual travel
+					velocity[2] = Math.sign(velocity[2]) * Math.abs(requestedVz);
+				}
+			}
 		};
 
 		controller.moveY = (velocity, elapsed) => {
