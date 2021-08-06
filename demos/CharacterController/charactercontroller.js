@@ -1094,18 +1094,20 @@ let loop = function(elapsed) {
 		let airSpeed = vec3.length(playerVelocity);
 		let dragDv = (airSpeed * airSpeed * 1.225 * elapsed) / (2 * 100);	// Assumes air and mass of 100kg, drag coefficent of ~1 and surface area ~1 (it's probably less)
 		// ^^ Technically surface area is different based on direction, so a more accurate model would break down vertical against others
+
+		if (airSpeed < dragDv) {
+			// This happens when elasped > 200 / 1.225 * airSpeed * airSpeed 
+			// i.e. air speed > sqrt(200 * 60 / 1.225) ~= 99 m/s
+			console.log("Warning: Calculated drag higher than air speed!");
+			airSpeed = Math.max(0, airSpeed - dragDv);
+		}
+
 		// Update Air Velocity
 		if (airSpeed !== 0) {
 			vec3.scale(playerVelocity, playerVelocity, (airSpeed - dragDv) / airSpeed);
 		} else {
 			vec3.zero(playerVelocity);
-		}
-		if (airSpeed < dragDv) {
-			// This happens when elasped > 200 / 1.225 * airSpeed * airSpeed 
-			// i.e. air speed > sqrt(200 * 60 / 1.225) ~= 99 m/s
-			console.log("Warning: Calculated drag higher than air speed!");
-		}
-		airSpeed = Math.min(0, airSpeed - dragDv);
+		}		
 
 		// Apply air movement (only deceleration allowed above maximum air movement speed)
 		// Convert inputX and inputZ into global X / Z velocity delta
