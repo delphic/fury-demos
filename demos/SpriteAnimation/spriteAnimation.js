@@ -1,5 +1,6 @@
 // Helpers
 var requestJson = function(path, callback) {
+	// TODO: Use fetch API
 	var request = new XMLHttpRequest();
 	request.open("GET", path, true);
 	request.onload = function() { callback(request.responseText); }
@@ -15,10 +16,9 @@ var createQuad = function(size) {
 };
 
 // TODO:
-// Change request JSON to use fetch API
 // Replace Zergling with Lena - aseprite json lonading -> image load playback with frame timings
 
-// Something that'd be actually interesting is the ability to read the original binary spritesheets 
+// Something that'd be actually interesting is the ability to read the original SC binary spritesheets 
 // Rather than this massive exported JSON - reverse engineering the file format from Kirke and this...
 // Maybe an electron app to interface with it might be fun, then the user can specify the sprite files.
 
@@ -148,8 +148,7 @@ var init = function() {
 			ctx = canvas.getContext("2d");
 			renderSpriteToCanvas(spriteData, palleteData, 0);
 
-			var texture = Fury.Renderer.createTexture(canvas, "low", true);
-			material.textures["uSampler"] = texture;
+			material.setTexture(Fury.Renderer.createTexture(canvas, "low", true));
 
 			lastTime = Date.now()/1000;
 			setMaterialOffset(intialSpriteIndex);
