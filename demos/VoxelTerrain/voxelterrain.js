@@ -355,28 +355,10 @@ var handleInput = function(elapsed) {
 	Input.handleFrameFinished();
 };
 
-let ScaledImage = (function(){
-	let exports = {};
-	exports.create = (config) => {
-		let canvas = document.createElement("canvas");
-		canvas.style = "display: none";
-		canvas.width = config.image.width * config.scale;
-		canvas.height = config.image.height * config.scale;
-
-		let ctx = canvas.getContext("2d");
-		ctx.imageSmoothingEnabled = !!config.imageSmoothingEnabled;
-		ctx.drawImage(config.image, 0, 0, canvas.width, canvas.height);
-
-		return canvas;
-	};
-
-	return exports;
-})();
-
 // Create Upscaled Texture
 let image = new Image();
 image.onload = function() {
-	let upscaled = ScaledImage.create({ image: image, scale: 8 });
+	let upscaled = Fury.Utils.createScaledImage({ image: image, scale: 8 });
 	let textureSize = upscaled.width, textureCount = Math.round(upscaled.height / upscaled.width);
 	let textureArray = Fury.Renderer.createTextureArray(upscaled, textureSize, textureSize, textureCount, "pixel", true);
 	atlasMaterial.setTexture(textureArray);

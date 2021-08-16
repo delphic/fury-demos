@@ -467,6 +467,7 @@ var Fury = module.exports = (function() {
 	Fury.Shader = require('./shader');
 	Fury.Shaders = require('./shaders');
 	Fury.Transform = require('./transform');
+	Fury.Utils = require('./utils');
 
 	Fury.prefabs = { keys: "Can't touch this, doo doo doo, do do, do do" };
 
@@ -476,8 +477,6 @@ var Fury = module.exports = (function() {
 			throw new Error("Please provide a valid and unique name parameter for your prefab");
 		} else {
 			prefabs[parameters.name] = parameters;
-			// TODO: If we move to using a component system will need to transfer from parameter flat structure to a gameobject like structure, for now these are the same.
-			// Note that each component class should deal with setting up that component instance from supplied parameters itself
 		}
 	};
 
@@ -518,7 +517,7 @@ var Fury = module.exports = (function() {
 	return Fury;
 })();
 
-},{"./bounds":2,"./camera":3,"./gameLoop":7,"./input":9,"./material":10,"./maths":11,"./mesh":12,"./model":13,"./physics":14,"./renderer":15,"./scene":16,"./shader":17,"./shaders":18,"./transform":19}],7:[function(require,module,exports){
+},{"./bounds":2,"./camera":3,"./gameLoop":7,"./input":9,"./material":10,"./maths":11,"./mesh":12,"./model":13,"./physics":14,"./renderer":15,"./scene":16,"./shader":17,"./shaders":18,"./transform":19,"./utils":20}],7:[function(require,module,exports){
 let Input = require('./input');
 
 let GameLoop = module.exports = (function() {
@@ -2820,4 +2819,23 @@ var Transform = module.exports = function() {
 	return exports;
 }();
 
-},{"./maths":11}]},{},[4]);
+},{"./maths":11}],20:[function(require,module,exports){
+let Utils = module.exports = (function(){
+    let exports = {};
+
+    exports.createScaledImage = (config) => {
+		let canvas = document.createElement("canvas");
+		canvas.style = "display: none";
+		canvas.width = config.image.width * config.scale;
+		canvas.height = config.image.height * config.scale;
+
+		let ctx = canvas.getContext("2d");
+		ctx.imageSmoothingEnabled = !!config.imageSmoothingEnabled;
+		ctx.drawImage(config.image, 0, 0, canvas.width, canvas.height);
+
+		return canvas;
+	};
+
+    return exports
+})();
+},{}]},{},[4]);
