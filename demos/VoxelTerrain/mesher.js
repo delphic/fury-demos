@@ -46,9 +46,7 @@ var buildMesh = function(vorld, chunkI, chunkJ, chunkK) {
 
 	var chunk = Vorld.getChunk(vorld, chunkI, chunkJ, chunkK);
 
-	forEachBlock(chunk, function(chunk, i, j, k, x, y, z) {
-		var block = Chunk.getBlock(chunk, i, j, k);
-
+	forEachBlock(chunk, function(block, i, j, k, x, y, z) {
 		// Exists?
 		if(!block) { return; }
 
@@ -127,7 +125,7 @@ var concat = function(a, b) {
 	}
 };
 
-// delegate should be a function taking chunk, i, j, k, x, y, z
+// delegate should be a function taking block, i, j, k, x, y, z
 var forEachBlock = function(chunk, delegate) {
 	for(i = 0; i < chunk.size; i++) {
 		x = i - Math.floor(chunk.size/2.0);
@@ -135,30 +133,66 @@ var forEachBlock = function(chunk, delegate) {
 			y = j - Math.floor(chunk.size/2.0);
 			for(k = 0; k < chunk.size; k++) {
 				z = k - Math.floor(chunk.size/2.0);
-				delegate(chunk, i, j, k, x, y, z);
+				delegate(Chunk.getBlock(chunk, i, j, k), i, j, k, x, y, z);
 			}
 		}
 	}
 };
 
-onmessage = function(e) {
-  var vorld = e.data.chunkData;
+/*
+var countChunks = function(vorld) {
+	let count = 0;
+	Vorld.forEachChunk(vorld, (chunk) => { count +=1; });
+	return count;
+};*/
 
-  // Create Meshes
-	var keys = Object.keys(vorld.chunks);
-	for(var i = 0, l = keys.length; i < l; i++) {
-		var indices = vorld.chunks[keys[i]].indices;
-		var mesh = buildMesh(vorld, indices[0], indices[1], indices[2]);
-		if (mesh.indices.length > 0) {
-			postMessage({
-				mesh: mesh,
-				offset: [indices[0] * vorld.chunkSize, indices[1] * vorld.chunkSize, indices[2] * vorld.chunkSize],
-				progress: i / l
-			});
-		} else {
-			postMessage({ progress: i / l });
+onmessage = function(e) {
+	let vorld = e.data.chunkData;
+	let bounds = e.data.bounds;
+
+	let count = 0;
+	let totalRange = (bounds.iMax - bounds.iMin + 1) * (bounds.jMax - bounds.jMin + 1) * (bounds.kMax - bounds.kMin + 1);
+
+	for (let i = bounds.iMin; i <= bounds.iMax; i++) {
+		for (let j = bounds.jMin; j <= bounds.jMax; j++) {
+			for (let k = bounds.kMin; k <= bounds.kMax; k++) {
+				count++;
+				let chunk = Vorld.getChunk(vorld, i, j, k);
+				if (chunk) {
+				  let indices = chunk.indices;
+				  let mesh = buildMesh(vorld, indices[0], indices[1], indices[2]);
+				  if (mesh.indices.length > 0) {
+					  this.postMessage({
+						  mesh: mesh,
+						  offset: [indices[0] * vorld.chunkSize, indices[1] * vorld.chunkSize, indices[2] * vorld.chunkSize],
+						  progress: count / totalRange
+					  });
+				  } else {
+					  this.postMessage({ progress: count / totalRange });
+				  }
+				} else {
+					this.postMessage({ progress: count / totalRange });
+				}
+			}
 		}
 	}
+	postMessage({ complete: true });
 
-  postMessage({ complete: true });
+	/*
+  var i = 0, l = countChunks(vorld);
+  // Create Meshes
+  Vorld.forEachChunk(vorld, (chunk) => {
+	var indices = chunk.indices;
+	var mesh = buildMesh(vorld, indices[0], indices[1], indices[2]);
+	if (mesh.indices.length > 0) {
+		postMessage({
+			mesh: mesh,
+			offset: [indices[0] * vorld.chunkSize, indices[1] * vorld.chunkSize, indices[2] * vorld.chunkSize],
+			progress: i / l
+		});
+	} else {
+		postMessage({ progress: i / l });
+	}
+	i++;
+  });*/  
 };

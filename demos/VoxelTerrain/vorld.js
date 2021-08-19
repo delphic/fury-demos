@@ -2,15 +2,22 @@
 
 var Vorld = (function() {
   var exports = {};
+
+  // NOTE - have tried a nested index map format, it is slower
+  // this is probably because the underlying parser thinks chunks is a mix of objects and arrays
+  // which is more costly than string based garbage allocation
+  // Coul try bitpacked index instead (requires setting a maximum vorld bounds though and offseting for positive numbers only)
+  let getKey = function(i, j, k) {
+    return i + "_" + j + "_" + k;
+  };
+
   exports.addChunk = function(vorld, chunk, i, j, k) {
-    vorld.chunks[i+"_"+j+"_"+k] = chunk;
+    vorld.chunks[getKey(i, j, k)] = chunk;
     chunk.indices = [i, j, k];
   };
   exports.getChunk = function(vorld, i, j, k) {
-    var key = i+"_"+j+"_"+k;
-    if (vorld.chunks[key]) {
-        return vorld.chunks[key];
-    }
+    let key = getKey(i, j, k);
+    if (vorld.chunks[key]) return vorld.chunks[key];
     return null;
   };
   exports.addBlock = function(vorld, x, y, z, block) {
@@ -67,6 +74,39 @@ var Vorld = (function() {
       return Chunk.getBlock(chunk, blockI, blockJ, blockK);
     }
     return null;
+  };
+  exports.forEachChunk = function(vorld, delegate) {
+    let chunks = vorld.chunks;
+    let keys = Object.keys(chunks);
+    for (let i = 0, l = keys.length; i < l; i++) {
+      delegate(chunks[keys[i]]);
+    }
+  };
+  // Reference adds provided chunks from b to a (aka vorld merge)
+  exports.tryMerge = function(a, b) {
+    if (a.chunkSize != b.chunkSize) {
+      return false;
+    }
+    let keys = Object.keys(b.chunks);
+    for (let i = 0, l = keys.length; i < l; i++) {
+      a.chunks[keys[i]] = b.chunks[keys[i]];
+    }
+    return true;
+  };
+  exports.createSlice = function(vorld, iMin, iMax, jMin, jMax, kMin, kMax) {
+    let chunks = {};
+    for (let i = iMin; i <= iMax; i++) {
+      for (let j = jMin; j <= jMax; j++) {
+        for (let k = kMin; k <= kMax; k++) {
+          let key = getKey(i, j, k);
+          if (vorld.chunks[key]) {
+            chunks[key] = vorld.chunks[key];
+          }
+        }
+      }
+    }
+    // As creating from existing vorld, do not need to use Chunk.create 
+    return { chunkSize: vorld.chunkSize, chunks: chunks };
   };
   exports.create = function(parameters) {
     var vorld = {};

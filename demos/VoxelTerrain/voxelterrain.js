@@ -178,7 +178,6 @@ $(document).ready(function(){
 // Create Camera & Scene
 var rotateRate = 0.1 * Math.PI, maxRotatePerFrame = 0.2 * rotateRate;
 var zoomRate = 16;
-var initalRotation = quat.create();
 var camera = Fury.Camera.create({
 	near: 0.1,
 	far: 1000000.0,
@@ -210,70 +209,292 @@ var awake = function() {
 	loop();
 };
 
+// TODO: Generic Worker pool with create function
+let GeneratorPool = (function() {
+	let exports = {};
+	let maxWorkers = 16;
+	let inUseWorkerCount = 0;
+	let workers = [];
+	let workerInUse = [];
+	
+	exports.isWorkerAvailable = () => {
+		return inUseWorkerCount < maxWorkers;
+	};
+
+	exports.requestWorker = () => {
+		for (let i = 0; i < maxWorkers; i++) {
+			if (!workerInUse[i]) {
+				if (!workers[i]) {
+					workers[i] = new Worker('generator.js');
+					workers[i].workerIndex = i;
+				}
+				workerInUse[i] = true;
+				inUseWorkerCount++;
+				return workers[i];
+			}
+		}
+		return null;
+	};
+
+	exports.returnWorker = (worker) => {
+		workerInUse[worker.workerIndex] = false;
+		inUseWorkerCount--;
+	};
+
+	/*exports.cleanup = () => {
+		for (let i = 0; i < maxWorkers; i++) {
+			if (workers[i]) {
+				if (workerInUse[i]) {
+					workers[i].terminate();
+				}
+				delete workers[i];
+			}
+		}
+		workers.length = 0;
+	};*/
+
+	return exports;
+})();
+
+let MesherPool = (function() {
+	let exports = {};
+	let maxWorkers = 8;
+	let inUseWorkerCount = 0;
+	let workers = [];
+	let workerInUse = [];
+	let queuedRequests = [];
+	
+	exports.isWorkerAvailable = () => {
+		return inUseWorkerCount < maxWorkers;
+	};
+
+	exports.requestWorker = () => {
+		for (let i = 0; i < maxWorkers; i++) {
+			if (!workerInUse[i]) {
+				if (!workers[i]) {
+					workers[i] = new Worker('mesher.js');
+					workers[i].workerIndex = i;
+				}
+				workerInUse[i] = true;
+				inUseWorkerCount++;
+				return workers[i];
+			}
+		}
+		return null;
+	};
+
+	exports.returnWorker = (worker) => {
+		workerInUse[worker.workerIndex] = false;
+		inUseWorkerCount--;
+		if (queuedRequests.length > 0) {
+			let request = queuedRequests[0];
+			queuedRequests.splice(0, 1);
+			request();
+		}
+	};
+
+	exports.queueRequest = (callback) => {
+		console.log("Queued Mesher Request");
+		queuedRequests.push(callback);
+	};
+
+	return exports;
+})();
+
+let vorld = Vorld.create({ size: 32 }); // Amalgamated Vorld Data
+
 var generateVorld = function() {
+	let startTime = Date.now();
 	$("#progressStage").html("Generating Voxel Data");
 	$("#progressBarInner").width("0%");
 
-	var generator = new Worker('generator.js');
-	generator.onmessage = function(e) {
-		if (e.data.stage) {
-			$("#progressStage").html(e.data.stage);
-		}
+	let subsectionSize = 3;
+	let generatedSubsections = 0;
+	let totalToSubsectionsGenerate = Math.ceil((2 * areaExtents + 1) / subsectionSize) * Math.ceil((2 * areaExtents + 1) / subsectionSize);
+	let generatedChunks = 0;
+	let totalChunksToGenerate = (2 * areaExtents + 1) * (2 * areaExtents + 1) * areaHeight;
 
-		if (e.data.progress !== undefined) {
-			$("#progressBarInner").width((e.data.progress * 100) + "%");
-		}
-
-		if (e.data.complete) {
-			generateMeshes(e.data.vorld);
-		}
+	let createGeneratorWorker = function(iMin, iMax, kMin, kMax, callback) {
+		var generator = GeneratorPool.requestWorker();
+		generator.onmessage = function(e) {
+			if (e.data.stage) {
+				$("#progressStage").html(e.data.stage);
+			}
+	
+			if (e.data.progress !== undefined) {
+				if (e.data.progress) {
+					generatedChunks++;
+				}
+				$("#progressBarInner").width((generatedChunks / totalChunksToGenerate) * 100 + "%");
+			}
+	
+			if (e.data.complete) {
+				GeneratorPool.returnWorker(generator);
+				callback(e.data.vorld); // TODO: rename chunkData as that's what it is, not full vorld? (although it does follow vorld format)
+			}
+		};
+		generator.postMessage({
+			seed: seedString,
+			numOctaves: numOctaves,
+			octaveWeightings: octaveWeightings,
+			perlin: perlin,
+			baseWavelength: baseWavelength,
+			iMin: iMin,
+			iMax: iMax,
+			kMin: kMin,
+			kMax: kMax,
+			areaHeight: areaHeight,
+			shapingFunction: shapingFunction,	// TODO: take shapingFunction Object
+			adjustmentFactor: adjustmentFactor,
+			yOffset: yOffset,
+			amplitude: amplitude,
+			sdx: sdx,
+			sdz: sdz,
+			yDenominator: yDenominator,
+			neutralNoise: neutralNoise
+		});
 	};
 
-	generator.postMessage({
-		seed: seedString,
-		numOctaves: numOctaves,
-		octaveWeightings: octaveWeightings,
-		perlin: perlin,
-		baseWavelength: baseWavelength,
-		areaExtents: areaExtents,
-		areaHeight: areaHeight,
-		shapingFunction: shapingFunction,
-		adjustmentFactor: adjustmentFactor,
-		yOffset: yOffset,
-		amplitude: amplitude,
-		sdx: sdx,
-		sdz: sdz,
-		yDenominator: yDenominator,
-		neutralNoise: neutralNoise
-	});
+	let i = -areaExtents, k = -areaExtents;
+
+	let workerCompleteCallback = (chunkData) => {
+		generatedSubsections++;
+		tryCreateNextWorker(); 
+		// Does this increase stack size or are we fine? If it does might need to use requestAnimationFrame
+		// Or just queue up the requests on the pool
+		if (!Vorld.tryMerge(vorld, chunkData)) {
+			console.log("Unable to merge chunk data into main vorld instance");
+		}
+
+		if (generatedSubsections >= totalToSubsectionsGenerate) {
+			console.log("----- Data Generation -----");
+			console.log("Generated Chunks: " + generatedChunks + " / " + totalChunksToGenerate);
+			console.log("Generated Sections: " + generatedSubsections + " / " + totalToSubsectionsGenerate);
+			console.log("Generation Time: " + (Date.now() - startTime));
+			generateMeshes(vorld);
+		}
+	}; 
+
+	let tryCreateNextWorker = () => {
+		if (i <= areaExtents && k <= areaExtents) {
+			createGeneratorWorker(i, Math.min(i + subsectionSize - 1, areaExtents), k, Math.min(k + subsectionSize - 1, areaExtents), workerCompleteCallback);
+			k += subsectionSize;
+			if (k > areaExtents) {
+				k = -areaExtents;
+				i += subsectionSize;
+			}
+			return true;
+		}
+		return false;
+	};
+
+	// Create initial workers
+	while (GeneratorPool.isWorkerAvailable() && tryCreateNextWorker()) { }
 };
 
 var generateMeshes = function(vorld) {
+	let startTime = Date.now();
+	let generatedMeshPositions = {}; // Sanity check on mesh generation
+
 	$("#progressStage").html("Generating Meshes");
 	$("#progressBarInner").width("0%");
 
-	var mesher = new Worker('mesher.js');
-	mesher.onmessage = function(e) {
-		if (e.data.mesh) {
-			var mesh = Fury.Mesh.create(e.data.mesh);
-			mesh.tileBuffer = Fury.Renderer.createBuffer(e.data.mesh.tileIndices, 1);
-			// TODO: Use customBuffer parameter - will require update to shader see model demo for reference
+	// Duplicated from chunk generation
+	let subsectionSize = 3;
+	let generatedSubsections = 0;
+	let totalToSubsectionsGenerate = Math.ceil((2 * areaExtents + 1) / subsectionSize) * Math.ceil((2 * areaExtents + 1) / subsectionSize);
+	let generatedChunks = 0;
+	let generatedMeshCount = 0;
+	let totalChunksToGenerate = (2 * areaExtents + 1) * (2 * areaExtents + 1) * areaHeight;
 
-			var meshObject = scene.add({ mesh: mesh, material: atlasMaterial, position: vec3.clone(e.data.offset), static: true });
-			meshes.push(meshObject);
-		}
-		if (e.data.progress !== undefined) {
-			$("#progressBarInner").width((e.data.progress * 100) + "%");
-		}
-		if (e.data.complete) {
+	let createMesherWorker = function(iMin, iMax, kMin, kMax, callback) {
+		// Increase size to include adjancy info
+		let chunkData = Vorld.createSlice(vorld, iMin - 1, iMax + 1, 0, areaHeight - 1, kMin - 1, kMax + 1);
+
+		let mesher = MesherPool.requestWorker();
+		mesher.onmessage = function(e) {
+			if (e.data.mesh) {
+				generatedMeshCount++;
+				let mesh = Fury.Mesh.create(e.data.mesh);
+				mesh.tileBuffer = Fury.Renderer.createBuffer(e.data.mesh.tileIndices, 1);
+				// TODO: Use customBuffer parameter - will require update to shader see model demo for reference
+				// Question: Should we be tracking these meshes too, or are they cleaned up when scene meshObjects are?
+	
+				let key = e.data.offset[0] + "_" + e.data.offset[1] + "_" + e.data.offset[2];
+				if (generatedMeshPositions[key]) {
+					console.error("Generated more than one mesh for " + key);
+				} else {
+					generatedMeshPositions[key] = true;
+				}
+	
+				var meshObject = scene.add({ mesh: mesh, material: atlasMaterial, position: vec3.clone(e.data.offset), static: true });
+				meshes.push(meshObject);
+			}
+			if (e.data.progress !== undefined) {
+				if (e.data.progress) {
+					generatedChunks++;
+				}
+				$("#progressBarInner").width(((generatedChunks / totalChunksToGenerate)  * 100) + "%");
+			}
+			if (e.data.complete) {
+				MesherPool.returnWorker(mesher);
+				callback();
+			}
+		};
+		mesher.postMessage({
+			chunkData: chunkData,
+			bounds: {
+				iMax: iMax,
+				iMin: iMin,
+				jMax: areaHeight - 1,
+				jMin: 0,
+				kMax: kMax,
+				kMin: kMin
+			}
+		});
+	};
+
+	let i = -areaExtents, k = -areaExtents;
+
+	let workerCompleteCallback = () => {
+		generatedSubsections++;
+		tryCreateNextWorker(); 
+		// Does this increase stack size or are we fine? If it does might need to use requestAnimationFrame
+		// Or just queue up the requests on the pool
+
+		if (generatedSubsections >= totalToSubsectionsGenerate) {
+			console.log("----- Mesh Generation -----");
+			console.log("Evaluated Sections: " + generatedSubsections + " / " + totalToSubsectionsGenerate);
+			console.log("Evaluated Chunks: " + generatedChunks + " / " + totalChunksToGenerate);
+			console.log("Generated Meshes: " + generatedMeshCount);
+			console.log("Mesh Generation Time: " + (Date.now() - startTime));
+
 			$("#progressDisplay").hide();
 			$("#generationParameters").show();
 		}
+	}; 
+
+	let tryCreateNextWorker = () => {
+		if (i <= areaExtents && k <= areaExtents) {
+			createMesherWorker(i, Math.min(i + subsectionSize - 1, areaExtents), k, Math.min(k + subsectionSize - 1, areaExtents), workerCompleteCallback);
+			k += subsectionSize;
+			if (k > areaExtents) {
+				k = -areaExtents;
+				i += subsectionSize;
+			}
+			return true;
+		}
+		return false;
 	};
-	mesher.postMessage({
-		chunkData: vorld
-	});
-}
+
+	// Create initial workers
+	while (MesherPool.isWorkerAvailable() && tryCreateNextWorker()) { }
+
+	// Out of memory crashes for sufficently large extents
+	// https://stackoverflow.com/questions/17491022/max-memory-usage-of-a-chrome-process-tab-how-do-i-increase-it
+	// TODO: Investigate if can be overriden for electron apps. 
+	// Also investigate if we're cleaning up after ourselves properly or we have hanging references
+};
 
 var framesInLastSecond = 0;
 var timeSinceLastFrame = 0;
