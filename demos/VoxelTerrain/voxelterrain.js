@@ -187,17 +187,12 @@ var camera = Fury.Camera.create({
 	rotation: quat.fromValues(-0.232, 0.24, 0.06, 0.94)
 });
 var scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
-var meshes = [];	// This is chunkMeshObjects really
 
 var lastTime = Date.now();
 
 var clear = function() {
-	if(meshes.length > 0) {
-		for(var i = 0, l = meshes.length; i < l; i++) {
-			scene.remove(meshes[i]);
-		}
-		meshes.length = 0;
-	}
+	scene.clear();
+	Fury.Scene.clearResources();
 };
 
 var awake = function() {
@@ -373,7 +368,6 @@ var generateMeshes = function(vorld) {
 				let mesh = Fury.Mesh.create(e.data.mesh);
 				mesh.tileBuffer = Fury.Renderer.createBuffer(e.data.mesh.tileIndices, 1);
 				// TODO: Use customBuffer parameter - will require update to shader see model demo for reference
-				// Question: Should we be tracking these meshes too, or are they cleaned up when scene meshObjects are?
 	
 				let key = e.data.offset[0] + "_" + e.data.offset[1] + "_" + e.data.offset[2];
 				if (generatedMeshPositions[key]) {
@@ -382,8 +376,7 @@ var generateMeshes = function(vorld) {
 					generatedMeshPositions[key] = true;
 				}
 	
-				var meshObject = scene.add({ mesh: mesh, material: atlasMaterial, position: vec3.clone(e.data.offset), static: true });
-				meshes.push(meshObject);
+				scene.add({ mesh: mesh, material: atlasMaterial, position: vec3.clone(e.data.offset), static: true });
 			}
 			if (e.data.progress !== undefined) {
 				if (e.data.progress) {
