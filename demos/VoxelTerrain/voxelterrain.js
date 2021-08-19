@@ -209,97 +209,52 @@ var awake = function() {
 	loop();
 };
 
-// TODO: Generic Worker pool with create function
-let GeneratorPool = (function() {
+let WorkerPool = (function() {
 	let exports = {};
-	let maxWorkers = 16;
-	let inUseWorkerCount = 0;
-	let workers = [];
-	let workerInUse = [];
-	
-	exports.isWorkerAvailable = () => {
-		return inUseWorkerCount < maxWorkers;
-	};
 
-	exports.requestWorker = () => {
-		for (let i = 0; i < maxWorkers; i++) {
-			if (!workerInUse[i]) {
-				if (!workers[i]) {
-					workers[i] = new Worker('generator.js');
-					workers[i].workerIndex = i;
+	let prototype = {
+		maxWorkers: 8,
+		isWorkerAvailable: function() {
+			return this.inUseWorkerCount < this.maxWorkers;
+		},
+		requestWorker: function() {
+			if (this.workerSrc) {
+				for (let i = 0; i < this.maxWorkers; i++) {
+					if (!this.workerInUse[i]) {
+						if (!this.workers[i]) {
+							this.workers[i] = new Worker(this.workerSrc);
+							this.workers[i].workerIndex = i;
+						}
+						this.workerInUse[i] = true;
+						this.inUseWorkerCount++;
+						return this.workers[i];
+					}
 				}
-				workerInUse[i] = true;
-				inUseWorkerCount++;
-				return workers[i];
 			}
+			return null;
+		},
+		returnWorker: function(worker) {
+			this.workerInUse[worker.workerIndex] = false;
+			this.inUseWorkerCount--;
 		}
-		return null;
 	};
 
-	exports.returnWorker = (worker) => {
-		workerInUse[worker.workerIndex] = false;
-		inUseWorkerCount--;
-	};
+	exports.create = function(config) {
+		let pool = Object.create(prototype);
+		pool.workerSrc = config.src;
+		if (config.maxWorkers) pool.maxWorkers = config.maxWorkers;
+		pool.inUseWorkerCount = 0;
+		pool.workers = [];
+		pool.workerInUse = [];
 
-	/*exports.cleanup = () => {
-		for (let i = 0; i < maxWorkers; i++) {
-			if (workers[i]) {
-				if (workerInUse[i]) {
-					workers[i].terminate();
-				}
-				delete workers[i];
-			}
-		}
-		workers.length = 0;
-	};*/
+		return pool;
+	};
 
 	return exports;
 })();
 
-let MesherPool = (function() {
-	let exports = {};
-	let maxWorkers = 8;
-	let inUseWorkerCount = 0;
-	let workers = [];
-	let workerInUse = [];
-	let queuedRequests = [];
-	
-	exports.isWorkerAvailable = () => {
-		return inUseWorkerCount < maxWorkers;
-	};
-
-	exports.requestWorker = () => {
-		for (let i = 0; i < maxWorkers; i++) {
-			if (!workerInUse[i]) {
-				if (!workers[i]) {
-					workers[i] = new Worker('mesher.js');
-					workers[i].workerIndex = i;
-				}
-				workerInUse[i] = true;
-				inUseWorkerCount++;
-				return workers[i];
-			}
-		}
-		return null;
-	};
-
-	exports.returnWorker = (worker) => {
-		workerInUse[worker.workerIndex] = false;
-		inUseWorkerCount--;
-		if (queuedRequests.length > 0) {
-			let request = queuedRequests[0];
-			queuedRequests.splice(0, 1);
-			request();
-		}
-	};
-
-	exports.queueRequest = (callback) => {
-		console.log("Queued Mesher Request");
-		queuedRequests.push(callback);
-	};
-
-	return exports;
-})();
+let generatorPool = WorkerPool.create({ src: 'generator.js', maxWorkers: 16 });
+let mesherPool =  WorkerPool.create({ src: 'mesher.js' });
 
 let vorld = Vorld.create({ size: 32 }); // Amalgamated Vorld Data
 
@@ -315,7 +270,7 @@ var generateVorld = function() {
 	let totalChunksToGenerate = (2 * areaExtents + 1) * (2 * areaExtents + 1) * areaHeight;
 
 	let createGeneratorWorker = function(iMin, iMax, kMin, kMax, callback) {
-		var generator = GeneratorPool.requestWorker();
+		var generator = generatorPool.requestWorker();
 		generator.onmessage = function(e) {
 			if (e.data.stage) {
 				$("#progressStage").html(e.data.stage);
@@ -329,7 +284,7 @@ var generateVorld = function() {
 			}
 	
 			if (e.data.complete) {
-				GeneratorPool.returnWorker(generator);
+				generatorPool.returnWorker(generator);
 				callback(e.data.vorld); // TODO: rename chunkData as that's what it is, not full vorld? (although it does follow vorld format)
 			}
 		};
@@ -389,7 +344,7 @@ var generateVorld = function() {
 	};
 
 	// Create initial workers
-	while (GeneratorPool.isWorkerAvailable() && tryCreateNextWorker()) { }
+	while (generatorPool.isWorkerAvailable() && tryCreateNextWorker()) { }
 };
 
 var generateMeshes = function(vorld) {
@@ -411,7 +366,7 @@ var generateMeshes = function(vorld) {
 		// Increase size to include adjancy info
 		let chunkData = Vorld.createSlice(vorld, iMin - 1, iMax + 1, 0, areaHeight - 1, kMin - 1, kMax + 1);
 
-		let mesher = MesherPool.requestWorker();
+		let mesher = mesherPool.requestWorker();
 		mesher.onmessage = function(e) {
 			if (e.data.mesh) {
 				generatedMeshCount++;
@@ -437,7 +392,7 @@ var generateMeshes = function(vorld) {
 				$("#progressBarInner").width(((generatedChunks / totalChunksToGenerate)  * 100) + "%");
 			}
 			if (e.data.complete) {
-				MesherPool.returnWorker(mesher);
+				mesherPool.returnWorker(mesher);
 				callback();
 			}
 		};
@@ -488,7 +443,7 @@ var generateMeshes = function(vorld) {
 	};
 
 	// Create initial workers
-	while (MesherPool.isWorkerAvailable() && tryCreateNextWorker()) { }
+	while (mesherPool.isWorkerAvailable() && tryCreateNextWorker()) { }
 
 	// Out of memory crashes for sufficently large extents
 	// https://stackoverflow.com/questions/17491022/max-memory-usage-of-a-chrome-process-tab-how-do-i-increase-it

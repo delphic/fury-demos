@@ -139,13 +139,6 @@ var forEachBlock = function(chunk, delegate) {
 	}
 };
 
-/*
-var countChunks = function(vorld) {
-	let count = 0;
-	Vorld.forEachChunk(vorld, (chunk) => { count +=1; });
-	return count;
-};*/
-
 onmessage = function(e) {
 	let vorld = e.data.chunkData;
 	let bounds = e.data.bounds;
@@ -177,22 +170,4 @@ onmessage = function(e) {
 		}
 	}
 	postMessage({ complete: true });
-
-	/*
-  var i = 0, l = countChunks(vorld);
-  // Create Meshes
-  Vorld.forEachChunk(vorld, (chunk) => {
-	var indices = chunk.indices;
-	var mesh = buildMesh(vorld, indices[0], indices[1], indices[2]);
-	if (mesh.indices.length > 0) {
-		postMessage({
-			mesh: mesh,
-			offset: [indices[0] * vorld.chunkSize, indices[1] * vorld.chunkSize, indices[2] * vorld.chunkSize],
-			progress: i / l
-		});
-	} else {
-		postMessage({ progress: i / l });
-	}
-	i++;
-  });*/  
 };
