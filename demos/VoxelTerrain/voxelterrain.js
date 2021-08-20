@@ -131,19 +131,33 @@ $(document).ready(function(){
 		$("#baseWavelength").val(Math.pow(2, power));
 	});
 	$("#regen").click(function(event){
-		$("#generationForm").hide();
-		$("#showGenerationForm").show();
-		$("#progressDisplay").show();
-		$("#generationParameters").hide();
-
 		getGenerationVariables();
-		clear();
-		generateVorld();
+		
+		let chunkLimit = 4225; 
+		// Semi-arbitary number determined by testing with height 1 up to extents of 32 for default settings
+		// Vorld data structure is currently sparse which makes it hard to predict the size of the Vorld data.
+		// Also the generated meshes will vary in complexity, depending on your settings.
+		// e.g. if your shaping function culls most of the data, this number is probably over-zealous. 
+		// However it also far from the worst case scenario either.
+		// e.g. Using very small octaves of noise will generate more noisey output which will create meshes with more vertices. 
+
+		// Using 8 octaves with the last 3 at 0.5 but it's also a lot closer to worst case meshes
+		// and breaks at lower numbers e.g. 16 extents 2 height = 2178
+		let chunksToGenerate = (2 * areaExtents + 1) * (2 * areaExtents + 1) * areaHeight;
+		let warningText = "This will attempt to generate and display " + chunksToGenerate + " chunks, depending on generation settings this could cause the tab to run out of memeory, do you wish to proceed?";
+		if (chunksToGenerate <= chunkLimit || confirm(warningText)) {
+			$("#generationForm").hide();
+			$("#showGenerationForm").show();
+			$("#progressDisplay").show();
+			$("#generationParameters").hide();
+
+			clear();
+			generateVorld();
+		}
 	});
 	$("#shapingFunction").change(function(event){
 	    setParameterVisibility(this.value);
 	});
-
 
 	// Set initial values
 	$("#octaves").val(numOctaves);
@@ -248,8 +262,8 @@ let WorkerPool = (function() {
 	return exports;
 })();
 
-let generatorPool = WorkerPool.create({ src: 'generator.js', maxWorkers: 16 });
-let mesherPool =  WorkerPool.create({ src: 'mesher.js' });
+let generatorPool = WorkerPool.create({ src: 'generator.js', maxWorkers: 8 });
+let mesherPool =  WorkerPool.create({ src: 'mesher.js', maxWorkers: 4 });
 
 let vorld = Vorld.create({ size: 32 }); // Amalgamated Vorld Data
 
@@ -258,7 +272,7 @@ var generateVorld = function() {
 	$("#progressStage").html("Generating Voxel Data");
 	$("#progressBarInner").width("0%");
 
-	let subsectionSize = 3;
+	let subsectionSize = 1;
 	let generatedSubsections = 0;
 	let totalToSubsectionsGenerate = Math.ceil((2 * areaExtents + 1) / subsectionSize) * Math.ceil((2 * areaExtents + 1) / subsectionSize);
 	let generatedChunks = 0;
@@ -350,7 +364,7 @@ var generateMeshes = function(vorld) {
 	$("#progressBarInner").width("0%");
 
 	// Duplicated from chunk generation
-	let subsectionSize = 3;
+	let subsectionSize = 4;
 	let generatedSubsections = 0;
 	let totalToSubsectionsGenerate = Math.ceil((2 * areaExtents + 1) / subsectionSize) * Math.ceil((2 * areaExtents + 1) / subsectionSize);
 	let generatedChunks = 0;
