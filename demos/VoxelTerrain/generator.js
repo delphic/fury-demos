@@ -107,7 +107,7 @@ var runAdjacenyTransformations = function(vorld, chunk, offset) {
 
 // World Generation
 onmessage = function(e) {
-	var vorld = Vorld.create({ chunkSize: 32 });
+	var vorld = Vorld.create({ chunkSize: e.data.chunkSize });
 
 	var seedString = e.data.seed;
 	var perlin = e.data.perlin;

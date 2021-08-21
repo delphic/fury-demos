@@ -6,7 +6,7 @@ var Vorld = (function() {
   // NOTE - have tried a nested index map format, it is slower
   // this is probably because the underlying parser thinks chunks is a mix of objects and arrays
   // which is more costly than string based garbage allocation
-  // Coul try bitpacked index instead (requires setting a maximum vorld bounds though and offseting for positive numbers only)
+  // Could try bitpacked index instead (requires setting a maximum vorld bounds though and offseting for positive numbers only)
   let getKey = function(i, j, k) {
     return i + "_" + j + "_" + k;
   };
@@ -108,12 +108,17 @@ var Vorld = (function() {
     // As creating from existing vorld, do not need to use Chunk.create 
     return { chunkSize: vorld.chunkSize, chunks: chunks };
   };
+
+  exports.clear = function(vorld) {
+    vorld.chunks = {};
+  }
+
   exports.create = function(parameters) {
     var vorld = {};
     if (parameters && parameters.chunkSize) {
       vorld.chunkSize = parameters.chunkSize;
     } else {
-      vorld.chunkSize = 32;
+      vorld.chunkSize = 16;
     }
     vorld.chunks = {};
     if (parameters && parameters.chunks) {

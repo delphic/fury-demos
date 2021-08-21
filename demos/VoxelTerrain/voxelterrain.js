@@ -39,7 +39,7 @@ var atlasMaterial = Fury.Material.create({ shader: shader });
 
 // Regeneration Variables and form details
 var neutralNoise = true; // Is noise between -0.5 and +0.5 or between 0 and 1
-var areaHeight = 2, areaExtents = 3;
+var areaHeight = 4, areaExtents = 6;
 var octaves = [], numOctaves = 4;
 var octaveWeightings = [ 0.5, 0.5, 1, 0.1 ];
 var perlin = true;
@@ -62,7 +62,7 @@ var getGenerationVariables = function() {
     neutralNoise = $("#neutralNoise").val() == "neutral";
 
 	baseWavelength = parseInt($("#baseWavelength").val(), 10);
-	areaExtents = parseInt($("#extents").val(), 10);
+	areaExtents = parseInt($("#extents").val(), 10);	
 	areaHeight = parseInt($("#height").val(), 10);
 
 	shapingFunction = $("#shapingFunction").val();
@@ -134,18 +134,24 @@ $(document).ready(function(){
 		getGenerationVariables();
 		
 		let chunkLimit = 4225; 
-		// Semi-arbitary number determined by testing with height 1 up to extents of 32 for default settings
-		// Vorld data structure is currently sparse which makes it hard to predict the size of the Vorld data.
-		// Also the generated meshes will vary in complexity, depending on your settings.
-		// e.g. if your shaping function culls most of the data, this number is probably over-zealous. 
-		// However it also far from the worst case scenario either.
-		// e.g. Using very small octaves of noise will generate more noisey output which will create meshes with more vertices. 
-
-		// Using 8 octaves with the last 3 at 0.5 but it's also a lot closer to worst case meshes
-		// and breaks at lower numbers e.g. 16 extents 2 height = 2178
+		// Semi-arbitary number determined by testing with height 1 up to extents of 32
+		// Using 1 octave of noise at wavelength 2 - as this is close to worse case mesh complexity.
+		// Generated meshes will vary in complexity, depending on noise settings and shaping function.
+		// e.g. if the shaping function culls most of the data, this number is over-zealous.
+		// Also if using larger octaves of noise large areas will be blank, and this limit over-zealous. 
 		let chunksToGenerate = (2 * areaExtents + 1) * (2 * areaExtents + 1) * areaHeight;
-		let warningText = "This will attempt to generate and display " + chunksToGenerate + " chunks, depending on generation settings this could cause the tab to run out of memeory, do you wish to proceed?";
-		if (chunksToGenerate <= chunkLimit || confirm(warningText)) {
+		let showWarning = chunksToGenerate > chunkLimit;
+		let warningText;
+		if (showWarning) {
+			if (chunksToGenerate > 4 * chunkLimit) {
+				warningText = "This will attempt to generate and display " + chunksToGenerate + " chunks, this likely to cause the tab to run out of memory regardless of generation settings, do you wish to proceed?"
+			} else if (chunksToGenerate > 2 * chunkLimit) {
+				warningText = "This will attempt to generate and display " + chunksToGenerate + " chunks, depending on generation settings this could to cause the tab to run out of memory, do you wish to proceed?";
+			} else {
+				warningText = "This will attempt to generate and display " + chunksToGenerate + " chunks, for 'noisy' generation settings this could cause the tab to run out of memeory, do you wish to proceed?";
+			}
+		}
+		if (!showWarning || confirm(warningText)) {
 			$("#generationForm").hide();
 			$("#showGenerationForm").show();
 			$("#progressDisplay").show();
@@ -205,6 +211,7 @@ var scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
 var lastTime = Date.now();
 
 var clear = function() {
+	Vorld.clear(vorld);
 	scene.clear();
 	Fury.Scene.clearResources();
 };
@@ -265,7 +272,7 @@ let WorkerPool = (function() {
 let generatorPool = WorkerPool.create({ src: 'generator.js', maxWorkers: 8 });
 let mesherPool =  WorkerPool.create({ src: 'mesher.js', maxWorkers: 4 });
 
-let vorld = Vorld.create({ size: 32 }); // Amalgamated Vorld Data
+let vorld = Vorld.create({ chunkSize: 16 }); // Amalgamated Vorld Data
 
 var generateVorld = function() {
 	let startTime = Date.now();
@@ -299,6 +306,7 @@ var generateVorld = function() {
 		};
 		generator.postMessage({
 			seed: seedString,
+			chunkSize: vorld.chunkSize,
 			numOctaves: numOctaves,
 			octaveWeightings: octaveWeightings,
 			perlin: perlin,
