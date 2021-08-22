@@ -1,7 +1,7 @@
 // Voxel Mesher
 
 // Data is meshed by adding quads for each visible voxel face to a mesh
-// One mesh per 32 cubic 'chunk' of voxels.
+// One mesh per cubic 'chunk' of voxels.
 // Uses texture coordinates and an atlas to allow for multiple voxel types in
 // a single texture.
 // Has option of outputing texture coordinates as a tile lookup rather than uv mapping
@@ -28,13 +28,6 @@ var cubeFaces = {
 
 // Atlas Info
 var atlas = VorldConfig.getAtlasInfo();
-
-var adjustTextureCoords = function(textureArray, faceIndex, tileIndex) {
-	for(var i = 8 * faceIndex, l = i + 8; i < l; i += 2) {
-		textureArray[i] = tileIndex + 0.5;
-		textureArray[i+1] = tileIndex + 0.5;
-	}
-};
 
 var buildMesh = function(vorld, chunkI, chunkJ, chunkK) {
 	var mesh = {
@@ -104,7 +97,6 @@ var addQuadToMesh = function(mesh, block, faceIndex, x, y, z) {
 
 	offset = faceIndex * 8;
 	textureCoordinates = cubeJson.textureCoordinates.slice(offset, offset + 8);
-	//adjustTextureCoords(textureCoordinates, 0, tile);
 
 	if (!mesh.tileIndices) {
 		mesh.tileIndices = [];

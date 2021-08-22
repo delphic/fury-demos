@@ -78,7 +78,7 @@ var VoxelShader = (function() {
       }
   };
 
-  exports.create = function(atlasInfo) {
+  exports.create = function() {
     var vsSource = shaderSource.vs();
     var fsSource = shaderSource.fs();
 

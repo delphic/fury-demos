@@ -30,8 +30,7 @@ updateCanvasSize();
 Fury.init("fury");
 var Input = Fury.Input;
 
-var atlas = VorldConfig.getAtlasInfo();
-var shader = Fury.Shader.create(VoxelShader.create(atlas));
+var shader = Fury.Shader.create(VoxelShader.create());
 
 var atlasMaterial = Fury.Material.create({ shader: shader });
 // Use upscaled texture to allow for reasonable resolution closeup
