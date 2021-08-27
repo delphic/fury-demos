@@ -729,7 +729,7 @@ let CharacterController = (() => {
 			playerBox.recalculateMinMax();
 		};
 
-		controller.moveXZ = (contacts, velocity, elapsed) => {
+		controller.moveXZ = (contacts, velocity, elapsed, inputVector) => {
 			vec3.copy(lastPosition, playerPosition);
 			vec3.copy(targetPosition, playerPosition);
 			vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, velocity[0] * elapsed);
@@ -760,6 +760,11 @@ let CharacterController = (() => {
 				// (this allow us to slide into tight spaces more easily)
 				let absDeltaZ = Math.abs(targetPosition[2] - playerPosition[2]);
 				let absDeltaX = Math.abs(targetPosition[0] - playerPosition[0]);
+				// If input vector is provided use it for intention as velocity is reduced by collisions
+				if (inputVector) {
+					absDeltaZ = Math.abs(inputVector[2]);
+					absDeltaX = Math.abs(inputVector[0]);
+				}
 				let pma = absDeltaZ < absDeltaX ? 0 : 2; // Primary movement axis
 				let sma = absDeltaZ < absDeltaX ? 2 : 0; // Secondary movement axis
 		
@@ -1145,7 +1150,7 @@ let loop = function(elapsed) {
 	}
 
 	// XZ Move
-	characterController.moveXZ(playerContacts, playerVelocity, elapsed);
+	characterController.moveXZ(playerContacts, playerVelocity, elapsed, inputVector);
 
 	// Now Gravity / Jumping
 	playerVelocity[1] -= gravity * elapsed;
