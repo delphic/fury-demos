@@ -1,6 +1,14 @@
 // Basic First Person Character Controller
 // Test bed for AABB physics testing
 
+// Potential Improvements:
+// * Arrest velocity in perpendicular direction on collision (grounded and air)
+// * Move player position to bottom of player box
+// * Sidestep logic is unpolished
+// * Rocket Impulse application falls off very quickly, perhaps should be max for set radius before fall off
+// * Velocity is store of distance moved, not expected velocity next frame
+// * The TODOs through this file
+
 // globalize glMatrix
 Fury.Maths.globalize();
 
@@ -385,7 +393,7 @@ let MapLoader = (function(){
 					playerSpawn.angle = parseInt(entity.angle, 10);
 					break;
 				case "trigger_push": // Game Specific
-					// relying on globals
+					// TODO: relying on globals - remove reliance
 					entity.aabb = {};
 					parseAABBFromBrush(entity.aabb, entity.brushes[0], scaleFactor);
 					triggerVolumes.push(TriggerVolume.create(entity));
@@ -721,7 +729,7 @@ let CharacterController = (() => {
 			playerBox.recalculateMinMax();
 		};
 
-		controller.moveXZ = (velocity, elapsed) => {
+		controller.moveXZ = (contacts, velocity, elapsed) => {
 			vec3.copy(lastPosition, playerPosition);
 			vec3.copy(targetPosition, playerPosition);
 			vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, velocity[0] * elapsed);
@@ -750,7 +758,7 @@ let CharacterController = (() => {
 				// Prioritise moving along the axis with the highest delta 
 				// (for inanimate objects should prioritse move along first collision axis, however for a character intent is important)
 				// (this allow us to slide into tight spaces more easily)
-				let absDeltaZ = Math.abs(targetPosition[2] - playerPosition[0]);
+				let absDeltaZ = Math.abs(targetPosition[2] - playerPosition[2]);
 				let absDeltaX = Math.abs(targetPosition[0] - playerPosition[0]);
 				let pma = absDeltaZ < absDeltaX ? 0 : 2; // Primary movement axis
 				let sma = absDeltaZ < absDeltaX ? 2 : 0; // Secondary movement axis
@@ -758,6 +766,7 @@ let CharacterController = (() => {
 				if (!tryStep(fca, maxStepHeight, elapsed)) {
 					// Try moving along pma first
 					let targetPosCache = targetPosition[sma];
+					contacts[sma] = Math.sign(targetPosition[sma] - playerPosition[sma]);
 					targetPosition[sma] = getTouchPointTarget(collisionsBuffer[minIndex[sma]], playerBox, sma, targetPosition[sma] - playerPosition[sma]);
 					
 					checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
@@ -767,15 +776,18 @@ let CharacterController = (() => {
 						if (!tryStep(pma, maxStepHeight, elapsed)) {
 							// Step did not resolve all collision
 							// No more sliding along in prioritised collision axis
+							contacts[pma] = Math.sign(targetPosition[pma] - playerPosition[pma]);
 							targetPosition[pma] = getTouchPointTarget(collisionsBuffer[minIndex[pma]], playerBox, pma, targetPosition[pma] - playerPosition[pma]);
 		
 							// Try sliding the deprioritised collisation axis instead (with minimal movement in prioritised collision axis)
+							contacts[sma] = 0;
 							targetPosition[sma] = targetPosCache;
 							checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
 		
 							if (minIndex[sma] != -1) {
 								if (!tryStep(sma, maxStepHeight, elapsed)) {
 									// No dice really in a corner
+									contacts[sma] = Math.sign(targetPosition[sma] - playerPosition[sma]);
 									targetPosition[sma] = getTouchPointTarget(collisionsBuffer[minIndex[sma]], playerBox, sma, targetPosition[sma] - playerPosition[sma]);
 								}
 							}
@@ -790,20 +802,24 @@ let CharacterController = (() => {
 				// Check if collision is in larger axis of movement, if so should consider attempting to sidestep the object
 				let shouldConsiderSidestep = useSideStep && Math.abs(targetPosition[fca] - playerPosition[fca]) > Math.abs(targetPosition[sca] - playerPosition[sca]);
 
-				if (!tryStep(fca, maxStepHeight, elapsed)) { 					
+				if (!tryStep(fca, maxStepHeight, elapsed)) { 
 					if (!shouldConsiderSidestep 
 						|| !trySideStep(collisionsBuffer[minIndex[fca]], fca, sca, sideStepDistance, targetPosition[fca] - playerPosition[fca], elapsed)) {
 						// Try step and try side step failed, move up to object instead
+						contacts[fca] = Math.sign(targetPosition[fca] - playerPosition[fca]);
 						targetPosition[fca] = getTouchPointTarget(collisionsBuffer[minIndex[fca]], playerBox, fca, targetPosition[fca] - playerPosition[fca]);
 						checkForPlayerCollisions(playerCollisionInfo, relevantBoxes, elapsed);
 						
 						if (minIndex[sca] != -1) {
 							// Oh no now that we're not moving in fca we're hitting something in sca
+							contacts[sca] = Math.sign(targetPosition[sca] - playerPosition[sca]);
 							targetPosition[sca] = getTouchPointTarget(collisionsBuffer[minIndex[sca]], playerBox, sca, targetPosition[sca] - playerPosition[sca]);
 						}
 					}
 				}
-			} 
+			} else {
+				contacts[0] = contacts[2] = 0;
+			}
 		
 			// Finally move the player to the approved target position
 			teleport(targetPosition);
@@ -825,7 +841,7 @@ let CharacterController = (() => {
 			}
 		};
 
-		controller.moveY = (velocity, elapsed) => {
+		controller.moveY = (contacts, velocity, elapsed) => {
 			vec3.copy(lastPosition, playerPosition);	
 			vec3.scaleAndAdd(targetPosition, playerPosition, Maths.vec3Y, velocity[1] * elapsed);
 			
@@ -838,18 +854,18 @@ let CharacterController = (() => {
 					playerPosition[1] = closestBox.max[1] + playerBox.extents[1];
 					playerBox.recalculateMinMax();
 					velocity[1] = (playerPosition[1] - lastPosition[1]) / elapsed;
-					return true; // Hit Ground
+					contacts[1] = -1;
 				} else {
 					// Moving up, move playerPosition so player is extents below  closestBox.min[1]
 					playerPosition[1] = closestBox.min[1] - playerBox.extents[1];
 					playerBox.recalculateMinMax();
 					velocity[1] = (playerPosition[1] - lastPosition[1]) / elapsed;
-					return false; // TODO: Contact point top would be nice to differentitate from no collision
+					contacts[1] = 1;
 				}
 			} else {
 				playerPosition[1] = targetPosition[1];
 				playerBox.recalculateMinMax();
-				return false;
+				contacts[1] = 0
 			}
 		};
 
@@ -884,6 +900,7 @@ let gravity = 2 * 9.8;  // Increased gravity because games
 let playerPosition = vec3.clone(camera.position);
 let playerBox = Physics.Box.create({ center: playerPosition, size: vec3.fromValues(1, 2, 1) });
 let playerVelocity = vec3.create();
+let playerContacts = vec3.create();
 
 let characterController = CharacterController.create({ 
 	world: world,
@@ -1128,7 +1145,7 @@ let loop = function(elapsed) {
 	}
 
 	// XZ Move
-	characterController.moveXZ(playerVelocity, elapsed);
+	characterController.moveXZ(playerContacts, playerVelocity, elapsed);
 
 	// Now Gravity / Jumping
 	playerVelocity[1] -= gravity * elapsed;
@@ -1141,8 +1158,9 @@ let loop = function(elapsed) {
 		}
 	}
 
-	// Y Move - returns true if hit ground
-	if (characterController.moveY(playerVelocity, elapsed)) {
+	// Y Move - playerContacts[1] = -1 if hit ground
+	characterController.moveY(playerContacts, playerVelocity, elapsed)
+	if (playerContacts[1] == -1) {
 		lastGroundedTime = Date.now();
 		if (!grounded && lastGroundedTime - lastJumpAttemptTime < 1000 * coyoteTime) {
 			jump();
