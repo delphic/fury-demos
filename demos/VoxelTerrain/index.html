@@ -34,7 +34,7 @@ fieldset input {
 	width: 50px;
 }
 fieldset input.inline {
-    width: 40px;
+	width: 40px;
 }
 fieldset input.button {
 	width: auto;
@@ -115,31 +115,31 @@ fieldset input.button {
 				<div id="weightingsContainer">
 				</div>
 				<div>
-				    <label for="neutralNoise">Noise Range</label>
-				    <select id="neutralNoise">
-				        <option value="neutral">-0.5 to +0.5</option>
-				        <option value="normalised">0 to 1</option>
-				    </select>
+					<label for="neutralNoise">Noise Range</label>
+					<select id="neutralNoise">
+						<option value="neutral">-0.5 to +0.5</option>
+						<option value="normalised">0 to 1</option>
+					</select>
 				</div>
 				<div>
-				    <label for="shapingFunction">Shaping Function</label>
-				    <select id="shapingFunction">
-				        <option value="inverse_y">Inverse Y</option>
-				        <option value="negative_y">Negative Y</option>
-				        <option value="gaussian">Gaussian</option>
-				        <option value="none">None</option>
-				    </select>
+					<label for="shapingFunction">Shaping Function</label>
+					<select id="shapingFunction">
+						<option value="inverse_y">Inverse Y</option>
+						<option value="negative_y">Negative Y</option>
+						<option value="gaussian">Gaussian</option>
+						<option value="none">None</option>
+					</select>
 				</div>
 				<div id="inverse_y">
-				    <p>Values from noise are multiplied by the result of the shaping function</p>
-				    <p>Inverse Y: <input id="adjust" class="inline" type="number" step="0.001" min="0" max="0.025" /> / (y + <input id="yOffset" class="inline" type="number" step="8" min="-32" max="32" />)</p>
+					<p>Values from noise are multiplied by the result of the shaping function</p>
+					<p>Inverse Y: <input id="adjust" class="inline" type="number" step="0.001" min="0" max="0.025" /> / (y + <input id="yOffset" class="inline" type="number" step="8" min="-32" max="32" />)</p>
 				</div>
 				<div id="negative_y">
-				    <p>Values from noise are multiplied by the result of the shaping function</p>
-				    <p>Negative Y: (<input id="yOffset_n" class="inline" type="number" step="8" min="-32" max="32" /> - y) / <input id="yDenominator_n" class="inline" type="number" step=8 min="8" max="128" /></p>
+					<p>Values from noise are multiplied by the result of the shaping function</p>
+					<p>Negative Y: (<input id="yOffset_n" class="inline" type="number" step="8" min="-32" max="32" /> - y) / <input id="yDenominator_n" class="inline" type="number" step=8 min="8" max="128" /></p>
 				</div>
 				<div id="gaussian">
-				    <p>Values from noise are multiplied by the result of the shaping function</p>
+					<p>Values from noise are multiplied by the result of the shaping function</p>
 					<p>Guassian: 1 + (g - y) / <input id="yDenominator_g" class="inline" type="number" step=8 min="8" max="128" /></p>
 					<p>where g = <input id="amplitude" class="inline" type="number" step="8" min="8" max="128" /> * exp ( (x&sup2;)/(2*<input id="sdx" class="inline" type="number" step="8" min="8" max="128" />&sup2;) + (z&sup2;)/(2*<input id="sdz" class="inline" type="number" step="8" min="8" max="128" />&sup2;) )</p>
 				</div>

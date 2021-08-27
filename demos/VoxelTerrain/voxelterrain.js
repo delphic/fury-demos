@@ -19,7 +19,7 @@ var updateCanvasSize = function() {
 	glCanvas.height = resolutionFactor * glCanvas.clientHeight;
 	cameraRatio = glCanvas.clientWidth / glCanvas.clientHeight;
 	if (camera && camera.ratio) {
-    	camera.ratio = cameraRatio;
+		camera.ratio = cameraRatio;
 	}
 };
 $(window).resize(function(){
@@ -58,7 +58,7 @@ var getGenerationVariables = function() {
 	}
 	perlin = $("input[name='noiseType']:checked").val() == "Perlin";
 	seedString = $("#seed").val();
-    neutralNoise = $("#neutralNoise").val() == "neutral";
+	neutralNoise = $("#neutralNoise").val() == "neutral";
 
 	baseWavelength = parseInt($("#baseWavelength").val(), 10);
 	areaExtents = parseInt($("#extents").val(), 10);	
@@ -66,42 +66,42 @@ var getGenerationVariables = function() {
 
 	shapingFunction = $("#shapingFunction").val();
 	if (shapingFunction == "inverse_y") {
-	    yOffset = parseFloat($("#yOffset").val());
-    	adjustmentFactor = 1 / parseFloat($("#adjust").val());  // TODO: Change the internal function to m / (y + offset)
+		yOffset = parseFloat($("#yOffset").val());
+		adjustmentFactor = 1 / parseFloat($("#adjust").val());  // TODO: Change the internal function to m / (y + offset)
 	} else if (shapingFunction == "negative_y") {
-    	yOffset = parseFloat($("#yOffset_n").val());
-    	yDenominator = parseFloat($("#yDenominator_n").val());
+		yOffset = parseFloat($("#yOffset_n").val());
+		yDenominator = parseFloat($("#yDenominator_n").val());
 	} else if (shapingFunction == "gaussian") {
-	    yDenominator = parseFloat($("#yDenominator_g").val());
-    	amplitude = parseFloat($("#amplitude").val());
-    	sdx = parseFloat($("#sdx").val());
-    	sdz = parseFloat($("#sdz").val());
+		yDenominator = parseFloat($("#yDenominator_g").val());
+		amplitude = parseFloat($("#amplitude").val());
+		sdx = parseFloat($("#sdx").val());
+		sdz = parseFloat($("#sdz").val());
 	}
 };
 
 var setParameterVisibility = function(shapingFunction) {
-    switch(shapingFunction){
-        case "inverse_y":
-            $("#inverse_y").show();
-            $("#negative_y").hide();
-            $("#gaussian").hide();
-            break;
-        case "negative_y":
-            $("#inverse_y").hide();
-            $("#negative_y").show();
-            $("#gaussian").hide();
-            break;
-        case "gaussian":
-            $("#inverse_y").hide();
-            $("#negative_y").hide();
-            $("#gaussian").show();
-            break;
-        default:
-            $("#inverse_y").hide();
-            $("#negative_y").hide();
-            $("#gaussian").hide();
-            break;
-    }
+	switch(shapingFunction){
+		case "inverse_y":
+			$("#inverse_y").show();
+			$("#negative_y").hide();
+			$("#gaussian").hide();
+			break;
+		case "negative_y":
+			$("#inverse_y").hide();
+			$("#negative_y").show();
+			$("#gaussian").hide();
+			break;
+		case "gaussian":
+			$("#inverse_y").hide();
+			$("#negative_y").hide();
+			$("#gaussian").show();
+			break;
+		default:
+			$("#inverse_y").hide();
+			$("#negative_y").hide();
+			$("#gaussian").hide();
+			break;
+	}
 };
 
 $(document).ready(function(){
@@ -161,7 +161,7 @@ $(document).ready(function(){
 		}
 	});
 	$("#shapingFunction").change(function(event){
-	    setParameterVisibility(this.value);
+		setParameterVisibility(this.value);
 	});
 
 	// Set initial values
@@ -173,7 +173,7 @@ $(document).ready(function(){
 	$("#weightingsContainer").html(html);
 	$("#seed").val(seedString);
 
-    $("#neutralNoise").val(neutralNoise ? "neutral": "normalised");
+	$("#neutralNoise").val(neutralNoise ? "neutral": "normalised");
 
 	$("#wavelengthPower").val(7);
 	$("#baseWavelength").val(baseWavelength);
@@ -492,12 +492,12 @@ var localz = vec3.create();
 
 // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
 var getRoll = function(q) {
-    // Note: glMatrix is x,y,z,w where as wiki assumes w,x,y,z!
-    let sinr_cosp = 2 * (q[3] * q[0] + q[1] * q[2]);
-    let cosr_cosp = 1 - 2 * (q[0] * q[0] + q[1] * q[1]);
-    return Math.atan(sinr_cosp / cosr_cosp);
-    // If you want to know sector you need atan2(sinr_cosp, cosr_cosp)
-    // but we don't in this case.
+	// Note: glMatrix is x,y,z,w where as wiki assumes w,x,y,z!
+	let sinr_cosp = 2 * (q[3] * q[0] + q[1] * q[2]);
+	let cosr_cosp = 1 - 2 * (q[0] * q[0] + q[1] * q[1]);
+	return Math.atan(sinr_cosp / cosr_cosp);
+	// If you want to know sector you need atan2(sinr_cosp, cosr_cosp)
+	// but we don't in this case.
 };
 
 var handleInput = function(elapsed) {
@@ -506,21 +506,21 @@ var handleInput = function(elapsed) {
 	Fury.Maths.quatLocalAxes(q, localx, localy, localz);
 	
 	if (Input.mouseDown(2)) {
-	    let xRotation = Input.MouseDelta[0] * rotateRate*elapsed;
-	    if (Math.abs(xRotation) > maxRotatePerFrame) {
-            xRotation = Math.sign(xRotation) * maxRotatePerFrame;
-	    }
-	    let yRotation = Input.MouseDelta[1] * rotateRate*elapsed;
-	    if (Math.abs(yRotation) > maxRotatePerFrame) {
-	        yRotation = Math.sign(yRotation) * maxRotatePerFrame;
-	    }
+		let xRotation = Input.MouseDelta[0] * rotateRate*elapsed;
+		if (Math.abs(xRotation) > maxRotatePerFrame) {
+			xRotation = Math.sign(xRotation) * maxRotatePerFrame;
+		}
+		let yRotation = Input.MouseDelta[1] * rotateRate*elapsed;
+		if (Math.abs(yRotation) > maxRotatePerFrame) {
+			yRotation = Math.sign(yRotation) * maxRotatePerFrame;
+		}
 		Fury.Maths.quatRotate(q, q, -xRotation, Fury.Maths.vec3Y);
 
 		let roll = getRoll(q);
 		let clampAngle = 10 * Math.PI/180;
-	    if (Math.sign(roll) == Math.sign(yRotation) || Math.abs(roll - yRotation) < 0.5*Math.PI - clampAngle) {
-    		quat.rotateX(q, q, -yRotation);
-	    }
+		if (Math.sign(roll) == Math.sign(yRotation) || Math.abs(roll - yRotation) < 0.5*Math.PI - clampAngle) {
+			quat.rotateX(q, q, -yRotation);
+		}
 	}
 
 	if(Input.keyDown("w")) {
