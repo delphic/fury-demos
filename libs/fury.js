@@ -282,10 +282,10 @@ var Camera = module.exports = function() {
 			// TODO: Add check of points too
 			return true;
 		},
-		getDepth: function(object) {
+		getDepth: function(position) {
 			var p0 = this.position[0], p1 = this.position[1], p2 = this.position[2],
 				q0 = this.rotation[0], q1 = this.rotation[1], q2 = this.rotation[2], q3 = this.rotation[3],
-				l0 = object.transform.position[0], l1 = object.transform.position[1], l2 = object.transform.position[2];
+				l0 = position[0], l1 = position[1], l2 = position[2];
 			return 2*(q1*q3 + q0*q2)*(l0 - p0) + 2*(q2*q3 - q0*q1)*(l1 - p1) + (1 - 2*q1*q1 - 2*q2*q2)*(l2 - p2);
 		},
 		getProjectionMatrix: function(out) {
@@ -322,6 +322,7 @@ var Camera = module.exports = function() {
 		camera.type = parameters.type ? parameters.type : Type.Perspective;
 		camera.near = parameters.near;
 		camera.far = parameters.far;
+		camera.clear = parameters.clear === undefined || !!parameters.clear;
 
 		if(camera.type == Type.Perspective) {
 			// vertical field of view, ratio (aspect) determines horizontal fov
@@ -521,64 +522,81 @@ var Fury = module.exports = (function() {
 let Input = require('./input');
 
 let GameLoop = module.exports = (function() {
-    let exports = {};
+	let exports = {};
 
-    let State = {
-        Paused: 0,
-        Running: 1,
-        RequestPause: 2
-    };
+	let State = {
+		Paused: 0,
+		Running: 1,
+		RequestPause: 2
+	};
 
-    let state = State.Paused;
+	let state = State.Paused;
+	let stopCount = 0;
 
-    let maxFrameTimeMs = null;
-    let loopDelegate = null;
+	let maxFrameTimeMs = null;
+	let loopDelegate = null;
 
-    let lastTime = 0;
+	let lastTime = 0;
 
-    exports.init = (parameters) => {
-        if (parameters.maxFrameTimeMs && typeof(parameters.maxFrameTimeMs) === 'number') {
-            // Optional max frame time to keep physics calculations sane
-            maxFrameTimeMs = parameters.maxFrameTimeMs;
-        }
+	exports.init = (parameters) => {
+		if (parameters.maxFrameTimeMs && typeof(parameters.maxFrameTimeMs) === 'number') {
+			// Optional max frame time to keep physics calculations sane
+			maxFrameTimeMs = parameters.maxFrameTimeMs;
+		}
 
-        if (parameters.loop && typeof(parameters.loop) === 'function') {
-            loopDelegate = parameters.loop;
-        } else {
-            console.error("You must provide GameLoop.init with a loop parameter of type function");
-        }
-    };
+		if (parameters.loop && typeof(parameters.loop) === 'function') {
+			loopDelegate = parameters.loop;
+		} else {
+			console.error("You must provide GameLoop.init with a loop parameter of type function");
+		}
 
-    exports.start = () => {
-        switch (state) {
-            case State.Paused:
-                state = State.Running;
-                window.requestAnimationFrame(loop);
-                break;
-            case State.RequestPause:
-                state = State.Running;
-                break;
-        }
-    };
+		if (loopDelegate) {
+			window.addEventListener('blur', onWindowBlur);
+			window.addEventListener('focus', onWindowFocus);	
+		}
+	};
 
-    exports.stop = () => {
-        if (state != State.Paused) {
-            state = State.RequestPause;
-        }
-    };
+	exports.start = () => {
+		stopCount = Math.max(0, stopCount - 1);
+		if (stopCount == 0) {
+			switch (state) {
+				case State.Paused:
+					state = State.Running;
+					Input.handleFrameFinished(); // clear any input that happened since pause
+					window.requestAnimationFrame(loop);
+					break;
+				case State.RequestPause:
+					state = State.Running;
+					break;
+			}
+		}
+	};
 
-    
-    let loop = () => {
-        if (state == State.RequestPause) {
-            state = State.Paused;
-            return;
-        }
+	exports.stop = () => {
+		stopCount += 1;
+		if (state != State.Paused) {
+			state = State.RequestPause;
+		}
+	};
+	
+	let onWindowBlur = (event) => {
+		exports.stop();
+	}; 
+	let onWindowFocus = (event) => {
+		exports.start();
+	};
 
-        let elapsed = Date.now() - lastTime;
+	let loop = () => {
+		if (state == State.RequestPause) {
+			state = State.Paused;
+			return;
+		}
+
+		let elapsed = Date.now() - lastTime;
 		lastTime += elapsed;
 
 		if (elapsed == 0) {
-			console.error("elapsed time of 0, skipping frame");
+			console.warn("elapsed time of 0, skipping frame");
 			requestAnimationFrame(loop);
 			return;
 		}
@@ -586,8 +604,8 @@ let GameLoop = module.exports = (function() {
 		if (maxFrameTimeMs && elapsed > maxFrameTimeMs) {
 			elapsed = maxFrameTimeMs;
 			// Arguably could run multiple logic updates,
-            // however that would require tracking window focus 
-            // and ensuring update length < maxFrameTime
+			// however that would require tracking window focus 
+			// and ensuring update length < maxFrameTime
 		}
 
 		elapsed /= 1000; // Convert elapsed to seconds
@@ -596,9 +614,9 @@ let GameLoop = module.exports = (function() {
 
 		Input.handleFrameFinished();
 		window.requestAnimationFrame(loop);
-    };
+	};
 
-    return exports;
+	return exports;
 })();
 },{"./input":9}],8:[function(require,module,exports){
 var IndexedMap = module.exports = function(){
@@ -660,6 +678,8 @@ var IndexedMap = module.exports = function(){
 	return exports;
 }();
 },{}],9:[function(require,module,exports){
+var Maths = require('./maths');
+
 var Input = module.exports = function() {
 	var exports = {};
 
@@ -694,7 +714,7 @@ var Input = module.exports = function() {
 	};
 
 	exports.requestPointerLock = function() {
-		canvas.requestPointerLock();
+		return canvas.requestPointerLock();
 	};
 
 	exports.releasePointerLock = function() {
@@ -1059,7 +1079,7 @@ var Input = module.exports = function() {
 	return exports;
 }();
 
-},{}],10:[function(require,module,exports){
+},{"./maths":11}],10:[function(require,module,exports){
 var Material = module.exports = function(){
 	var exports = {};
 	var prototype = {
@@ -1100,6 +1120,8 @@ var Material = module.exports = function(){
 		material.textures = {};
 		if (parameters.textures) {
 			material.setTextures(parameters.textures);
+		} else if (parameters.texture) {
+			material.setTexture(parameters.texture);
 		}
 
 		if (parameters.properties) {
@@ -1116,34 +1138,7 @@ var Material = module.exports = function(){
 
 		return material;
 	};
-
-	var copy = exports.copy = function(material) {
-		var copy = Object.create(prototype);
-		// Note this is explicit rather than automatic using reflection
-		// as we do not want to copy any dynamically appended properties (i.e. id)
-		copy.shader = material.shader;
-		copy.textures = {};
-		if(material.textures) {
-			var textures = material.textures;
-			for(var key in textures) {
-				if(textures.hasOwnProperty(key)) {
-					copy.textures[key] = textures[key];
-				}
-			}
-		}
-
-		if (material._properties) {
-			// Note this will assign the same to the copy for reference types, rather than performing a deep clone
-			// additionally it will not copy across any dynamically added properties 
-			// TODO: Support dynamic properties via Object.assign ? 
-			for (let i = 0, l = material._properties.length; i < l; i++) {
-				copy[material._properties[i]] = material[material._properties[i]];
-			}
-		}
 	
-		return copy;
-	};
-
 	return exports;
 }();
 
@@ -1197,22 +1192,47 @@ let Maths = module.exports = (function() {
   var vec3Y = exports.vec3Y = glMatrix.vec3.fromValues(0,1,0);
   var vec3Z = exports.vec3Z = glMatrix.vec3.fromValues(0,0,1);
 
+  exports.vec3Pool = (function(){
+    let stack = [];
+    for (let i = 0; i < 5; i++) {
+      stack.push(glMatrix.vec3.create());
+    }
+    
+    return {
+      return: (v) => { stack.push(v); },
+      request: () => {
+        if (stack.length > 0) {
+          return stack.pop();
+        }
+        return glMatrix.vec3.create();
+      }
+    }
+  })();
+
+  exports.quatPool = (function(){
+    let stack = [];
+    for (let i = 0; i < 5; i++) {
+      stack.push(glMatrix.quat.create());
+    }
+    
+    return {
+      return: (v) => { stack.push(v); },
+      request: () => {
+        if (stack.length > 0) {
+          return stack.pop();
+        }
+        return glMatrix.quat.create();
+      }
+    }
+  })();
+
   let equals = glMatrix.glMatrix.equals;
 
   let approximately = exports.approximately = (a, b, epsilon) => {
-    // See https://floating-point-gui.de/errors/comparison/ for explaination of logic
+    // Was using adpated version of https://floating-point-gui.de/errors/comparison/
+    // However, it's behaviour is somewhat unintuative and honestly more helpful just to have straight threshold check 
     if (!epsilon) epsilon = Number.EPSILON;
-    const absA = Math.abs(a);
-    const absB = Math.abs(b);
-    const diff = Math.abs(a - b);
-
-    if (a === b) {
-      return true;
-    } else if (a === 0 || y === 0 || diff < Number.MIN_VALUE) {
-      return diff < (epsilon * Number.MIN_VALUE);
-    } else {
-      return diff / Math.min(absA + absB, Number.MAX_VALUE) < epsilon;
-    }
+    return Math.abs(a - b) <  epsilon;
   };
 
   let clamp = exports.clamp = (x, min, max) => { return Math.max(Math.min(max, x), min); };
@@ -1458,7 +1478,7 @@ var vec3 = require('./maths').vec3;
 var Mesh = module.exports = function(){
 	exports = {};
 
-	let calculateMinVertex = function(out, vertices) {
+	let calculateMinPoint = exports.calculateMinPoint = function(out, vertices) {
 		var i, l, v1 = Number.MAX_VALUE, v2 = Number.MAX_VALUE, v3 = Number.MAX_VALUE;
 		for(i = 0, l = vertices.length; i < l; i += 3) {
 			v1 = Math.min(v1, vertices[i]);
@@ -1468,7 +1488,7 @@ var Mesh = module.exports = function(){
 		out[0] = v1, out[1] = v2, out[2] = v3;
 	};
 
-	let calculateMaxVertex = function(out, vertices) {
+	let calculateMaxPoint = exports.calculateMaxPoint = function(out, vertices) {
 		var i, l, v1 = Number.MIN_VALUE, v2 = Number.MIN_VALUE, v3 = Number.MIN_VALUE;
 		for(i = 0, l = vertices.length; i < l; i += 3) {
 			v1 = Math.max(v1, vertices[i]);
@@ -1498,33 +1518,47 @@ var Mesh = module.exports = function(){
 		calculateBounds: function() {
 			// NOTE: all bounds in local space
 			this.boundingRadius = calculateBoundingRadius(this.vertices);
-			calculateMinVertex(this.bounds.min, this.vertices);
-			calculateMaxVertex(this.bounds.max, this.vertices);
+			calculateMinPoint(this.bounds.min, this.vertices);
+			calculateMaxPoint(this.bounds.max, this.vertices);
 			this.bounds.recalculateExtents();
 		},
-		calculateNormals: function() {
-			// TODO: Calculate Normals from Vertex information
-		},
+		// TODO: Method to calculate normals from vertex information + winding info
 		updateVertices: function() {
-			this.vertexBuffer = r.createBuffer(this.vertices, 3);
 			// TODO: If vertexBuffers exists we should delete the existing buffer?
 			// or we should use the existing buffer and bind different data
+			if (this.vertices) {
+				this.vertexBuffer = r.createBuffer(this.vertices, 3);
+			} else {
+				console.warn("Unable to update vertexBuffer from mesh vertices, ensure mesh was created with dynamic parameter");
+			}
 		},
 		updateTextureCoordinates: function() {
 			// TODO: If uvBuffer exists we should delete the existing buffer?
 			// or we should use the existing buffer and bind different data
-			this.textureBuffer = r.createBuffer(this.textureCoordinates, 2);
+			if (this.textureCoordinates) {
+				this.textureBuffer = r.createBuffer(this.textureCoordinates, 2);
+			} else {
+				console.warn("Unable to update textureBuffer from texture coordinates, ensure mesh was created with dynamic parameter");
+			}
 		},
 		updateNormals: function() {
 			// TODO: If normalBuffer exists we should delete the existing buffer?
 			// or we should use the existing buffer and bind different data
-			this.normalBuffer = r.createBuffer(this.normals, 3);
+			if (this.normals) {
+				this.normalBuffer = r.createBuffer(this.normals, 3);
+			} else {
+				console.warn("Unable to update normalBuffer from mesh normals, ensure mesh was created with dynamic parameter");
+			}
 		},
 		updateIndexBuffer: function() {
 			// TODO: If indexBuffer exists we should delete the existing buffer?
 			// or we should use the existing buffer and bind different data
-			this.indexBuffer = r.createBuffer(this.indices, 1, true);
-			this.indexed = true;
+			if (this.indices) {
+				this.indexBuffer = r.createBuffer(this.indices, 1, true);
+				this.indexed = true;	
+			} else {
+				console.warn("Unable to update indexBuffer from mesh indices, ensure mesh was created with dynamic parameter");
+			}
 		}
 	};
 
@@ -1543,94 +1577,74 @@ var Mesh = module.exports = function(){
 			mesh.boundingRadius = parameters.boundingRadius | 0;
 
 			if (parameters.buffers) {
-					// NOTE: update<X> methods will not work when providing buffers directly
-					// if the mesh needs to be manipulated at run time, it's best to convert the buffers
-					// to JS arrays create the mesh data with that.
-					if (parameters.vertices && parameters.vertexCount) {
-						mesh.vertices = parameters.vertices;
-						mesh.calculateBounds();
-						mesh.vertexBuffer = r.createArrayBuffer(parameters.vertices, 3, parameters.vertexCount);
-					}
-					if (parameters.textureCoordinates && parameters.textureCoordinatesCount) {
-						mesh.textureBuffer = r.createArrayBuffer(parameters.textureCoordinates, 2, parameters.textureCoordinatesCount);
-					}
-					if (parameters.normals && parameters.normalsCount) {
-						mesh.normalBuffer = r.createArrayBuffer(parameters.normals, 3, parameters.normalsCount);
-					}
+				// NOTE: update<X> methods will not work when providing buffers directly
+				// if the mesh needs to be manipulated at run time, it's best to convert the buffers
+				// to JS arrays create the mesh data with that.
+				if (parameters.vertices && parameters.vertexCount) {
+					mesh.vertices = parameters.vertices;
+					mesh.calculateBounds();
+					mesh.vertexBuffer = r.createArrayBuffer(parameters.vertices, 3, parameters.vertexCount);
+				}
+				if (parameters.textureCoordinates && parameters.textureCoordinatesCount) {
+					mesh.textureBuffer = r.createArrayBuffer(parameters.textureCoordinates, 2, parameters.textureCoordinatesCount);
+				}
+				if (parameters.normals && parameters.normalsCount) {
+					mesh.normalBuffer = r.createArrayBuffer(parameters.normals, 3, parameters.normalsCount);
+				}
 
-					if (parameters.customBuffers && parameters.customBuffers.length) {
-						mesh.customBuffers = [];
-						for (let i = 0, l = parameters.customBuffers.length; i < l; i++) {
-							let customBuffer = parameters.customBuffers[i];
-							switch (customBuffer.componentType) {
-								case 5126: // Float32
-									mesh.customBuffers[customBuffer.name] = r.createArrayBuffer(customBuffer.buffer, customBuffer.size, customBuffer.count);
-									break;
-								case 5123: // Int16
-									mesh.customBuffers[customBuffer.name] = r.createElementArrayBuffer(customBuffer.buffer, customBuffer.size, customBuffer.count);
-									// UNTESTED
-									break;
-							}
+				if (parameters.customBuffers && parameters.customBuffers.length) {
+					mesh.customBuffers = [];
+					for (let i = 0, l = parameters.customBuffers.length; i < l; i++) {
+						let customBuffer = parameters.customBuffers[i];
+						switch (customBuffer.componentType) {
+							case 5126: // Float32
+								mesh.customBuffers[customBuffer.name] = r.createArrayBuffer(customBuffer.buffer, customBuffer.size, customBuffer.count);
+								break;
+							case 5123: // Int16
+								mesh.customBuffers[customBuffer.name] = r.createElementArrayBuffer(customBuffer.buffer, customBuffer.size, customBuffer.count);
+								// UNTESTED
+								break;
 						}
 					}
+				}
 
-					if (parameters.indices && parameters.indexCount) {
-						mesh.indexBuffer = r.createElementArrayBuffer(parameters.indices, 1, parameters.indexCount);
-						mesh.indexed = true;
-					} else {
-						mesh.indexed = false;
-					}
+				if (parameters.indices && parameters.indexCount) {
+					mesh.indexBuffer = r.createElementArrayBuffer(parameters.indices, 1, parameters.indexCount);
+					mesh.indexed = true;
+				} else {
+					mesh.indexed = false;
+				}
 			} else {
-					if (parameters.vertices) {
-						mesh.vertices = parameters.vertices;
-						mesh.calculateBounds();
-						mesh.updateVertices();
-					}
-					if (parameters.textureCoordinates) {
-						mesh.textureCoordinates = parameters.textureCoordinates;
-						mesh.updateTextureCoordinates();
-					}
-					if (parameters.normals) {
-						mesh.normals = parameters.normals;
-						mesh.updateNormals();
-					}
-					if (parameters.indices) {
-						mesh.indices = parameters.indices;
-						mesh.updateIndexBuffer();
-					} else {
-						mesh.indexed = false;
-					}
+				if (parameters.vertices) {
+					mesh.vertices = parameters.vertices;
+					mesh.calculateBounds();
+					mesh.updateVertices();
+				}
+				if (parameters.textureCoordinates) {
+					mesh.textureCoordinates = parameters.textureCoordinates;
+					mesh.updateTextureCoordinates();
+				}
+				if (parameters.normals) {
+					mesh.normals = parameters.normals;
+					mesh.updateNormals();
+				}
+				if (parameters.indices) {
+					mesh.indices = parameters.indices;
+					mesh.updateIndexBuffer();
+				} else {
+					mesh.indexed = false;
+				}
+
+				if (!parameters.dynamic) {
+					// clear mesh data if not mesh does not need to be dynamically updated
+					mesh.vertices = null;
+					mesh.textureCoordinates = null;
+					mesh.normals = null;
+					mesh.indices = null;
+				}
 			}
 		}
 		return mesh;
-	};
-
-	var copy = exports.copy = function(mesh) {
-		var copy = Object.create(prototype);
-		// Note this is explicit rather than automatic using reflection
-		// as we do not want to copy any dynamically appended properties (i.e. id)
-		copy.indexed = mesh.indexed;
-		copy.renderMode = mesh.renderMode;
-		copy.boundingRadius = mesh.boundingRadius;
-		copy.bounds = Bounds.create({ min: mesh.bounds.min, max: mesh.bounds.max }) ;
-		if (mesh.vertices) {
-			copy.vertices = mesh.vertices.slice(0);
-			copy.updateVertices();
-		}
-		if (mesh.textureCoordinates) {
-			copy.textureCoordinates = mesh.textureCoordinates.slice(0);
-			copy.updateTextureCoordinates();
-		}
-		if (mesh.normals) {
-			copy.normals = mesh.normals.slice(0);
-			copy.updateNormals();
-		}
-		if (mesh.indices) {
-			copy.indices = mesh.indices.slice(0);
-			copy.updateIndexBuffer();
-		}
-
-		return copy;
 	};
 
 	return exports;
@@ -2254,6 +2268,10 @@ var Scene = module.exports = function() {
 	// TODO: Add clearUnusedResources - which enumerates through scene renderObjects / prefab instances 
 	// to check objects are used or reference count them - will need to track created scenes
 
+	// glState Tracking - shared across scenes
+	var currentShaderId, currentMaterialId, currentMeshId, pMatrixRebound = false;
+	var nextTextureLocation = 0, currentTextureBindings = {}, currentTextureLocations = [];	// keyed on texture.id to binding location, keyed on binding location to texture.id
+
 	var create = exports.create = function(parameters) {
 		var sceneId = (nextSceneId++).toString();
 		var cameras = {};
@@ -2261,8 +2279,7 @@ var Scene = module.exports = function() {
 		var mainCameraName = "main";
 		// mvMatrix may need to be a stack in future (although a stack which avoids unnecessary mat4.creates)
 		var pMatrix = mat4.create(), mvMatrix = mat4.create(), nMatrix = mat3.create(), cameraMatrix = mat4.create(), cameraOffset = vec3.create(), inverseCameraRotation = quat.create();
-		var currentShaderId, currentMaterialId, currentMeshId, pMatrixRebound = false;
-		var nextTextureLocation = 0, currentTextureBindings = {}, currentTextureLocations = [];	// keyed on texture.id to binding location, keyed on binding location to texture.id
+		
 
 		var scene = Object.create(prototype);
 
@@ -2320,9 +2337,9 @@ var Scene = module.exports = function() {
 					itteration++;
 					var step = Math.ceil(alphaRenderObjects.length/(2*itteration));
 					if(!less) {
-						index -= step;
+						index = Math.max(0, index - step);
 					} else {
-						index += step;
+						index = Math.min(alphaRenderObjects.length, index + step);
 					}
 				}
 			}
@@ -2419,14 +2436,14 @@ var Scene = module.exports = function() {
 			}
 			if(!prefabs[parameters.name]) {
 				var defn = Fury.prefabs[parameters.name];
-				if(!defn.material || !defn.mesh) {
-					throw new Error("Requested prefab must have a material and a mesh present");
+				if(!defn.materialConfig || !defn.meshConfig) {
+					throw new Error("Requested prefab must have a material and a mesh config present");
 				}
 				prefab = {
 					name: parameters.name,
 					instances: indexedMap.create(),
-					mesh: Mesh.copy(defn.mesh),
-					material: Material.copy(defn.material)
+					mesh: Mesh.create(defn.meshConfig),
+					material: Material.create(defn.materialConfig)
 				};
 				prefab.meshId = meshes.add(prefab.mesh);
 				prefab.materialId = materials.add(prefab.material);
@@ -2451,6 +2468,7 @@ var Scene = module.exports = function() {
 		};
 
 		// Add Camera
+		// Arguably camera.render(scene) would be a preferable pattern
 		scene.addCamera = function(camera, name) {
 			var key = name ? name : "main";
 			if(cameraNames.length === 0) {
@@ -2486,8 +2504,9 @@ var Scene = module.exports = function() {
 			// An extension would be to batch materials such that shaders that textures used overlap
 
 			// This batching by shader / material / mesh may need to be combined with scene management techniques
-
-			r.clear();
+			if (camera.clear) {
+				r.clear();
+			}
 
 			// TODO: Scene graph should provide these as a single thing to loop over, will then only split and loop for instances at mvMatrix binding / drawing
 			// Scene Graph should be class with enumerate() method, that way it can batch as described above and sort watch its batching / visibility whilst providing a way to simple loop over all elements
@@ -2499,7 +2518,11 @@ var Scene = module.exports = function() {
 				}
 				if (!culled && renderObject.active) {
 					if(renderObject.material.alpha) {
-						addToAlphaList(renderObject, camera.getDepth(renderObject));
+						let sortPosition = renderObject.transform.position
+						if (renderObject.bounds) {
+							sortPosition = renderObject.bounds.center;
+						}
+						addToAlphaList(renderObject, camera.getDepth(sortPosition));
 					} else {
 						bindAndDraw(renderObject);
 					}
@@ -2514,7 +2537,11 @@ var Scene = module.exports = function() {
 					}
 					if (!culled && instance.active) {
 						if(instance.material.alpha) {
-							addToAlphaList(instance, camera.getDepth(instance));
+							let sortPosition = instance.transform.position;
+							if (instance.bounds) {
+								sortPosition = instance.bounds.center;
+							}
+							addToAlphaList(instance, camera.getDepth(sortPosition));
 						} else {
 							bindAndDraw(instance);
 						}
@@ -2858,9 +2885,9 @@ var Transform = module.exports = function() {
 
 },{"./maths":11}],20:[function(require,module,exports){
 let Utils = module.exports = (function(){
-    let exports = {};
+	let exports = {};
 
-    exports.createScaledImage = (config) => {
+	exports.createScaledImage = (config) => {
 		let canvas = document.createElement("canvas");
 		canvas.style = "display: none";
 		canvas.width = config.image.width * config.scale;
@@ -2873,6 +2900,6 @@ let Utils = module.exports = (function(){
 		return canvas;
 	};
 
-    return exports
+	return exports
 })();
 },{}]},{},[4]);
