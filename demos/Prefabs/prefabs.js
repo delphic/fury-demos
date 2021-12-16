@@ -138,8 +138,8 @@ var cubeMaterialConfig = { shader : shader };
 var teapotMaterialConfig = { shader : shader };
 
 // Create Prefabs
-Fury.createPrefab({ name: "cube", meshConfig: cubeJson, materialConfig: cubeMaterialConfig });
-Fury.createPrefab({ name: "teapot", meshConfig: teapotJson, materialConfig: teapotMaterialConfig });
+Fury.Prefab.create({ name: "cube", meshConfig: cubeJson, materialConfig: cubeMaterialConfig });
+Fury.Prefab.create({ name: "teapot", meshConfig: teapotJson, materialConfig: teapotMaterialConfig });
 
 // Create Camera & Scene
 var camera = Fury.Camera.create({ near: 0.1, far: 1000000.0, fov: 1.0472, ratio: 1.0, position: vec3.fromValues(0.0, 0.0, 550.0) });

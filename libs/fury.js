@@ -31,7 +31,7 @@ THE SOFTWARE.
 },{}],2:[function(require,module,exports){
 var vec3 = require('./maths').vec3;
 
-var Bounds = module.exports = (function() {
+module.exports = (function() {
 	let exports = {};
 	let prototype = {
 		recalculateMinMax: function() {
@@ -100,7 +100,7 @@ var Bounds = module.exports = (function() {
 		for (let i = 0; i < 3; i++) {
 			if (Math.sign(box.center[i] - origin[i]) == Math.sign(direction[i])
 				&& !(origin[i] >= box.min[i] && origin[i] <= box.max[i])) { // and NOT INSIDE the box on this axis
-				axis = i;
+				let axis = i;
 
 				// Move along that axis to find the intersection point on this axis
 				let ip = box.center[axis] - Math.sign(direction[axis]) * box.extents[axis];
@@ -131,7 +131,7 @@ var Bounds = module.exports = (function() {
 		let z = Math.max(box.min[2], Math.min(sphere.center[2], box.max[2]));
 
 		let sqrDistance = (x - sphere.center[0]) * (x - sphere.center[0]) +
-		 	(y - sphere.center[1]) * (y - sphere.center[1]) +
+			(y - sphere.center[1]) * (y - sphere.center[1]) +
 			(z - sphere.center[2]) * (z - sphere.center[2]);
 
 		return sqrDistance < sphere.radius * sphere.radius;
@@ -196,6 +196,7 @@ var Camera = module.exports = function() {
 		// Set Rotation from Euler
 		// Set Position x, y, z
 		// Note do not have enforced copy setters, the user is responsible for this
+		// TODO: Review depth and frustrum to make sure they deal with look in -z correctly
 		calculateFrustum: function() {
 			// TODO: Update to work for orthonormal projection as well
 			Maths.quatLocalAxes(this.rotation, localX, localY, localZ);
@@ -288,6 +289,10 @@ var Camera = module.exports = function() {
 				l0 = position[0], l1 = position[1], l2 = position[2];
 			return 2*(q1*q3 + q0*q2)*(l0 - p0) + 2*(q2*q3 - q0*q1)*(l1 - p1) + (1 - 2*q1*q1 - 2*q2*q2)*(l2 - p2);
 		},
+		getLookDirection: function(out) {
+			vec3.transformQuat(out, Maths.vec3Z, this.rotation);
+			vec3.negate(out, out); // Camera faces in -z
+		},
 		getProjectionMatrix: function(out) {
 			if(this.type == Camera.Type.Perspective) {
 				mat4.perspective(out, this.fov, this.ratio, this.near, this.far);
@@ -312,10 +317,12 @@ var Camera = module.exports = function() {
 			}
 		}
 	};
+
 	var Type = exports.Type = {
 		Perspective: "Perspective",
 		Orthonormal: "Orthonormal"
 	};
+
 	var create = exports.create = function(parameters) {
 		var camera = Object.create(prototype);
 		// TODO: Arguement Checking
@@ -449,7 +456,7 @@ let Ease = module.exports = (function() {
 })();
 },{}],6:[function(require,module,exports){
 // Fury Module can be used with 'require'
-var Fury = module.exports = (function() {
+module.exports = (function() {
 	let Fury = {};
 	let canvas;
 
@@ -463,23 +470,13 @@ var Fury = module.exports = (function() {
 	Fury.Mesh = require('./mesh');
 	Fury.Model = require('./model');
 	Fury.Physics = require('./physics');
+	Fury.Prefab = require('./prefab');
 	Fury.Renderer = require('./renderer');
 	Fury.Scene = require('./scene');
 	Fury.Shader = require('./shader');
 	Fury.Shaders = require('./shaders');
 	Fury.Transform = require('./transform');
 	Fury.Utils = require('./utils');
-
-	Fury.prefabs = { keys: "Can't touch this, doo doo doo, do do, do do" };
-
-	Fury.createPrefab = function(parameters) {
-		var prefabs = Fury.prefabs;
-		if(!parameters || !parameters.name || prefabs[parameters.name]) {
-			throw new Error("Please provide a valid and unique name parameter for your prefab");
-		} else {
-			prefabs[parameters.name] = parameters;
-		}
-	};
 
 	Fury.init = function(parameters) {
 		let disableShaderPreload = false;
@@ -518,7 +515,7 @@ var Fury = module.exports = (function() {
 	return Fury;
 })();
 
-},{"./bounds":2,"./camera":3,"./gameLoop":7,"./input":9,"./material":10,"./maths":11,"./mesh":12,"./model":13,"./physics":14,"./renderer":15,"./scene":16,"./shader":17,"./shaders":18,"./transform":19,"./utils":20}],7:[function(require,module,exports){
+},{"./bounds":2,"./camera":3,"./gameLoop":7,"./input":9,"./material":10,"./maths":11,"./mesh":12,"./model":13,"./physics":14,"./prefab":15,"./renderer":16,"./scene":17,"./shader":18,"./shaders":19,"./transform":20,"./utils":21}],7:[function(require,module,exports){
 let Input = require('./input');
 
 let GameLoop = module.exports = (function() {
@@ -577,6 +574,10 @@ let GameLoop = module.exports = (function() {
 		if (state != State.Paused) {
 			state = State.RequestPause;
 		}
+	};
+
+	exports.isRunning = () => {
+		return state === State.Running;
 	};
 	
 	let onWindowBlur = (event) => {
@@ -637,14 +638,24 @@ var IndexedMap = module.exports = function(){
 	// but I don't think it does any harm :shrug:
 
 	var prototype = {
-		add: function(item) {
+		add: function(item, sortFunction) {
 			if (!item.id || !this[item.id]) {
 				var key = (nextKey++).toString();
 				item.id = key;
 				this[key] = item;
 				this.keys.push(key);
+				if (sortFunction) {
+					this.keys.sort(sortFunction);
+				}
 			}
 			return item.id;
+		},
+		sort: function(sortFunction) {
+			if (sortFunction) {
+				this.keys.sort(sortFunction);
+			} else {
+				this.keys.sort();
+			}
 		},
 		remove: function(key) {
 			if(key != "keys" && this.hasOwnProperty(key)) {
@@ -698,6 +709,7 @@ var Input = module.exports = function() {
 			canvas.addEventListener("mousemove", handleMouseMove);
 			canvas.addEventListener("mousedown", handleMouseDown, true);
 			canvas.addEventListener("mouseup", handleMouseUp);
+			canvas.addEventListener("wheel", handleMouseWheel);
 
 			document.addEventListener('pointerlockchange', (event) => {
 				pointerLocked = !!(document.pointerLockElement || document.mozPointerLockElement); // polyfill
@@ -723,6 +735,7 @@ var Input = module.exports = function() {
 
 	var MouseDelta = exports.MouseDelta = [0, 0];
 	var MousePosition = exports.MousePosition = [0, 0];
+	var MouseWheel = exports.MouseWheel = [0, 0, 0];
 
 	var keyPressed = function(key) {
 		if (!isNaN(key) && !key.length) {
@@ -857,8 +870,8 @@ var Input = module.exports = function() {
 	};
 
 	exports.handleFrameFinished = function() {
-		MouseDelta[0] = 0;
-		MouseDelta[1] = 0;
+		MouseDelta[0] = MouseDelta[1] = 0;
+		MouseWheel[0] = MouseWheel[1] = MouseWheel[2] = 0;
 		downKeys.length = 0;
 		upKeys.length = 0;
 		downMouse.length = 0;
@@ -910,6 +923,13 @@ var Input = module.exports = function() {
 		mouseState[event.button] = false;
 		upMouseTimes[event.button] = Date.now();
 		upMouse[event.button] = true;
+	};
+
+	var handleMouseWheel = function(event) {
+		MouseWheel[0] += event.deltaX;
+		MouseWheel[1] += event.deltaY;
+		MouseWheel[2] += event.deltaZ;
+		// Note event.deltaMode determines if values are pixels, lines or pages, assumed pixels here
 	};
 
 	exports.getMouseViewportX = function() {
@@ -1083,9 +1103,16 @@ var Input = module.exports = function() {
 var Material = module.exports = function(){
 	var exports = {};
 	var prototype = {
+		blendSeparate: false, // Toggles use of blendFunc vs. blendFuncSeparate
 		blendEquation: "FUNC_ADD",
+		// blendFunc Parameters
 		sourceBlendType: "SRC_ALPHA",
 		destinationBlendType: "ONE_MINUS_SRC_ALPHA",
+		// blendFuncSeparate Parameters 
+		sourceColorBlendType: "SRC_ALPHA",
+		destinationColorBlendType: "ONE_MINUS_SRC_ALPHA",
+		sourceAlphaBlendType: "ZERO",
+		destinationAlphaBlendType: "DST_ALPHA",
 		setTexture: function(texture, uniformName) {
 			if (uniformName) {
 				this.textures[uniformName] = texture;
@@ -1106,6 +1133,12 @@ var Material = module.exports = function(){
 						+ " or an array textures of length no greater than the provided shader's uniform names array");
 				}
 			}
+		},
+		setProperties: function(properties) {
+			let keys = Object.keys(properties);
+			for (let i = 0, l = keys.length; i < l; i++) {
+				this[keys[i]] = properties[keys[i]];
+			}
 		}
 	};
 
@@ -1125,11 +1158,7 @@ var Material = module.exports = function(){
 		}
 
 		if (parameters.properties) {
-			let keys = Object.keys(parameters.properties);
-			for (let i = 0, l = keys.length; i < l; i++) {
-				material[keys[i]] = parameters.properties[keys[i]];
-			}
-			material._properties = keys; // Store custom properties for the copy method
+			material.setProperties(parameters.properties);
 		}
 
 		if (material.shader.validateMaterial) {
@@ -1150,17 +1179,19 @@ let glMatrix = require('../libs/gl-matrix-min');
 // Created here so that any local variables in the Maths Module
 // does not stop the globalising of the variable.
 let globalize = () => {
-  // Lets create some globals!
-  mat2 = glMatrix.mat2;
-  mat3 = glMatrix.mat3;
-  mat4 = glMatrix.mat4;
-  quat = glMatrix.quat;
-  quat2 = glMatrix.quat2;
-  vec2 = glMatrix.vec2;
-  vec3 = glMatrix.vec3;
-  vec4 = glMatrix.vec4;
-  // Would be nice if there was a way to add to the context a function
-  // was called in but don't think that's possible?
+	// Lets create some globals!
+	if (window) {
+		window.mat2 = glMatrix.mat2;
+		window.mat3 = glMatrix.mat3;
+		window.mat4 = glMatrix.mat4;
+		window.quat = glMatrix.quat;
+		window.quat2 = glMatrix.quat2;
+		window.vec2 = glMatrix.vec2;
+		window.vec3 = glMatrix.vec3;
+		window.vec4 = glMatrix.vec4;
+	}
+	// Would be nice if there was a way to add to the context a function
+	// was called in but don't think that's possible?
 };
 
 // Use of object freeze has funnily enough frozen these objects
@@ -1168,306 +1199,308 @@ let globalize = () => {
 // make the changes and then build - I *think* we just want to remove the freezes?
 // then we can extend it here for clarity?
 
-let Maths = module.exports = (function() {
-  let exports = {
-    glMatrix: glMatrix,
-    toRadian: glMatrix.glMatrix.toRadian,
-    equals: glMatrix.glMatrix.equals,
-    mat2: glMatrix.mat2,
-    mat3: glMatrix.mat3,
-    mat4: glMatrix.mat4,
-    quat: glMatrix.quat,
-    quat2: glMatrix.quat2,
-    vec2: glMatrix.vec2,
-    vec3: glMatrix.vec3,
-    vec4:  glMatrix.vec4
-  };
+module.exports = (function() {
+	let exports = {
+		glMatrix: glMatrix,
+		toRadian: glMatrix.glMatrix.toRadian,
+		equals: glMatrix.glMatrix.equals,
+		mat2: glMatrix.mat2,
+		mat3: glMatrix.mat3,
+		mat4: glMatrix.mat4,
+		quat: glMatrix.quat,
+		quat2: glMatrix.quat2,
+		vec2: glMatrix.vec2,
+		vec3: glMatrix.vec3,
+		vec4:  glMatrix.vec4
+	};
 
-  exports.Ease = require('./ease');
+	exports.Ease = require('./ease');
 
-  // TODO: Add plane 'class' - it's a vec4 with 0-2 being the normal vector and 3 being the distance to the origin from the plane along the normal vector
-  // I.e. the dot product of the offset point?
+	// TODO: Add plane 'class' - it's a vec4 with 0-2 being the normal vector and 3 being the distance to the origin from the plane along the normal vector
+	// I.e. the dot product of the offset point?
 
-  var vec3X = exports.vec3X = glMatrix.vec3.fromValues(1,0,0);
-  var vec3Y = exports.vec3Y = glMatrix.vec3.fromValues(0,1,0);
-  var vec3Z = exports.vec3Z = glMatrix.vec3.fromValues(0,0,1);
+	var vec3X = exports.vec3X = glMatrix.vec3.fromValues(1,0,0);
+	var vec3Y = exports.vec3Y = glMatrix.vec3.fromValues(0,1,0);
+	var vec3Z = exports.vec3Z = glMatrix.vec3.fromValues(0,0,1);
+	exports.vec3Zero = glMatrix.vec3.fromValues(0,0,0);
+	exports.vec3One = glMatrix.vec3.fromValues(1,1,1);
 
-  exports.vec3Pool = (function(){
-    let stack = [];
-    for (let i = 0; i < 5; i++) {
-      stack.push(glMatrix.vec3.create());
-    }
-    
-    return {
-      return: (v) => { stack.push(v); },
-      request: () => {
-        if (stack.length > 0) {
-          return stack.pop();
-        }
-        return glMatrix.vec3.create();
-      }
-    }
-  })();
+	exports.vec3Pool = (function(){
+		let stack = [];
+		for (let i = 0; i < 5; i++) {
+			stack.push(glMatrix.vec3.create());
+		}
+		
+		return {
+			return: (v) => { stack.push(v); },
+			request: () => {
+				if (stack.length > 0) {
+					return stack.pop();
+				}
+				return glMatrix.vec3.create();
+			}
+		}
+	})();
 
-  exports.quatPool = (function(){
-    let stack = [];
-    for (let i = 0; i < 5; i++) {
-      stack.push(glMatrix.quat.create());
-    }
-    
-    return {
-      return: (v) => { stack.push(v); },
-      request: () => {
-        if (stack.length > 0) {
-          return stack.pop();
-        }
-        return glMatrix.quat.create();
-      }
-    }
-  })();
+	exports.quatPool = (function(){
+		let stack = [];
+		for (let i = 0; i < 5; i++) {
+			stack.push(glMatrix.quat.create());
+		}
+		
+		return {
+			return: (v) => { stack.push(v); },
+			request: () => {
+				if (stack.length > 0) {
+					return stack.pop();
+				}
+				return glMatrix.quat.create();
+			}
+		}
+	})();
 
-  let equals = glMatrix.glMatrix.equals;
+	let equals = glMatrix.glMatrix.equals;
 
-  let approximately = exports.approximately = (a, b, epsilon) => {
-    // Was using adpated version of https://floating-point-gui.de/errors/comparison/
-    // However, it's behaviour is somewhat unintuative and honestly more helpful just to have straight threshold check 
-    if (!epsilon) epsilon = Number.EPSILON;
-    return Math.abs(a - b) <  epsilon;
-  };
+	let approximately = exports.approximately = (a, b, epsilon) => {
+		// Was using adpated version of https://floating-point-gui.de/errors/comparison/
+		// However, it's behaviour is somewhat unintuative and honestly more helpful just to have straight threshold check 
+		if (!epsilon) epsilon = Number.EPSILON;
+		return Math.abs(a - b) <  epsilon;
+	};
 
-  let clamp = exports.clamp = (x, min, max) => { return Math.max(Math.min(max, x), min); };
+	exports.clamp = (x, min, max) => { return Math.max(Math.min(max, x), min); };
 
-  let clamp01 = exports.clamp01 = (x) => { return exports.clamp(x, 0, 1); };
+	let clamp01 = exports.clamp01 = (x) => { return exports.clamp(x, 0, 1); };
 
-  let lerp = exports.lerp = (a, b, r) => { return r * (b - a) + a; };
+	exports.lerp = (a, b, r) => { return r * (b - a) + a; };
 
-  let smoothStep = exports.smoothStep = (a, b, r) => {
-    // https://en.wikipedia.org/wiki/Smoothstep
-    let x = clamp01((r - a) / (b - a));
-    return x * x * (3 - 2 * x); 
-  };
+	exports.smoothStep = (a, b, r) => {
+		// https://en.wikipedia.org/wiki/Smoothstep
+		let x = clamp01((r - a) / (b - a));
+		return x * x * (3 - 2 * x); 
+	};
 
-  let moveTowards = exports.moveTowards = (a, b, maxDelta) => {
-    let delta = b - a;
-    return maxDelta >= Math.abs(delta) ? b : a + Math.sign(delta) * maxDelta; 
-  };
+	let moveTowards = exports.moveTowards = (a, b, maxDelta) => {
+		let delta = b - a;
+		return maxDelta >= Math.abs(delta) ? b : a + Math.sign(delta) * maxDelta; 
+	};
 
-  let smoothDamp = exports.smoothDamp = (a, b, speed, smoothTime, maxSpeed, elapsed) => {
-    if (a === b) {
-      return b;
-    }
+	exports.smoothDamp = (a, b, speed, smoothTime, maxSpeed, elapsed) => {
+		if (a === b) {
+			return b;
+		}
 
-    smoothTime = Math.max(0.0001, smoothTime); // minimum smooth time of 0.0001
-    let omega = 2.0 / smoothTime;
-    let x = omega * elapsed;
-    let exp = 1.0 / (1.0 * x + 0.48 * x * X + 0.245 * x * x * x);
-    let delta = b - a;
-    let mag = Math.abs(delta);
+		smoothTime = Math.max(0.0001, smoothTime); // minimum smooth time of 0.0001
+		let omega = 2.0 / smoothTime;
+		let x = omega * elapsed;
+		let exp = 1.0 / (1.0 * x + 0.48 * x * x + 0.245 * x * x * x);
+		let delta = b - a;
+		let mag = Math.abs(delta);
 
-    // Adjust to delta to ensure we don't exceed max speed if necessary
-    let maxDelta = maxSpeed * smoothTime; // Expects max speed +ve
-    if (mag > maxDelta) {
-      delta = maxDelta * Math.sign(delta);
-    }
+		// Adjust to delta to ensure we don't exceed max speed if necessary
+		let maxDelta = maxSpeed * smoothTime; // Expects max speed +ve
+		if (mag > maxDelta) {
+			delta = maxDelta * Math.sign(delta);
+		}
 
-    let temp = (speed + omega * delta) * elapsed;
-    speed = (speed - omega * temp) * exp;
-    let result = a - delta + (delta + temp) * exp;
-    // Check we don't overshoot
-    if (mag <= Math.abs(result - a)) {
-      return b;
-    }
-    return result;
-  };
+		let temp = (speed + omega * delta) * elapsed;
+		speed = (speed - omega * temp) * exp;
+		let result = a - delta + (delta + temp) * exp;
+		// Check we don't overshoot
+		if (mag <= Math.abs(result - a)) {
+			return b;
+		}
+		return result;
+	};
 
-  const angleDotEpison = 0.000001;  // If the dot product 
+	const angleDotEpison = 0.000001;  // If the dot product 
 
-  // vec3 extensions adapated from https://graemepottsfolio.wordpress.com/2015/11/26/vectors-programming/
-  // TODO: Tests
+	// vec3 extensions adapated from https://graemepottsfolio.wordpress.com/2015/11/26/vectors-programming/
+	// TODO: Tests
 
-  exports.vec3Slerp = (() => {
-    let an = glMatrix.vec3.create(), bn = glMatrix.vec3.create();
-    return (out, a, b, t) => {
-      glMatrix.vec3.normlize(an, a);
-      glMatrix.vec3.normlize(bn, b);
-      let dot = vec3.dot(an, bn);
-      if (approximately(Math.abs(dot), 1.0, angleDotEpison)) {
-        // lerp
-        glMatrix.vec3.lerp(out, a, b, t);
-      } else {
-        // Slerp
-        // a * sin ( theta * (1 - t) / sin (theta)) + b * (sin(theta * t) / sin(theta)) where theta = acos(|a|.|b|)
-        let theta = Math.acos(dot);
-        let sinTheta = Math.sin(theta);
-        let ap = Math.sin(theta * (1.0 - t)) / sinTheta;
-        let bp = Math.sin(theta * t ) / sinTheta;
-        out[0] = a[0] * ap + b[0] * bp;
-        out[1] = a[1] * ap + b[1] * bp;
-        out[2] = a[2] * ap + b[2] * bp;
-      }
-    };
-  })(); 
+	exports.vec3Slerp = (() => {
+		let an = glMatrix.vec3.create(), bn = glMatrix.vec3.create();
+		return (out, a, b, t) => {
+			glMatrix.vec3.normlize(an, a);
+			glMatrix.vec3.normlize(bn, b);
+			let dot = glMatrix.vec3.dot(an, bn);
+			if (approximately(Math.abs(dot), 1.0, angleDotEpison)) {
+				// lerp
+				glMatrix.vec3.lerp(out, a, b, t);
+			} else {
+				// Slerp
+				// a * sin ( theta * (1 - t) / sin (theta)) + b * (sin(theta * t) / sin(theta)) where theta = acos(|a|.|b|)
+				let theta = Math.acos(dot);
+				let sinTheta = Math.sin(theta);
+				let ap = Math.sin(theta * (1.0 - t)) / sinTheta;
+				let bp = Math.sin(theta * t ) / sinTheta;
+				out[0] = a[0] * ap + b[0] * bp;
+				out[1] = a[1] * ap + b[1] * bp;
+				out[2] = a[2] * ap + b[2] * bp;
+			}
+		};
+	})(); 
 
-  exports.vec3MoveTowards = (() => {
-    let delta = glMatrix.vec3.create();
-    return (out, a, b, maxDelta) => {
-      glMatrix.vec3.sub(delta, b, a);
-      let sqrLen = glMatrix.vec3.sqrDist(a, b); 
-      let sqrMaxDelta = maxDelta * maxDelta;
-      if (sqrMaxDelta >= sqrLen) {
-        glMatrix.vec3.copy(out, b);
-      } else {
-        glMatrix.vec3.scaleAndAdd(a, delta, sqrMaxDelta / sqrLen)
-      }
-    }; 
-  })();
+	exports.vec3MoveTowards = (() => {
+		let delta = glMatrix.vec3.create();
+		return (out, a, b, maxDelta) => {
+			glMatrix.vec3.sub(delta, b, a);
+			let sqrLen = glMatrix.vec3.sqrDist(a, b); 
+			let sqrMaxDelta = maxDelta * maxDelta;
+			if (sqrMaxDelta >= sqrLen) {
+				glMatrix.vec3.copy(out, b);
+			} else {
+				glMatrix.vec3.scaleAndAdd(a, delta, sqrMaxDelta / sqrLen)
+			}
+		}; 
+	})();
 
-  exports.vec3RotateTowards = (() => {
-    let an = glMatrix.vec3.create();
-    let bn = glMatrix.vec3.create();
-    let cross = glMatrix.vec3.create();
-    let q = glMatrix.quat.create();
-    return (out, a, b, maxRadiansDelta, maxMagnitudeDelta) => {
-      let vec3 = glMatrix.vec3;
-      let quat = glMatrix.quat;
+	exports.vec3RotateTowards = (() => {
+		//let an = glMatrix.vec3.create();
+		//let bn = glMatrix.vec3.create();
+		let cross = glMatrix.vec3.create();
+		let q = glMatrix.quat.create();
+		return (out, a, b, maxRadiansDelta, maxMagnitudeDelta) => {
+			let vec3 = glMatrix.vec3;
+			let quat = glMatrix.quat;
 
-      let aLen = vec3.length(a);
-      let bLen = vec3.length(b);
-      let an = vec3.normlize(a);
-      let bn = vec3.normlize(b);
+			let aLen = vec3.length(a);
+			let bLen = vec3.length(b);
+			let an = vec3.normlize(a);
+			let bn = vec3.normlize(b);
 
-      // check for magnitude overshoot via move towards
-      let targetLen = moveTowards(aLen, bLen, maxMagnitudeDelta);
-      let dot = vec3.dot(an, bn);
-      if (approximately(Math.abs(dot), 1.0, angleDotEpison)) {  // Q: What about when pointing in opposite directions?
-        // if pointing same direction just change magnitude
-        vec3.copy(out, an);
-        vec3.scale(out, targetLen);
-      } else {
-        // check for rotation overshoot
-        let angle = Math.acos(dot) - maxRadiansDelta;
-        if (angle <= 0) {
-          vec3.copy(out, bn);
-          vec3.scale(out, targetLen);
-        } else if (angle > Math.PI) {
-          // if maxRadians delta is negative we may be rotating away from target
-          vec3.negate(out, bn);
-          vec3.scale(out, targetLen);
-        } else {
-          // use quaternion to rotate
-          vec3.cross(cross, a, b);
-          quat.setAxisAngle(q, cross, maxRadiansDelta);
-          vec3.transformQuat(out, a, q);
-          // then set target length
-          vec3.normlize(out, out);
-          vec3.scale(out, targetLen);
-        }
-      }
-    };
-  })();
+			// check for magnitude overshoot via move towards
+			let targetLen = moveTowards(aLen, bLen, maxMagnitudeDelta);
+			let dot = vec3.dot(an, bn);
+			if (approximately(Math.abs(dot), 1.0, angleDotEpison)) {  // Q: What about when pointing in opposite directions?
+				// if pointing same direction just change magnitude
+				vec3.copy(out, an);
+				vec3.scale(out, targetLen);
+			} else {
+				// check for rotation overshoot
+				let angle = Math.acos(dot) - maxRadiansDelta;
+				if (angle <= 0) {
+					vec3.copy(out, bn);
+					vec3.scale(out, targetLen);
+				} else if (angle > Math.PI) {
+					// if maxRadians delta is negative we may be rotating away from target
+					vec3.negate(out, bn);
+					vec3.scale(out, targetLen);
+				} else {
+					// use quaternion to rotate
+					vec3.cross(cross, a, b);
+					quat.setAxisAngle(q, cross, maxRadiansDelta);
+					vec3.transformQuat(out, a, q);
+					// then set target length
+					vec3.normlize(out, out);
+					vec3.scale(out, targetLen);
+				}
+			}
+		};
+	})();
 
-  exports.vec3SmoothDamp = (() => {
-    let delta = glMatrix.vec3.create();
-    let temp = glMatrix.vec3.create();
-    return (out, a, b, velocity, smoothTime, maxSpeed, elapsed) => { // Q: Should have outVelocity?
-      let vec3 = glMatrix.vec3;
-      if (vec3.equals(a, b)) {
-        vec3.copy(out, b);
-      } else {
-        // Derivation: https://graemepottsfolio.wordpress.com/2016/01/11/game-programming-math-libraries/
-        smoothTime = Math.max(0.0001, smoothTime); // minimum smooth time of 0.0001
-        let omega = 2.0 / smoothTime;
-        let x = omega * elapsed;
-        let exp = 1.0 / (1.0 + x + 0.48 * x * x + 0.245 * x * x * x);
-        vec3.sub(delta, a, b);
-        let length = vec3.length(delta);
-        let maxDelta = maxSpeed * smoothTime;
+	exports.vec3SmoothDamp = (() => {
+		let delta = glMatrix.vec3.create();
+		let temp = glMatrix.vec3.create();
+		return (out, a, b, velocity, smoothTime, maxSpeed, elapsed) => { // Q: Should have outVelocity?
+			let vec3 = glMatrix.vec3;
+			if (vec3.equals(a, b)) {
+				vec3.copy(out, b);
+			} else {
+				// Derivation: https://graemepottsfolio.wordpress.com/2016/01/11/game-programming-math-libraries/
+				smoothTime = Math.max(0.0001, smoothTime); // minimum smooth time of 0.0001
+				let omega = 2.0 / smoothTime;
+				let x = omega * elapsed;
+				let exp = 1.0 / (1.0 + x + 0.48 * x * x + 0.245 * x * x * x);
+				vec3.sub(delta, a, b);
+				let length = vec3.length(delta);
+				let maxDelta = maxSpeed * smoothTime;
 
-        let deltaX = Math.min(length, maxDelta);
-        vec3.scale(delta, delta, deltaX / length);
+				let deltaX = Math.min(length, maxDelta);
+				vec3.scale(delta, delta, deltaX / length);
 
-        // temp = (velocity + omega * delta) * elapsed
-        vec3.scaleAndAdd(temp, velocity, delta, omega);
-        vec3.scale(temp, temp, elapsed);
+				// temp = (velocity + omega * delta) * elapsed
+				vec3.scaleAndAdd(temp, velocity, delta, omega);
+				vec3.scale(temp, temp, elapsed);
 
-        // velocity = (velocity - omega * temp) * exp
-        vec3.scaleAndAdd(velocity, velocity, temp, -omega);
-        vec3.scale(velocity, velocity, exp);
+				// velocity = (velocity - omega * temp) * exp
+				vec3.scaleAndAdd(velocity, velocity, temp, -omega);
+				vec3.scale(velocity, velocity, exp);
 
-        // out = a - delta + (delta + temp) * exp;
-        vec3.sub(out, a, delta);
-        vec3.scaleAndAdd(out, out, delta, exp);
-        vec3.scaleAndAdd(out, out, temp, exp);
+				// out = a - delta + (delta + temp) * exp;
+				vec3.sub(out, a, delta);
+				vec3.scaleAndAdd(out, out, delta, exp);
+				vec3.scaleAndAdd(out, out, temp, exp);
 
-        // Ensure we don't overshoot
-        if (vec3.sqrDist(b, a) <= vec3.sqrDist(out, a)) {
-          vec3.copy(out, b);
-          vec3.zero(velocity);
-        }
-      }
-    };
-  })();
+				// Ensure we don't overshoot
+				if (vec3.sqrDist(b, a) <= vec3.sqrDist(out, a)) {
+					vec3.copy(out, b);
+					vec3.zero(velocity);
+				}
+			}
+		};
+	})();
 
 	exports.vec3ToString = (v) => { return "(" + v[0] + ", " + v[1] + ", " + v[2] + ")"; };
 
-  exports.quatEuler = function(x, y, z) {
-    let q = glMatrix.quat.create();
-    glMatrix.quat.fromEuler(q, x, y, z);
-    return q;
-  };
+	exports.quatEuler = function(x, y, z) {
+		let q = glMatrix.quat.create();
+		glMatrix.quat.fromEuler(q, x, y, z);
+		return q;
+	};
 
-  exports.quatIsIdentity = function(q) {
-    // Is the provided quaterion identity
-    return (equals(q[0], 0) && equals(q[1], 0) && equals(q[2], 0) && equals(q[3], 1));
-  };
+	exports.quatIsIdentity = function(q) {
+		// Is the provided quaterion identity
+		return (equals(q[0], 0) && equals(q[1], 0) && equals(q[2], 0) && equals(q[3], 1));
+	};
 
-  exports.quatRotate = (function() {
-  	var i = glMatrix.quat.create();
-  	return function(out, q, rad, axis) {
-  		glMatrix.quat.setAxisAngle(i, axis, rad);
-  		return glMatrix.quat.multiply(out, i, q);
-  	};
-  })();
+	exports.quatRotate = (function() {
+		var i = glMatrix.quat.create();
+		return function(out, q, rad, axis) {
+			glMatrix.quat.setAxisAngle(i, axis, rad);
+			return glMatrix.quat.multiply(out, i, q);
+		};
+	})();
 
-  exports.quatLocalAxes = function(q, localX, localY, localZ) {
-    glMatrix.vec3.transformQuat(localX, vec3X, q);
-    glMatrix.vec3.transformQuat(localY, vec3Y, q);
-    glMatrix.vec3.transformQuat(localZ, vec3Z, q);
-  };
+	exports.quatLocalAxes = function(q, localX, localY, localZ) {
+		glMatrix.vec3.transformQuat(localX, vec3X, q);
+		glMatrix.vec3.transformQuat(localY, vec3Y, q);
+		glMatrix.vec3.transformQuat(localZ, vec3Z, q);
+	};
 
-  // See https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
-  // Note: They define roll as rotation around x axis, pitch around y axis, and yaw around z-axis
-  // I do not agree, roll is around z-axis, pitch around x-axis, and yaw around y-axis.
-  // Methods renamed accordingly
+	// See https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+	// Note: They define roll as rotation around x axis, pitch around y axis, and yaw around z-axis
+	// I do not agree, roll is around z-axis, pitch around x-axis, and yaw around y-axis.
+	// Methods renamed accordingly
 
-  // I attempted to swap and rearrange some of the formula so pitch could be -pi/2 to pi/2 range
-  // and yaw would be -pi to pi but naively swapping the formula according to the apparent pattern did not work
-  // c.f. 7dfps player class for hacky work around - TODO: Fix these
-  exports.calculatePitch = function(q) {
-  	// x-axis rotation
-  	let w = q[3], x = q[0], y = q[1], z = q[2];
-  	return Math.atan2(2 * (w*x + y*z), 1 - 2 * (x*x + y*y)); // use atan and probably would get -90:90?
-  };
+	// I attempted to swap and rearrange some of the formula so pitch could be -pi/2 to pi/2 range
+	// and yaw would be -pi to pi but naively swapping the formula according to the apparent pattern did not work
+	// c.f. 7dfps player class for hacky work around - TODO: Fix these
+	exports.calculatePitch = function(q) {
+		// x-axis rotation
+		let w = q[3], x = q[0], y = q[1], z = q[2];
+		return Math.atan2(2 * (w*x + y*z), 1 - 2 * (x*x + y*y)); // use atan and probably would get -90:90?
+	};
 
-  exports.calculateYaw = function(q) {
-  	// y-axis rotation
-  	let w = q[3], x = q[0], y = q[1], z = q[2];
-  	let sinp = 2 * (w*y - z*x);
-    if (Math.abs(sinp) >= 1) sinp = Math.sign(sinp) * (Math.PI / 2);  // Use 90 if out of range
-  	return Math.asin(sinp) // returns pi/2 -> - pi/2 range
-  };
+	exports.calculateYaw = function(q) {
+		// y-axis rotation
+		let w = q[3], x = q[0], y = q[1], z = q[2];
+		let sinp = 2 * (w*y - z*x);
+		if (Math.abs(sinp) >= 1) sinp = Math.sign(sinp) * (Math.PI / 2);  // Use 90 if out of range
+		return Math.asin(sinp) // returns pi/2 -> - pi/2 range
+	};
 
-  exports.calculateRoll = function(q) {
-  	// z-axis rotation
-  	let w = q[3], x = q[0], y = q[1], z = q[2];
-  	return Math.atan2(2 * (w*z + x*y), 1 - 2 * (y*y + z*z));
-    // This seems to occasionally return PI or -PI instead of 0
-    // It does seem to be related to crossing boundaries but it's not entirely predictable
-  };
+	exports.calculateRoll = function(q) {
+		// z-axis rotation
+		let w = q[3], x = q[0], y = q[1], z = q[2];
+		return Math.atan2(2 * (w*z + x*y), 1 - 2 * (y*y + z*z));
+		// This seems to occasionally return PI or -PI instead of 0
+		// It does seem to be related to crossing boundaries but it's not entirely predictable
+	};
 
-  exports.globalize = globalize;
+	exports.globalize = globalize;
 
-  return exports;
+	return exports;
 })();
 
 },{"../libs/gl-matrix-min":1,"./ease":5}],12:[function(require,module,exports){
@@ -1475,7 +1508,7 @@ var r = require('./renderer');
 var Bounds = require('./bounds');
 var vec3 = require('./maths').vec3;
 
-var Mesh = module.exports = function(){
+module.exports = function(){
 	exports = {};
 
 	let calculateMinPoint = exports.calculateMinPoint = function(out, vertices) {
@@ -1562,7 +1595,7 @@ var Mesh = module.exports = function(){
 		}
 	};
 
-	var create = exports.create = function(parameters) {
+	exports.create = function(parameters) {
 		var mesh = Object.create(prototype);
 
 		mesh.bounds = Bounds.create({ min: vec3.create(), max: vec3.create() });
@@ -1635,6 +1668,15 @@ var Mesh = module.exports = function(){
 					mesh.indexed = false;
 				}
 
+				if (parameters.customAttributes && parameters.customAttributes.length) {
+					for (let i = 0, l = parameters.customAttributes.length; i < l; i++) {
+						let a = parameters.customAttributes[i]; 
+						// Maybe should validate name isn't already used?
+						mesh[a.name] = r.createBuffer(parameters[a.source], a.size);
+						// Note - dynamic not currently supported for custom attributes
+					}
+				}
+
 				if (!parameters.dynamic) {
 					// clear mesh data if not mesh does not need to be dynamically updated
 					mesh.vertices = null;
@@ -1650,211 +1692,218 @@ var Mesh = module.exports = function(){
 	return exports;
 }();
 
-},{"./bounds":2,"./maths":11,"./renderer":15}],13:[function(require,module,exports){
+},{"./bounds":2,"./maths":11,"./renderer":16}],13:[function(require,module,exports){
 var Model = module.exports = (function() {
-    var exports = {};
+	var exports = {};
 
-    // Takes a URI of a glTF file to load
-    // Returns an object containing an array meshdata ready for use with Fury.Mesh
-    // In future can be extended to include material information
-    exports.load = function(uri, callback) {
-        // TODO: Check file extension, only gltf currently supported
-        // https://github.com/KhronosGroup/glTF/tree/master/specification/2.0
+	// Takes a URI of a glTF file to load
+	// Returns an object containing an array meshdata ready for use with Fury.Mesh
+	// In future can be extended to include material information
+	exports.load = function(uri, callback) {
+		// TODO: Check file extension, only gltf currently supported
+		// https://github.com/KhronosGroup/glTF/tree/master/specification/2.0
 
-        fetch(uri).then(function(response) {
-            return response.json();
-        }).then(function(json) {
-            // Find first mesh and load it
-            // TODO: Load all meshes
-            // TODO: Load all sets of texture coordinates
+		fetch(uri).then(function(response) {
+			return response.json();
+		}).then(function(json) {
+			// Find first mesh and load it
+			// TODO: Load all meshes
+			// TODO: Load all sets of texture coordinates
 
-            // TODO: Option to provide data as JS arrays (i.e. buffers: false)
-            // This is so we can have the data available to JS for runtime manipulation
-            var meshData = {
-                buffers: true
-            };
+			// TODO: Option to provide data as JS arrays (i.e. buffers: false)
+			// This is so we can have the data available to JS for runtime manipulation
+			var meshData = {
+				buffers: true
+			};
 
-            var attributes = json.meshes[0].primitives[0].attributes;
-            var positionIndex = attributes.POSITION;    // index into accessors
-            var normalsIndex = attributes.NORMAL;       // index into accessors
-            var uvIndex = attributes.TEXCOORD_0;        // index into accessors
-            var colorIndices = [];
+			var attributes = json.meshes[0].primitives[0].attributes;
+			var positionIndex = attributes.POSITION;    // index into accessors
+			var normalsIndex = attributes.NORMAL;       // index into accessors
+			var uvIndex = attributes.TEXCOORD_0;        // index into accessors
+			var colorIndices = [];
 
-            var propertyName = "COLOR_";
-            var propertyNameIndex = 0;
-            while (attributes.hasOwnProperty(propertyName + propertyNameIndex)) {
-              colorIndices.push(attributes[propertyName + propertyNameIndex]);
-              propertyNameIndex++;
-            }
+			var propertyName = "COLOR_";
+			var propertyNameIndex = 0;
+			while (attributes.hasOwnProperty(propertyName + propertyNameIndex)) {
+			  colorIndices.push(attributes[propertyName + propertyNameIndex]);
+			  propertyNameIndex++;
+			}
 
-            var indicesIndex = json.meshes[0].primitives[0].indices;
-            // ^^ I think this is the index and not the index count, should check with a more complex / varied model
+			var indicesIndex = json.meshes[0].primitives[0].indices;
+			// ^^ I think this is the index and not the index count, should check with a more complex / varied model
 
-            // Calculate bounding radius
-            var max = json.accessors[positionIndex].max;
-            var min = json.accessors[positionIndex].min;
-            var maxPointSqrDistance = max[0]*max[0] + max[1]*max[1] + max[2]*max[2];
-            var minPointSqrDistance = min[0]*min[0] + min[1]*min[1] + min[2]*min[2];
-            meshData.boundingRadius = Math.sqrt(Math.max(maxPointSqrDistance, minPointSqrDistance));
+			// Calculate bounding radius
+			var max = json.accessors[positionIndex].max;
+			var min = json.accessors[positionIndex].min;
+			var maxPointSqrDistance = max[0]*max[0] + max[1]*max[1] + max[2]*max[2];
+			var minPointSqrDistance = min[0]*min[0] + min[1]*min[1] + min[2]*min[2];
+			meshData.boundingRadius = Math.sqrt(Math.max(maxPointSqrDistance, minPointSqrDistance));
 
-            var vertexCount = json.accessors[positionIndex].count;
-            var positionBufferView = json.bufferViews[json.accessors[positionIndex].bufferView];
+			var vertexCount = json.accessors[positionIndex].count;
+			var positionBufferView = json.bufferViews[json.accessors[positionIndex].bufferView];
 
-            var indexCount = json.accessors[indicesIndex].count;
-            var indicesBufferView = json.bufferViews[json.accessors[indicesIndex].bufferView];
+			var indexCount = json.accessors[indicesIndex].count;
+			var indicesBufferView = json.bufferViews[json.accessors[indicesIndex].bufferView];
 
-            if (positionBufferView.buffer != indicesBufferView.buffer) {
-                console.error("Triangle Indices Buffer Index does not match Position Buffer Index");
-            }
+			if (positionBufferView.buffer != indicesBufferView.buffer) {
+				console.error("Triangle Indices Buffer Index does not match Position Buffer Index");
+			}
 
-            var normalsCount, uvCount;
-            var normalsBufferView, uvBufferView;
+			var normalsCount, uvCount;
+			var normalsBufferView, uvBufferView;
 
-            if (normalsIndex !== undefined) {
-                normalsCount = json.accessors[normalsIndex].count;
-                normalsBufferView = json.bufferViews[json.accessors[normalsIndex].bufferView];
-                if (positionBufferView.buffer != normalsBufferView.buffer) {
-                    console.error("Normals Buffer Index does not match Position Buffer Index");
-                }
-            }
+			if (normalsIndex !== undefined) {
+				normalsCount = json.accessors[normalsIndex].count;
+				normalsBufferView = json.bufferViews[json.accessors[normalsIndex].bufferView];
+				if (positionBufferView.buffer != normalsBufferView.buffer) {
+					console.error("Normals Buffer Index does not match Position Buffer Index");
+				}
+			}
 
-            if (uvIndex !== undefined) {
-                uvCount = json.accessors[uvIndex].count;
-                uvBufferView = json.bufferViews[json.accessors[uvIndex].bufferView];
-                if (positionBufferView.buffer != uvBufferView.buffer) {
-                    console.error("Texture Coordinates Buffer Index does not match Position Buffer Index");
-                }
-            }
+			if (uvIndex !== undefined) {
+				uvCount = json.accessors[uvIndex].count;
+				uvBufferView = json.bufferViews[json.accessors[uvIndex].bufferView];
+				if (positionBufferView.buffer != uvBufferView.buffer) {
+					console.error("Texture Coordinates Buffer Index does not match Position Buffer Index");
+				}
+			}
 
-            var colorsCounts = [];
-            var colorsBufferViews = [];
+			var colorsCounts = [];
+			var colorsBufferViews = [];
 
-            for (let i = 0, l = colorIndices.length; i < l; i++) {
-              let colorIndex = colorIndices[i];
-              let accessor = json.accessors[colorIndex];
-              colorsCounts[i] = accessor.count;
-              colorsBufferViews[i] = json.bufferViews[accessor.bufferView];
-              if (positionBufferView.buffer != colorsBufferViews[i].buffer) {
-                console.error("The COLOR_" + i +" Buffer Index does not match Position Buffer Index");
-              }
-            }
+			for (let i = 0, l = colorIndices.length; i < l; i++) {
+				let colorIndex = colorIndices[i];
+				let accessor = json.accessors[colorIndex];
+				colorsCounts[i] = accessor.count;
+				colorsBufferViews[i] = json.bufferViews[accessor.bufferView];
+				if (positionBufferView.buffer != colorsBufferViews[i].buffer) {
+					console.error("The COLOR_" + i +" Buffer Index does not match Position Buffer Index");
+				}
+			}
 
-            fetch(json.buffers[positionBufferView.buffer].uri).then(function(response) {
-                return response.arrayBuffer();
-            }).then(function(arrayBuffer) {
-                // TODO: pick typedarray type from accessors[index].componentType (5126 => Float32, 5123 => Int16)
-                // TODO: Get size from data from accessors[index].type rather than hardcoding
-                meshData.vertices = new Float32Array(arrayBuffer, positionBufferView.byteOffset, vertexCount * 3);
-                meshData.vertexCount = vertexCount;
+			fetch(json.buffers[positionBufferView.buffer].uri).then(function(response) {
+				return response.arrayBuffer();
+			}).then(function(arrayBuffer) {
+				// TODO: pick typedarray type from accessors[index].componentType (5126 => Float32, 5123 => Int16)
+				// TODO: Get size from data from accessors[index].type rather than hardcoding
+				meshData.vertices = new Float32Array(arrayBuffer, positionBufferView.byteOffset, vertexCount * 3);
+				meshData.vertexCount = vertexCount;
 
-                if (normalsIndex !== undefined) {
-                    meshData.normals = new Float32Array(arrayBuffer, normalsBufferView.byteOffset, normalsCount * 3);
-                    meshData.normalsCount = normalsCount;
-                }
+				if (normalsIndex !== undefined) {
+					meshData.normals = new Float32Array(arrayBuffer, normalsBufferView.byteOffset, normalsCount * 3);
+					meshData.normalsCount = normalsCount;
+				}
 
-                if (uvIndex !== undefined) {
-                    meshData.textureCoordinates = new Float32Array(arrayBuffer, uvBufferView.byteOffset, uvCount * 2);
-                    meshData.textureCoordinatesCount = uvCount;
-                }
+				if (uvIndex !== undefined) {
+					meshData.textureCoordinates = new Float32Array(arrayBuffer, uvBufferView.byteOffset, uvCount * 2);
+					meshData.textureCoordinatesCount = uvCount;
+				}
 
-                meshData.indices = new Int16Array(arrayBuffer, indicesBufferView.byteOffset, indexCount);
-                meshData.indexCount = indexCount;
+				meshData.indices = new Int16Array(arrayBuffer, indicesBufferView.byteOffset, indexCount);
+				meshData.indexCount = indexCount;
 
-                if(colorIndices.length > 0) {
-                  meshData.customBuffers = [];
-                  // Assumed componentType = 5126 => Float32, type = "VEC4" => count * 4
-                  for (let i = 0, l = colorIndices.length; i < l; i++) {
-                    meshData.customBuffers.push({
-                      name: "COLOR_" + i,
-                      buffer: new Float32Array(arrayBuffer, colorsBufferViews[i].byteOffset, colorsCounts[i] * 4),
-                      count: colorsCounts[i],
-                      componentType: 5126,
-                      size: 4
-                    });
-                  }
-                }
+				if(colorIndices.length > 0) {
+					meshData.customBuffers = [];
+					// Assumed componentType = 5126 => Float32, type = "VEC4" => count * 4
+					for (let i = 0, l = colorIndices.length; i < l; i++) {
+						meshData.customBuffers.push({
+							name: "COLOR_" + i,
+							buffer: new Float32Array(arrayBuffer, colorsBufferViews[i].byteOffset, colorsCounts[i] * 4),
+							count: colorsCounts[i],
+							componentType: 5126,
+							size: 4
+						});
+					}
+				}
 
-                callback({ meshData: [ meshData ]});
+				callback({ meshData: [ meshData ]});
 
-            }).catch(function(error) {
-                console.error("Unable to fetch data buffer from model");
-            });
+			}).catch(function(error) {
+				console.error("Unable to fetch data buffer from model");
+			});
 
-        }).catch(function(error) {
-            console.error("Unable to load model at " + uri);
-        });
-    };
+		}).catch(function(error) {
+			console.error("Unable to load model at " + uri);
+		});
+	};
 
-    return exports;
+	return exports;
 })();
 
 },{}],14:[function(require,module,exports){
-var Physics = module.exports = (function(){
-  // https://developer.mozilla.org/en-US/docs/Games/Techniques/3D_collision_detection
+const vec3 = require('./maths').vec3;
 
-  var exports = {};
+module.exports = (function(){
+	// https://developer.mozilla.org/en-US/docs/Games/Techniques/3D_collision_detection
 
-  // For now a box is an AABB - in future we'll need to allow rotation
-  var Box = exports.Box = require('./bounds');
+	let exports = {};
 
-  var Sphere = exports.Sphere = (function() {
-  	let exports = {};
-  	let prototype = {};
+	// For now a box is an AABB - in future we'll need to allow rotation
+	let Box = exports.Box = require('./bounds');
 
-  	exports.contains = function(point, sphere) {
-  		let dx = point[0] - sphere.center[0], dy = point[1] - sphere.center[1], dz = point[2] - sphere.center[2];
-  		let sqrDistance = dx * dx + dy * dy + dz * dz;
-  		return sqrDistance < sphere.radius * sphere.radius;
-  	};
+	exports.Sphere = (function() {
+		let exports = {};
+		let prototype = {};
 
-  	exports.intersect = function(a, b) {
-  		let dx = a.center[0] - b.center[0], dy = a.center[1] - b.center[1], dz = a.center[2] - b.center[2];
-  		let sqrDistance = dx * dx + dy * dy + dz * dz;
-  		return sqrDistance < (a.radius + b.radius) * (a.radius + b.radius);
-  	};
+		exports.contains = function(point, sphere) {
+			let dx = point[0] - sphere.center[0], dy = point[1] - sphere.center[1], dz = point[2] - sphere.center[2];
+			let sqrDistance = dx * dx + dy * dy + dz * dz;
+			return sqrDistance < sphere.radius * sphere.radius;
+		};
 
-  	exports.intersectBox = function(box, sphere) {
-  		return Box.intersectSphere(sphere, box);
-  	};
+		exports.intersect = function(a, b) {
+			let dx = a.center[0] - b.center[0], dy = a.center[1] - b.center[1], dz = a.center[2] - b.center[2];
+			let sqrDistance = dx * dx + dy * dy + dz * dz;
+			return sqrDistance < (a.radius + b.radius) * (a.radius + b.radius);
+		};
+		
+		exports.intersectBox = function(box, sphere) {
+			return Box.intersectSphere(sphere, box);
+		};
+		
+		exports.create = function(parameters) {
+			let sphere = Object.create(prototype);
+		
+			if (parameters.center) {
+				sphere.center = parameters.center;
+			} else {
+				sphere.center = vec3.create();
+			}
+			if (parameters.radius) {
+				sphere.radius = parameters.radius;
+			} else {
+				sphere.radius = 0;
+			}
 
-  	exports.create = function(parameters) {
-  		let sphere = Object.create(prototype);
-
-  		if (parameters.center) {
-  			sphere.center = parameters.center;
-  		} else {
-  			sphere.center = vec3.create();
-  		}
-      if (parameters.radius) {
-        sphere.radius = parameters.radius;
-      } else {
-        sphere.radius = 0;
-      }
-
-  		return sphere;
-  	};
-
-  	return exports;
-  })();
-
-  return exports;
+			return sphere;
+		};
+	
+		return exports;
+	})();
+	
+	return exports;
 })();
 
-},{"./bounds":2}],15:[function(require,module,exports){
+},{"./bounds":2,"./maths":11}],15:[function(require,module,exports){
+module.exports = (function(){
+	let exports = {};
+
+	let prefabs = exports.prefabs = { keys: "Can't touch this, doo doo doo, do do, do do" };
+
+	exports.create = (parameters) => {
+		if(!parameters || !parameters.name || prefabs[parameters.name]) {
+			throw new Error("Please provide a valid and unique name parameter for your prefab");
+		} else {
+			prefabs[parameters.name] = parameters;
+		}
+	};
+
+	return exports;
+})();
+},{}],16:[function(require,module,exports){
 // This module is essentially a GL Context Facade
 // There are - of necessity - a few hidden logical dependencies in this class
 // mostly with the render functions, binding buffers before calling a function draw
-
-var Maths = require('./maths');
-var mat2 = Maths.mat2,
-	mat3 = Maths.mat3,
-	mat4 = Maths.mat4,
-	quat = Maths.quat,
-	quat2 = Maths.quat2,
-	vec2 = Maths.vec2,
-	vec3 = Maths.vec3,
-	vec4 = Maths.vec4;
-
 var gl, currentShaderProgram, anisotropyExt, maxAnisotropy;
 
 exports.init = function(canvas, contextAttributes) {
@@ -1879,6 +1928,7 @@ exports.init = function(canvas, contextAttributes) {
 	}
 };
 
+// TODO: This cshould be called setClearColor
 exports.clearColor = function(r,g,b,a) {
 	gl.clearColor(r, g, b, a);
 };
@@ -1886,6 +1936,10 @@ exports.clearColor = function(r,g,b,a) {
 exports.clear = function() {
 	gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight); // TODO: this isn't necessary every frame
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+};
+
+exports.clearDepth = function() {
+	gl.clear(gl.DEPTH_BUFFER_BIT);
 };
 
 // Shader / Shader Programs
@@ -1984,6 +2038,8 @@ exports.createTexture = function(source, quality, clamp, disableAniso) {
 	gl.bindTexture(gl.TEXTURE_2D, texture);
 	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+	// If we want to create mipmaps manually provide an array source and put them into
+	// different levels in texImage2D - you must provide all mipmap levels
 
 	setTextureQuality(gl.TEXTURE_2D, quality, disableAniso);
 
@@ -2058,13 +2114,13 @@ exports.setTexture = function(location, texture) {
 };
 
 // Blending
-var BlendEquation = exports.BlendEquation = {
+exports.BlendEquation = {
 	Add: "FUNC_ADD",
 	Subtract: "FUNC_SUBTRACT",
 	ReverseSubtract: "FUNC_REVERSE_SUBTRACT"
 };
 
-var BlendType = exports.BlendType = {
+exports.BlendType = {
 	Zero: "ZERO",
 	One: "ONE",
 	ConstantAlpha: "CONSTANT_ALPHA",
@@ -2091,8 +2147,19 @@ exports.enableBlending = function(sourceBlend, destinationBlend, equation) {
 	}
 	gl.enable(gl.BLEND);
 	gl.depthMask(false);
-
 };
+
+exports.enableSeparateBlending = function(sourceColorBlend, destinationColorBlend, sourceAlphaBlend, destinationAlphaBlend, equation) {
+	gl.enable(gl.BLEND);
+	if (equation) {
+		// Does WebGL support separate blend equations? Do we want to?
+		gl.blendEquation(gl[equation]);
+	}
+	if (sourceColorBlend && sourceAlphaBlend && destinationColorBlend && destinationAlphaBlend) {
+		gl.blendFuncSeparate(gl[sourceColorBlend], gl[destinationColorBlend], gl[sourceAlphaBlend], gl[destinationAlphaBlend]);
+	}
+	gl.depthMask(false);
+}
 
 exports.disableBlending = function() {
 	gl.disable(gl.BLEND);
@@ -2228,11 +2295,12 @@ exports.draw = function(renderMode, count, indexed, offset) {
 	}
 };
 
-},{"./maths":11}],16:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 var r = require('./renderer');
 var indexedMap = require('./indexedMap');
 var Material = require('./material');
 var Mesh = require('./mesh');
+var Prefab = require('./prefab');
 var Transform = require('./transform');
 var Maths = require('./maths');
 var Bounds = require('./bounds');
@@ -2323,9 +2391,11 @@ var Scene = module.exports = function() {
 		};
 
 		var addToAlphaList = function(object, depth) {
+			// TODO: Profile using Array sort instead of insertion sorting, also test add/remove from list rather than clear
 			depths[object.sceneId] = depth;
 			// Binary search
-			// Could technically do better by batching up items with the same depth according to material / mesh like sence graph
+			// Could technically do better by batching up items with the same depth according to material / mesh like scene graph
+			// However this is only relevant for 2D games with orthographic projection
 			var less, more, itteration = 1, inserted = false, index = Math.floor(alphaRenderObjects.length/2);
 			while(!inserted) {
 				less = (index === 0 || depths[alphaRenderObjects[index-1].sceneId] <= depth);
@@ -2375,6 +2445,16 @@ var Scene = module.exports = function() {
 			}
 		};
 
+		var sortByMaterial = function(a, b) {
+			if (a.materialId == b.materialId) {
+				return 0;
+			} else if (a.materialId < b.materialId) { // Note: will not order strings by their parsed numberical value, however this is not required.
+				return +1;
+			} else {
+				return -1;
+			}
+		};
+
 		// Add Render Object
 		scene.add = function(parameters) {
 			var object = {};
@@ -2397,7 +2477,10 @@ var Scene = module.exports = function() {
 			// as the renderer requires it.
 			object.transform = Transform.create(parameters);
 
-			object.sceneId = renderObjects.add(object);
+			// For now just sort by material on add
+			object.sceneId = renderObjects.add(object, sortByMaterial); 
+			// Would probably be more performant to dynamic changes if kept a record of start and end index
+			// of all materials and could simply inject at the correct point - TODO: Profile
 			object.static = !!parameters.static;
 			object.active = parameters.active === undefined || !!parameters.active;
 
@@ -2431,11 +2514,11 @@ var Scene = module.exports = function() {
 		// Instantiate prefab instance
 		scene.instantiate = function(parameters) {
 			var prefab;
-			if(!parameters || !parameters.name || !Fury.prefabs[parameters.name]) {
+			if(!parameters || !parameters.name || !Prefab.prefabs[parameters.name]) {
 				throw new Error("You must provide a valid prefab name");
 			}
 			if(!prefabs[parameters.name]) {
-				var defn = Fury.prefabs[parameters.name];
+				var defn = Prefab.prefabs[parameters.name];
 				if(!defn.materialConfig || !defn.meshConfig) {
 					throw new Error("Requested prefab must have a material and a mesh config present");
 				}
@@ -2493,8 +2576,7 @@ var Scene = module.exports = function() {
 			mat4.translate(cameraMatrix, cameraMatrix, vec3.set(cameraOffset, -camera.position[0], -camera.position[1], -camera.position[2]));
 
 			pMatrixRebound = false;
-			alphaRenderObjects.length = 0;
-			// Simple checks for now - no ordering
+			alphaRenderObjects.length = 0; 
 
 			// TODO: Scene Graph
 			// Batched first by Shader
@@ -2506,12 +2588,15 @@ var Scene = module.exports = function() {
 			// This batching by shader / material / mesh may need to be combined with scene management techniques
 			if (camera.clear) {
 				r.clear();
+			} else if (camera.clearDepth) {
+				r.clearDepth();
 			}
 
 			// TODO: Scene graph should provide these as a single thing to loop over, will then only split and loop for instances at mvMatrix binding / drawing
 			// Scene Graph should be class with enumerate() method, that way it can batch as described above and sort watch its batching / visibility whilst providing a way to simple loop over all elements
 			var culled = false;
 			for(var i = 0, l = renderObjects.keys.length; i < l; i++) {
+				// TODO: Detect if resorting is necessary (check +1 and -1 in array against sort function)
 				var renderObject = renderObjects[renderObjects.keys[i]];
 				if (scene.enableFrustumCulling) {
 					culled = isCulledByFrustrum(camera, renderObject);
@@ -2550,8 +2635,13 @@ var Scene = module.exports = function() {
 			}
 			for(i = 0, l = alphaRenderObjects.length; i < l; i++) {
 				var renderObject = alphaRenderObjects[i];
+				let m = renderObject.material; 
 				// Could probably do this in bind and draw method
-				r.enableBlending(renderObject.material.sourceBlendType, renderObject.material.destinationBlendType, renderObject.material.blendEquation);
+				if (!m.blendSeparate) {
+					r.enableBlending(m.sourceBlendType, m.destinationBlendType, m.blendEquation);
+				} else {
+					r.enableSeparateBlending(m.sourceColorBlendType, m.destinationColorBlendType, m.sourceAlphaBlendType, m.destinationAlphaBlendType, m.blendEquation);
+				}
 				bindAndDraw(renderObject);
 			}
 			r.disableBlending();
@@ -2677,7 +2767,7 @@ var Scene = module.exports = function() {
 	return exports;
 }();
 
-},{"./bounds":2,"./indexedMap":8,"./material":10,"./maths":11,"./mesh":12,"./renderer":15,"./transform":19}],17:[function(require,module,exports){
+},{"./bounds":2,"./indexedMap":8,"./material":10,"./maths":11,"./mesh":12,"./prefab":15,"./renderer":16,"./transform":20}],18:[function(require,module,exports){
 // Shader Class for use with Fury Scene
 var r = require('./renderer');
 
@@ -2749,7 +2839,7 @@ var Shader = module.exports = function() {
 	return exports;
 }();
 
-},{"./renderer":15}],18:[function(require,module,exports){
+},{"./renderer":16}],19:[function(require,module,exports){
 let Shader = require('./shader');
 
 let Shaders = module.exports = (function() {
@@ -2854,7 +2944,7 @@ let Shaders = module.exports = (function() {
 
 	return exports;
 })();
-},{"./shader":17}],19:[function(require,module,exports){
+},{"./shader":18}],20:[function(require,module,exports){
 var Maths = require('./maths');
 var quat = Maths.quat, vec3 = Maths.vec3;
 
@@ -2883,8 +2973,9 @@ var Transform = module.exports = function() {
 	return exports;
 }();
 
-},{"./maths":11}],20:[function(require,module,exports){
-let Utils = module.exports = (function(){
+},{"./maths":11}],21:[function(require,module,exports){
+// Utils
+module.exports = (function(){
 	let exports = {};
 
 	exports.createScaledImage = (config) => {
