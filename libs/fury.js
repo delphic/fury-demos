@@ -48,7 +48,7 @@ module.exports = (function() {
 		}
 	};
 
-	exports.contains = (point, box) => {
+	exports.contains = function(point, box) {
 		return point[0] >= box.min[0] && point[0] <= box.max[0]
 			&& point[1] >= box.min[1] && point[1] <= box.max[1]
 			&& point[2] >= box.min[2] && point[2] <= box.max[2];
@@ -57,37 +57,37 @@ module.exports = (function() {
 	// TODO: Adds Touches methods which use <= and >=
 	// Note - ray casts should probably return true for touches
 
-	exports.intersect = (a, b) => {
+	exports.intersect = function(a, b) {
 		return (a.min[0] < b.max[0] && a.max[0] > b.min[0])
 			&& (a.min[1] < b.max[1] && a.max[1] > b.min[1])
 			&& (a.min[2] < b.max[2] && a.max[2] > b.min[2]);
 	};
 
 	// Return true if box b and box a overlap on provided axis 
-	exports.intersectsAxis = (a, b, axis) => {
+	exports.intersectsAxis = function(a, b, axis) {
 		return a.min[axis] < b.max[axis] && a.max[axis] > b.min[axis];
 	};
 
 	// Returns true if box b offset by provided displacement would intersect box a on provided axis 
-	exports.intersectsAxisOffset = (a, b, axis, displacement) => {
+	exports.intersectsAxisOffset = function(a, b, axis, displacement) {
 		return a.min[axis] < b.max[axis] + displacement && a.max[axis] > b.min[axis] + displacement;
 	};
 
 	// Enters functions return true if box b did not intersect box a on specified axis
 	// before displacement but would afterwards. Calculating the point of entry could be useful.
 	// If it's always needed we could return the distance and use > 0 check for does enter
-	exports.entersAxis = (a, b, axis, displacement) => {
+	exports.entersAxis = function(a, b, axis, displacement) {
 		return !(a.min[axis] < b.max[axis] && a.max[axis] > b.min[axis])
 			&& (a.min[axis] < b.max[axis] + displacement && a.max[axis] > b.min[axis] + displacement);
 	};
 
 	// Entered is the same as enters but it assumes you've already moved the box
-	exports.enteredAxis = (a, b, axis, displacement) => {
+	exports.enteredAxis = function(a, b, axis, displacement) {
 		return !(a.min[axis] < b.max[axis] - displacement && a.max[axis] > b.min[axis] - displacement)
 			&& (a.min[axis] < b.max[axis] && a.max[axis] > b.min[axis]);
 	};
 
-	exports.rayCast = (out, origin, direction, box) => {
+	exports.rayCast = function(out, origin, direction, box) {
 		// Using 0 to imply no intersection so we can return distance (if normalized)
 		// Wouldn't work if we included origin touching as impact
 
@@ -124,7 +124,7 @@ module.exports = (function() {
 		return 0;
 	}
 
-	exports.intersectSphere = (sphere, box) => {
+	exports.intersectSphere = function(sphere, box) {
 		// closest point on box to sphere center
 		let x = Math.max(box.min[0], Math.min(sphere.center[0], box.max[0]));
 		let y = Math.max(box.min[1], Math.min(sphere.center[1], box.max[1]));
@@ -137,7 +137,7 @@ module.exports = (function() {
 		return sqrDistance < sphere.radius * sphere.radius;
 	};
 
-	exports.create = (parameters) => {
+	exports.create = function(parameters) {
 			// Note - you are expected to recalculate min/max when position or extents change
 			// or alternatively if you change min/max you can recalculate extents/size/center
 			let aabb = Object.create(prototype);
@@ -323,7 +323,7 @@ module.exports = (function() {
 		}
 	};
 
-	exports.create = (parameters) => {
+	exports.create = function(parameters) {
 		let camera = Object.create(prototype);
 		// TODO: Arguement Checking
 		camera.type = parameters.type ? parameters.type : Type.Perspective;
@@ -535,7 +535,7 @@ module.exports = (function() {
 
 	let lastTime = 0;
 
-	exports.init = (parameters) => {
+	exports.init = function(parameters) {
 		if (parameters.maxFrameTimeMs && typeof(parameters.maxFrameTimeMs) === 'number') {
 			// Optional max frame time to keep physics calculations sane
 			maxFrameTimeMs = parameters.maxFrameTimeMs;
@@ -553,7 +553,7 @@ module.exports = (function() {
 		}
 	};
 
-	exports.start = () => {
+	exports.start = function() {
 		stopCount = Math.max(0, stopCount - 1);
 		if (stopCount == 0) {
 			switch (state) {
@@ -569,25 +569,25 @@ module.exports = (function() {
 		}
 	};
 
-	exports.stop = () => {
+	exports.stop = function() {
 		stopCount += 1;
 		if (state != State.Paused) {
 			state = State.RequestPause;
 		}
 	};
 
-	exports.isRunning = () => {
+	exports.isRunning = function() {
 		return state === State.Running;
 	};
 	
-	let onWindowBlur = () => {
+	let onWindowBlur = function() {
 		exports.stop();
 	}; 
-	let onWindowFocus = () => {
+	let onWindowFocus = function() {
 		exports.start();
 	};
 
-	let loop = () => {
+	let loop = function() {
 		if (state == State.RequestPause) {
 			state = State.Paused;
 			return;
@@ -679,7 +679,7 @@ module.exports = (function(){
 		}
 	};
 
-	exports.create = () => {
+	exports.create = function() {
 		// TODO: Option to specify property name to use for id, defaulting to "id"
 		let map = Object.create(prototype);
 		map.keys = [];
@@ -704,7 +704,7 @@ module.exports = (function() {
 
 	let defaultTime = Date.now(); // Just return start of program rather than start of epoch if keys never pressed
 
-	exports.init = (targetCanvas) => {
+	exports.init = function(targetCanvas) {
 			canvas = targetCanvas;
 			canvas.addEventListener("mousemove", handleMouseMove);
 			canvas.addEventListener("mousedown", handleMouseDown, true);
@@ -721,15 +721,15 @@ module.exports = (function() {
 			window.addEventListener("blur", handleBlur);
 	};
 
-	exports.isPointerLocked = () => {
+	exports.isPointerLocked = function() {
 		return pointerLocked;
 	};
 
-	exports.requestPointerLock = () => {
+	exports.requestPointerLock = function() {
 		return canvas.requestPointerLock();
 	};
 
-	exports.releasePointerLock = () => {
+	exports.releasePointerLock = function() {
 		document.exitPointerLock();
 	};
 
@@ -737,7 +737,7 @@ module.exports = (function() {
 	let MousePosition = exports.MousePosition = [0, 0];
 	let MouseWheel = exports.MouseWheel = [0, 0, 0];
 
-	let keyPressed = (key) => {
+	let keyPressed = function(key) {
 		if (!isNaN(key) && !key.length) {
 			return currentlyPressedKeys[key];
 		}
@@ -750,7 +750,7 @@ module.exports = (function() {
 		}
 	};
 
-	exports.keyUp = (key) => {
+	exports.keyUp = function(key) {
 		if (!isNaN(key) && !key.length) {
 			return upKeys[key];
 		}
@@ -763,7 +763,7 @@ module.exports = (function() {
 		}
 	};
 
-	exports.keyDown = (key, thisFrame) => {
+	exports.keyDown = function(key, thisFrame) {
 		if (!thisFrame) {
 			return keyPressed(key);
 		} else {
@@ -780,7 +780,7 @@ module.exports = (function() {
 		}
 	};
 
-	let keyDownTime = exports.keyDownTime = (key) => {
+	let keyDownTime = exports.keyDownTime = function(key) {
 		if (!isNaN(key) && !key.length) {
 			return downKeyTimes[key];
 		} else if (key) {
@@ -791,7 +791,7 @@ module.exports = (function() {
 		}
 	}
 
-	exports.keyUpTime = (key) => {
+	exports.keyUpTime = function(key) {
 		if (!isNaN(key) && !key.length) {
 			return upKeyTimes[key];
 		} else if (key) {
@@ -802,7 +802,7 @@ module.exports = (function() {
 		}
 	}
 
-	exports.getAxis = (plusKey, minusKey, smoothTime, ease) => {
+	exports.getAxis = function(plusKey, minusKey, smoothTime, ease) {
 		let result = 0;
 		let now = Date.now();
 		if (keyPressed(plusKey)) {
@@ -826,7 +826,7 @@ module.exports = (function() {
 		return result;
 	};
 
-	let mousePressed = (button) => {
+	let mousePressed = function(button) {
 		if (!isNaN(button) && !button.length) {
 			return mouseState[button];
 		} else if (button) {
@@ -837,7 +837,7 @@ module.exports = (function() {
 		}
 	}
 
-	exports.mouseUp = (button) => {
+	exports.mouseUp = function(button) {
 		if (!isNaN(button) && !button.length) {
 			return upMouse[button];
 		} else if (button) {
@@ -848,7 +848,7 @@ module.exports = (function() {
 		}
 	};
 
-	exports.mouseDown = (button, thisFrame) => {
+	exports.mouseDown = function(button, thisFrame) {
 		if (!thisFrame) {
 			return mousePressed(button);
 		} else {
@@ -863,7 +863,7 @@ module.exports = (function() {
 		}
 	};
 
-	exports.handleFrameFinished = () => {
+	exports.handleFrameFinished = function() {
 		MouseDelta[0] = MouseDelta[1] = 0;
 		MouseWheel[0] = MouseWheel[1] = MouseWheel[2] = 0;
 		downKeys.length = 0;
@@ -872,7 +872,7 @@ module.exports = (function() {
 		upMouse.length = 0;
 	};
 
-	let handleKeyDown = (event) => {
+	let handleKeyDown = function(event) {
 		// keyDown event can get called multiple times after a short delay
 		if (!currentlyPressedKeys[event.keyCode]) {
 			downKeys[event.keyCode] = true;
@@ -881,13 +881,13 @@ module.exports = (function() {
 		currentlyPressedKeys[event.keyCode] = true;
 	};
 
-	let handleKeyUp = (event) => {
+	let handleKeyUp = function(event) {
 		currentlyPressedKeys[event.keyCode] = false;
 		upKeyTimes[event.keyCode] = Date.now();
 		upKeys[event.keyCode] = true;
 	};
 
-	let handleBlur = () => {
+	let handleBlur = function() {
 		downMouse.length = 0;
 		mouseState.length = 0;
 		upMouse.length = 0;
@@ -897,14 +897,14 @@ module.exports = (function() {
 		upKeys.length = 0;	// Q: Should we be copying currently pressed Keys as they've kinda been released?
 	};
 
-	let handleMouseMove = (event) => {
+	let handleMouseMove = function(event) {
 		MousePosition[0] = event.pageX;
 		MousePosition[1] = event.pageY;
 		MouseDelta[0] += event.movementX;
 		MouseDelta[1] += event.movementY;
 	};
 
-	let handleMouseDown = (event) => {
+	let handleMouseDown = function(event) {
 		if (!mouseState[event.button]) {
 			downMouse[event.button] = true;
 			downMouseTimes[event.button] = Date.now();
@@ -913,24 +913,24 @@ module.exports = (function() {
 		return false;
 	};
 
-	let handleMouseUp = (event) => {
+	let handleMouseUp = function(event) {
 		mouseState[event.button] = false;
 		upMouseTimes[event.button] = Date.now();
 		upMouse[event.button] = true;
 	};
 
-	let handleMouseWheel = (event) => {
+	let handleMouseWheel = function(event) {
 		MouseWheel[0] += event.deltaX;
 		MouseWheel[1] += event.deltaY;
 		MouseWheel[2] += event.deltaZ;
 		// Note event.deltaMode determines if values are pixels, lines or pages, assumed pixels here
 	};
 
-	exports.getMouseViewportX = () => {
+	exports.getMouseViewportX = function() {
 		return MousePosition[0] / canvas.clientWidth;
 	};
 
-	exports.getMouseViewportY = () => {
+	exports.getMouseViewportY = function() {
 		return MousePosition[1] / canvas.clientHeight;
 	};
 
@@ -1500,7 +1500,7 @@ const vec3 = require('./maths').vec3;
 module.exports = (function(){
 	let exports = {};
 
-	let calculateMinPoint = exports.calculateMinPoint = (out, vertices) => {
+	let calculateMinPoint = exports.calculateMinPoint = function(out, vertices) {
 		let i, l, v1 = Number.MAX_VALUE, v2 = Number.MAX_VALUE, v3 = Number.MAX_VALUE;
 		for (i = 0, l = vertices.length; i < l; i += 3) {
 			v1 = Math.min(v1, vertices[i]);
@@ -1510,7 +1510,7 @@ module.exports = (function(){
 		out[0] = v1, out[1] = v2, out[2] = v3;
 	};
 
-	let calculateMaxPoint = exports.calculateMaxPoint = (out, vertices) => {
+	let calculateMaxPoint = exports.calculateMaxPoint = function(out, vertices) {
 		let i, l, v1 = Number.MIN_VALUE, v2 = Number.MIN_VALUE, v3 = Number.MIN_VALUE;
 		for (i = 0, l = vertices.length; i < l; i += 3) {
 			v1 = Math.max(v1, vertices[i]);
@@ -1523,7 +1523,7 @@ module.exports = (function(){
 	// Returns the furthest vertex from the local origin
 	// Note this is not the same as the furthest from the mid-point of the vertices
 	// This is necessray for the boundingRadius to remain accurate under rotation
-	let calculateBoundingRadius = (vertices) => {
+	let calculateBoundingRadius = function(vertices) {
 		var sqrResult = 0;
 		for (let i = 0, l = vertices.length; i< l; i += 3) {
 			let sqrDistance = vertices[i] * vertices[i]
@@ -1584,7 +1584,7 @@ module.exports = (function(){
 		}
 	};
 
-	exports.create = (parameters) => {
+	exports.create = function(parameters) {
 		let mesh = Object.create(prototype);
 
 		mesh.bounds = Bounds.create({ min: vec3.create(), max: vec3.create() });
@@ -1880,7 +1880,7 @@ module.exports = (function(){
 
 	let prefabs = exports.prefabs = { keys: "Can't touch this, doo doo doo, do do, do do" };
 
-	exports.create = (parameters) => {
+	exports.create = function(parameters) {
 		if(!parameters || !parameters.name || prefabs[parameters.name]) {
 			throw new Error("Please provide a valid and unique name parameter for your prefab");
 		} else {
@@ -1894,7 +1894,7 @@ module.exports = (function(){
 // This module is essentially a GL Context Facade
 // There are - of necessity - a few hidden logical dependencies in this class
 // mostly with the render functions, binding buffers before calling a function draw
-var gl, currentShaderProgram, anisotropyExt, maxAnisotropy;
+let gl, currentShaderProgram, anisotropyExt, maxAnisotropy;
 
 exports.init = function(canvas, contextAttributes) {
 	gl = canvas.getContext('webgl2', contextAttributes);
@@ -1911,9 +1911,9 @@ exports.init = function(canvas, contextAttributes) {
 	// Now TextureLocations.length will tell you how many there are and provide
 	// a link from the integer to the actual value
 	TextureLocations.length = 0;
-	var i = 0;
-	while(gl["TEXTURE"+i.toString()]) {
-		TextureLocations.push(gl["TEXTURE"+i.toString()]);
+	let i = 0;
+	while(gl["TEXTURE" + i.toString()]) {
+		TextureLocations.push(gl["TEXTURE" + i.toString()]);
 		i++;
 	}
 };
@@ -1934,19 +1934,19 @@ exports.clearDepth = function() {
 
 // Shader / Shader Programs
 
-var ShaderType = exports.ShaderType = {
+let ShaderType = exports.ShaderType = {
 	Vertex: "vertex",
 	Fragment: "fragment"
 };
 
 exports.createShader = function(type, glsl) {
-	var shader;
+	let shader;
 	if (type == ShaderType.Vertex) {
 		shader = gl.createShader(gl.VERTEX_SHADER);
 	} else if (type == ShaderType.Fragment) {
 		shader = gl.createShader(gl.FRAGMENT_SHADER);
 	} else {
-		throw new Error("Unrecognised shader type '"+type+"'");
+		throw new Error("Unrecognised shader type '" + type + "'");
 	}
 	gl.shaderSource(shader, glsl);
 	gl.compileShader(shader);
@@ -1956,13 +1956,12 @@ exports.createShader = function(type, glsl) {
 	return shader;
 };
 
-exports.deleteShader = function(shader)
-{
+exports.deleteShader = function(shader) {
 	gl.deleteShader(shader);
 };
 
 exports.createShaderProgram = function(vertexShader, fragmentShader) {
-	var program = gl.createProgram();
+	let program = gl.createProgram();
 	gl.attachShader(program, vertexShader);
 	gl.attachShader(program, fragmentShader);
 	gl.linkProgram(program);
@@ -1980,7 +1979,7 @@ exports.useShaderProgram = function(shaderProgram) {
 // Buffers
 
 exports.createBuffer = function(data, itemSize, indexed) {
-	var buffer = gl.createBuffer();
+	let buffer = gl.createBuffer();
 	if (!indexed) {
 		gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
@@ -1994,7 +1993,7 @@ exports.createBuffer = function(data, itemSize, indexed) {
 };
 
 exports.createArrayBuffer = function(data, itemSize, numItems) {
-    var buffer = gl.createBuffer();
+    let buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
     buffer.itemSize = itemSize;
@@ -2003,7 +2002,7 @@ exports.createArrayBuffer = function(data, itemSize, numItems) {
 };
 
 exports.createElementArrayBuffer = function(data, itemSize, numItems) {
-    var buffer = gl.createBuffer();
+    let buffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, data, gl.STATIC_DRAW);
     buffer.itemSize = itemSize;
@@ -2013,9 +2012,9 @@ exports.createElementArrayBuffer = function(data, itemSize, numItems) {
 
 // Textures
 
-var TextureLocations = exports.TextureLocations = [];
+let TextureLocations = exports.TextureLocations = [];
 
-var TextureQuality = exports.TextureQuality = {
+let TextureQuality = exports.TextureQuality = {
 	Pixel: "pixel",			// Uses Mips and nearest pixel
 	Highest: "highest",		// Uses Mips & Interp (trilinear)
 	High: "high",			// Uses Mips & Interp (bilinear)
@@ -2024,7 +2023,7 @@ var TextureQuality = exports.TextureQuality = {
 };
 
 exports.createTexture = function(source, quality, clamp, disableAniso) {
-	var texture = gl.createTexture();
+	let texture = gl.createTexture();
 	gl.bindTexture(gl.TEXTURE_2D, texture);
 	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
@@ -2044,7 +2043,7 @@ exports.createTexture = function(source, quality, clamp, disableAniso) {
 
 /// width and height are of an individual texture
 exports.createTextureArray = function(source, width, height, imageCount, quality, clamp) {
-	var texture = gl.createTexture();
+	let texture = gl.createTexture();
 	// gl.activeTexture(gl.TEXTURE0);
 	gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
 	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -2062,7 +2061,7 @@ exports.createTextureArray = function(source, width, height, imageCount, quality
 	return texture;
 };
 
-var setTextureQuality = function(glTextureType, quality, disableAniso) {
+let setTextureQuality = function(glTextureType, quality, disableAniso) {
 	if (quality == TextureQuality.Pixel) {
 		gl.texParameteri(glTextureType, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 		gl.texParameteri(glTextureType, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
@@ -2129,7 +2128,7 @@ exports.BlendType = {
 };
 
 exports.enableBlending = function(sourceBlend, destinationBlend, equation) {
-	if(equation) {
+	if (equation) {
 		gl.blendEquation(gl[equation]);
 	}
 	if(sourceBlend && destinationBlend) {
@@ -2218,63 +2217,63 @@ exports.setUniformMatrix4 = function(name, value) {
 };
 
 // Draw Functions
-var RenderMode = exports.RenderMode = {
+let RenderMode = exports.RenderMode = {
 	Triangles: "triangles",
 	TriangleStrip: "triangleStrip",
 	Lines: "lines",
 	Points: "points"
 };
 
-var drawTriangles = exports.drawTriangles = function(count) {
+let drawTriangles = exports.drawTriangles = function(count) {
 	gl.drawArrays(gl.TRIANGLES, 0, count);
 };
-var drawTriangleStrip = exports.drawTriangleStrip = function(count) {
+let drawTriangleStrip = exports.drawTriangleStrip = function(count) {
 	gl.drawArrays(gl.TRIANGLE_STRIP, 0, count);
 };
-var drawLines = exports.drawLines = function(count) {
+let drawLines = exports.drawLines = function(count) {
 	gl.drawArrays(gl.LINES, 0, count);
 };
-var drawPoints = exports.drawPoints = function(count) {
+let drawPoints = exports.drawPoints = function(count) {
 	gl.drawArrays(gl.POINTS, 0, count);
 };
-var drawIndexedTriangles = exports.drawIndexedTriangles = function(count, offset) {
+let drawIndexedTriangles = exports.drawIndexedTriangles = function(count, offset) {
 	gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_SHORT, offset);
 };
-var drawIndexedTriangleStrip = exports.drawIndexedTriangleStrip = function(count, offset) {
+let drawIndexedTriangleStrip = exports.drawIndexedTriangleStrip = function(count, offset) {
 	gl.drawElements(gl.TRIANGLE_STRIP, count, gl.UNSIGNED_SHORT, offset);
 }
-var drawIndexedLines = exports.drawIndexedLines = function(count, offset) {
+let drawIndexedLines = exports.drawIndexedLines = function(count, offset) {
 	gl.drawElements(gl.LINES, count, gl.UNSIGNED_SHORT, offset);
 };
-var drawIndexedPoints = exports.drawIndexedPoints = function(count, offset) {
+let drawIndexedPoints = exports.drawIndexedPoints = function(count, offset) {
 	gl.drawElements(gl.POINTS, count, gl.UNSIGNED_SHORT, offset);
 };
 
 exports.draw = function(renderMode, count, indexed, offset) {
-	switch(renderMode) {
+	switch (renderMode) {
 		case RenderMode.Triangles:
-			if(!indexed) {
+			if (!indexed) {
 				drawTriangles(count);
 			} else {
 				drawIndexedTriangles(count, offset);
 			}
 			break;
 		case RenderMode.TriangleStrip:
-			if(!indexed) {
+			if (!indexed) {
 				drawTriangleStrip(count);
 			} else {
 				drawIndexedTriangleStrip(count);
 			}
 			break;
 		case RenderMode.Lines:
-			if(!indexed) {
+			if (!indexed) {
 				drawLines(count);
 			} else {
 				drawIndexedLines(count, offset);
 			}
 			break;
 		case RenderMode.Points:
-			if(!indexed) {
+			if (!indexed) {
 				drawPoints(count);
 			} else {
 				drawIndexedPoints(count, offset);
@@ -2286,34 +2285,29 @@ exports.draw = function(renderMode, count, indexed, offset) {
 };
 
 },{}],17:[function(require,module,exports){
-var r = require('./renderer');
-var indexedMap = require('./indexedMap');
-var Material = require('./material');
-var Mesh = require('./mesh');
-var Prefab = require('./prefab');
-var Transform = require('./transform');
-var Maths = require('./maths');
-var Bounds = require('./bounds');
-var mat2 = Maths.mat2,
-	mat3 = Maths.mat3,
+const r = require('./renderer');
+const IndexedMap = require('./indexedMap');
+const Material = require('./material');
+const Mesh = require('./mesh');
+const Prefab = require('./prefab');
+const Transform = require('./transform');
+const Maths = require('./maths');
+const Bounds = require('./bounds');
+const mat3 = Maths.mat3,
 	mat4 = Maths.mat4,
 	quat = Maths.quat,
-	quat2 = Maths.quat2,
-	vec2 = Maths.vec2,
-	vec3 = Maths.vec3,
-	vec4 = Maths.vec4;
+	vec3 = Maths.vec3;
 
-var Scene = module.exports = function() {
-	var nextSceneId = 0;
-	var exports = {};
-	var prototype = {};
+module.exports = (function() {
+	let nextSceneId = 0;
+	let exports = {};
 
 	// Note Meshes and Materials shared across scenes
 	// Going to use dictionaries but with an array of keys for enumeration (hence private with accessor methods)
-	var meshes = indexedMap.create();
-	var materials = indexedMap.create();
-	var shaders = indexedMap.create();
-	var textures = indexedMap.create();
+	let meshes = IndexedMap.create();
+	let materials = IndexedMap.create();
+	let shaders = IndexedMap.create();
+	let textures = IndexedMap.create();
 
 	// Note: clears all resources - any uncleared existing scenes will break
 	exports.clearResources = function() {
@@ -2327,34 +2321,33 @@ var Scene = module.exports = function() {
 	// to check objects are used or reference count them - will need to track created scenes
 
 	// glState Tracking - shared across scenes
-	var currentShaderId, currentMaterialId, currentMeshId, pMatrixRebound = false;
-	var nextTextureLocation = 0, currentTextureBindings = {}, currentTextureLocations = [];	// keyed on texture.id to binding location, keyed on binding location to texture.id
+	let currentShaderId, currentMaterialId, currentMeshId, pMatrixRebound = false;
+	let nextTextureLocation = 0, currentTextureBindings = {}, currentTextureLocations = [];	// keyed on texture.id to binding location, keyed on binding location to texture.id
 
-	var create = exports.create = function(parameters) {
-		var sceneId = (nextSceneId++).toString();
-		var cameras = {};
-		var cameraNames = [];
-		var mainCameraName = "main";
+	exports.create = function(parameters) {
+		let cameras = {};
+		let cameraNames = [];
+		let mainCameraName = "main";
 		// mvMatrix may need to be a stack in future (although a stack which avoids unnecessary mat4.creates)
-		var pMatrix = mat4.create(), mvMatrix = mat4.create(), nMatrix = mat3.create(), cameraMatrix = mat4.create(), cameraOffset = vec3.create(), inverseCameraRotation = quat.create();
+		let pMatrix = mat4.create(), mvMatrix = mat4.create(), nMatrix = mat3.create(), cameraMatrix = mat4.create(), cameraOffset = vec3.create(), inverseCameraRotation = quat.create();
 		
 
-		var scene = Object.create(prototype);
-
+		let scene = {};
+		scene.id = (nextSceneId++).toString();
 		scene.enableFrustumCulling = !!parameters.enableFrustumCulling;
-		var forceSphereCulling = !!parameters.forceSphereCulling;
+		let forceSphereCulling = !!parameters.forceSphereCulling;
 
 		// these renderObjects / instances on prefabs need to contain at minimum materialId, meshId, and transform (currently object just has material and mesh as well as transform)
-		var renderObjects = indexedMap.create(); // TODO: use materialId / meshId to bind
-		var prefabs = { keys: [] };	// Arguably instances could be added to renderer objects and memory would still be saved, however keeping a separate list allows easier batching for now
+		let renderObjects = IndexedMap.create(); // TODO: use materialId / meshId to bind
+		let prefabs = { keys: [] };	// Arguably instances could be added to renderer objects and memory would still be saved, however keeping a separate list allows easier batching for now
 		// TODO: Should have an equivilent to indexedMap but where you supply the keys, keyedMap?.
-		var alphaRenderObjects = [];
-		var depths = {};
+		let alphaRenderObjects = [];
+		let depths = {};
 
-		var addTexturesToScene = function(material) {
-			for(var i = 0, l = material.shader.textureUniformNames.length; i < l; i++) {
-				var uniformName = material.shader.textureUniformNames[i];
-				var texture = material.textures[uniformName];
+		let addTexturesToScene = function(material) {
+			for (let i = 0, l = material.shader.textureUniformNames.length; i < l; i++) {
+				let uniformName = material.shader.textureUniformNames[i];
+				let texture = material.textures[uniformName];
 				if (texture) {
 					textures.add(texture);
 					bindTextureToLocation(texture);
@@ -2363,7 +2356,7 @@ var Scene = module.exports = function() {
 			}
 		};
 
-		var bindTextureToLocation = function(texture) {
+		let bindTextureToLocation = function(texture) {
 			if (currentTextureBindings[texture.id] === undefined) {
 				if (currentTextureLocations.length < r.TextureLocations.length) {
 					r.setTexture(currentTextureLocations.length, texture);
@@ -2380,17 +2373,17 @@ var Scene = module.exports = function() {
 			}
 		};
 
-		var addToAlphaList = function(object, depth) {
+		let addToAlphaList = function(object, depth) {
 			// TODO: Profile using Array sort instead of insertion sorting, also test add/remove from list rather than clear
 			depths[object.sceneId] = depth;
 			// Binary search
 			// Could technically do better by batching up items with the same depth according to material / mesh like scene graph
 			// However this is only relevant for 2D games with orthographic projection
-			var less, more, itteration = 1, inserted = false, index = Math.floor(alphaRenderObjects.length/2);
-			while(!inserted) {
+			let less, more, itteration = 1, inserted = false, index = Math.floor(alphaRenderObjects.length/2);
+			while (!inserted) {
 				less = (index === 0 || depths[alphaRenderObjects[index-1].sceneId] <= depth);
 				more = (index >= alphaRenderObjects.length || depths[alphaRenderObjects[index].sceneId] >= depth);
-				if(less && more) {
+				if (less && more) {
 					alphaRenderObjects.splice(index, 0, object);
 					inserted = true;
 				} else {
@@ -2405,7 +2398,7 @@ var Scene = module.exports = function() {
 			}
 		};
 
-		var createObjectBounds = function(object, mesh, rotation) {
+		let createObjectBounds = function(object, mesh, rotation) {
 			// If object is static and not rotated, create object AABB from mesh bounds
 			if (!forceSphereCulling && object.static && (!rotation || Maths.quatIsIdentity(rotation))) {
 				// TODO: Allow for calculation of AABB of rotated meshes
@@ -2416,18 +2409,7 @@ var Scene = module.exports = function() {
 			}
 		};
 
-		var recalculateObjectBounds = function(object) {
-			if (object.bounds) {
-				// This method recalculates AABB for a translated static objects
-				// NOTE: Does not account for rotation of object :scream:
-				// Need to recalculate extents as well as center if rotation is not identity
-				// => need to transform all mesh vertices in order to recalculate accurate AABB
-				vec3.add(object.bounds.center, object.mesh.bounds.center, object.transform.position);
-				object.bounds.recalculateMinMax();
-			}
-		};
-
-		var isCulledByFrustrum = function(camera, object) {
+		let isCulledByFrustrum = function(camera, object) {
 			if (!object.static || !object.bounds) {
 				return !camera.isSphereInFrustum(object.transform.position, object.mesh.boundingRadius);
 			} else {
@@ -2435,7 +2417,7 @@ var Scene = module.exports = function() {
 			}
 		};
 
-		var sortByMaterial = function(a, b) {
+		let sortByMaterial = function(a, b) {
 			if (a.materialId == b.materialId) {
 				return 0;
 			} else if (a.materialId < b.materialId) { // Note: will not order strings by their parsed numberical value, however this is not required.
@@ -2447,8 +2429,8 @@ var Scene = module.exports = function() {
 
 		// Add Render Object
 		scene.add = function(parameters) {
-			var object = {};
-			if(!parameters || !parameters.mesh || !parameters.material) {
+			let object = {};
+			if (!parameters || !parameters.mesh || !parameters.material) {
 				throw new Error("Mesh and Material must be present on the object.");
 			}
 
@@ -2503,18 +2485,18 @@ var Scene = module.exports = function() {
 
 		// Instantiate prefab instance
 		scene.instantiate = function(parameters) {
-			var prefab;
-			if(!parameters || !parameters.name || !Prefab.prefabs[parameters.name]) {
+			let prefab;
+			if (!parameters || !parameters.name || !Prefab.prefabs[parameters.name]) {
 				throw new Error("You must provide a valid prefab name");
 			}
-			if(!prefabs[parameters.name]) {
-				var defn = Prefab.prefabs[parameters.name];
-				if(!defn.materialConfig || !defn.meshConfig) {
+			if (!prefabs[parameters.name]) {
+				let defn = Prefab.prefabs[parameters.name];
+				if (!defn.materialConfig || !defn.meshConfig) {
 					throw new Error("Requested prefab must have a material and a mesh config present");
 				}
 				prefab = {
 					name: parameters.name,
-					instances: indexedMap.create(),
+					instances: IndexedMap.create(),
 					mesh: Mesh.create(defn.meshConfig),
 					material: Material.create(defn.materialConfig)
 				};
@@ -2528,7 +2510,7 @@ var Scene = module.exports = function() {
 			} else {
 				prefab = prefabs[parameters.name];
 			}
-			var instance = Object.create(prefab);
+			let instance = Object.create(prefab);
 			instance.transform = Transform.create(parameters);
 
 			instance.id = prefab.instances.add(instance);
@@ -2543,11 +2525,11 @@ var Scene = module.exports = function() {
 		// Add Camera
 		// Arguably camera.render(scene) would be a preferable pattern
 		scene.addCamera = function(camera, name) {
-			var key = name ? name : "main";
-			if(cameraNames.length === 0) {
+			let key = name ? name : "main";
+			if (cameraNames.length === 0) {
 				mainCameraName = key;
 			}
-			if(!cameras.hasOwnProperty(key)) {
+			if (!cameras[key]) {
 				cameraNames.push(key);
 			}
 			cameras[key] = camera;
@@ -2555,7 +2537,7 @@ var Scene = module.exports = function() {
 
 		// Render
 		scene.render = function(cameraName) {
-			var camera = cameras[cameraName ? cameraName : mainCameraName];
+			let camera = cameras[cameraName ? cameraName : mainCameraName];
 			if (scene.enableFrustumCulling) {
 				camera.calculateFrustum();
 			}
@@ -2584,10 +2566,10 @@ var Scene = module.exports = function() {
 
 			// TODO: Scene graph should provide these as a single thing to loop over, will then only split and loop for instances at mvMatrix binding / drawing
 			// Scene Graph should be class with enumerate() method, that way it can batch as described above and sort watch its batching / visibility whilst providing a way to simple loop over all elements
-			var culled = false;
-			for(var i = 0, l = renderObjects.keys.length; i < l; i++) {
+			let culled = false, renderObject = null;
+			for (let i = 0, l = renderObjects.keys.length; i < l; i++) {
 				// TODO: Detect if resorting is necessary (check +1 and -1 in array against sort function)
-				var renderObject = renderObjects[renderObjects.keys[i]];
+				renderObject = renderObjects[renderObjects.keys[i]];
 				if (scene.enableFrustumCulling) {
 					culled = isCulledByFrustrum(camera, renderObject);
 				}
@@ -2603,15 +2585,15 @@ var Scene = module.exports = function() {
 					}
 				}
 			}
-			for(i = 0, l = prefabs.keys.length; i < l; i++) {
-				var instances = prefabs[prefabs.keys[i]].instances;
-				for(var j = 0, n = instances.keys.length; j < n; j++) {
-					var instance = instances[instances.keys[j]];
+			for (let i = 0, l = prefabs.keys.length; i < l; i++) {
+				let instances = prefabs[prefabs.keys[i]].instances;
+				for (let j = 0, n = instances.keys.length; j < n; j++) {
+					let instance = instances[instances.keys[j]];
 					if (scene.enableFrustumCulling) {
 						culled = isCulledByFrustrum(camera, instance);
 					}
 					if (!culled && instance.active) {
-						if(instance.material.alpha) {
+						if (instance.material.alpha) {
 							let sortPosition = instance.transform.position;
 							if (instance.bounds) {
 								sortPosition = instance.bounds.center;
@@ -2623,8 +2605,8 @@ var Scene = module.exports = function() {
 					}
 				}
 			}
-			for(i = 0, l = alphaRenderObjects.length; i < l; i++) {
-				var renderObject = alphaRenderObjects[i];
+			for (let i = 0, l = alphaRenderObjects.length; i < l; i++) {
+				renderObject = alphaRenderObjects[i];
 				let m = renderObject.material; 
 				// Could probably do this in bind and draw method
 				if (!m.blendSeparate) {
@@ -2637,10 +2619,10 @@ var Scene = module.exports = function() {
 			r.disableBlending();
 		};
 
-		var bindAndDraw = function(object) {	// TODO: Separate binding and drawing
-			var shader = object.material.shader;
-			var material = object.material;
-			var mesh = object.mesh;
+		let bindAndDraw = function(object) {	// TODO: Separate binding and drawing
+			let shader = object.material.shader;
+			let material = object.material;
+			let mesh = object.mesh;
 			// BUG:
 			// If there's only one material or one mesh in the scene real time changes to the material or mesh will not present themselves as the id will still match the currently bound
 			// mesh / material, seems like we're going need a flag on mesh / material for forceRebind for this case. (should probably be called forceRebind as it 'might' be rebound anyway)
@@ -2649,9 +2631,9 @@ var Scene = module.exports = function() {
 			// TODO: When scene graph implemented - check material.shaderId & object.shaderId against shader.id, and object.materialId against material.id and object.meshId against mesh.id
 			// as this indicates that this object needs reordering in the graph (as it's been changed).
 
-			var shaderChanged = false;
-			var materialChanged = false;
-			if(!shader.id || shader.id != currentShaderId) {
+			let shaderChanged = false;
+			let materialChanged = false;
+			if (!shader.id || shader.id != currentShaderId) {
 				shaderChanged = true;
 				if(!shader.id) {	// Shader was changed on the material since originally added to scene
 					material.shaderId = shaders.add(shader);
@@ -2662,26 +2644,26 @@ var Scene = module.exports = function() {
 				pMatrixRebound = false;
 			}
 
-			if(!pMatrixRebound) {
+			if (!pMatrixRebound) {
 				// New Shader or New Frame, rebind projection Matrix
 				r.setUniformMatrix4(shader.pMatrixUniformName, pMatrix);
 				pMatrixRebound = true;
 			}
 
-			if(!material.id || material.id != currentMaterialId || material.dirty) {
-				if(!material.dirty) {
+			if (!material.id || material.id != currentMaterialId || material.dirty) {
+				if (!material.dirty) {
 					materialChanged = true;
 				} else {
 					material.dirty = false;
 				}
-				if(!material.id) {	// material was changed on object since originally added to scene
+				if (!material.id) {	// material was changed on object since originally added to scene
 					object.materialId = materials.add(material);
 				}
 				currentMaterialId = material.id;
 				shader.bindMaterial.call(r, material);
 			}
 
-			if(shaderChanged || materialChanged) {
+			if (shaderChanged || materialChanged) {
 				// Texture Rebinding dependencies
 				// If the shader has changed you DON'T need to rebind, you only need to rebind if the on the uniforms have changed since the shaderProgram was last used...
 					// NOTE Large Changes needed because of this
@@ -2691,28 +2673,28 @@ var Scene = module.exports = function() {
 				// If the material has changed textures may need rebinding
 
 				// Check for gl location rebinds needed, if any needed and rebind all to make sure we don't replace a texture we're using
-				var locationRebindsNeeded = false;
-				for(var i = 0, l = shader.textureUniformNames.length; i < l; i++) {
-					var uniformName = shader.textureUniformNames[i];
-					if(material.textures[uniformName]) {
-						var texture = material.textures[uniformName];
-						if(!texture.id) {
+				let locationRebindsNeeded = false, uniformName = null, texture = null;
+				for (let i = 0, l = shader.textureUniformNames.length; i < l; i++) {
+					uniformName = shader.textureUniformNames[i];
+					if (material.textures[uniformName]) {
+						texture = material.textures[uniformName];
+						if (!texture.id) {
 							textures.add(texture);
 							locationRebindsNeeded = true;
 							break;
 						}
-						if(isNaN(currentTextureBindings[texture.id])) {
+						if (isNaN(currentTextureBindings[texture.id])) {
 							locationRebindsNeeded = true;
 							break;
 						}
 					}
 				}
 				// Rebind if necessary and set uniforms
-				for(i = 0, l = shader.textureUniformNames.length; i < l; i++) {
-					var uniformName = shader.textureUniformNames[i];
-					if(material.textures[uniformName]) {
-						var texture = material.textures[uniformName];
-						if(locationRebindsNeeded) {
+				for (let i = 0, l = shader.textureUniformNames.length; i < l; i++) {
+					uniformName = shader.textureUniformNames[i];
+					if (material.textures[uniformName]) {
+						texture = material.textures[uniformName];
+						if (locationRebindsNeeded) {
 							bindTextureToLocation(texture);
 						}
 						r.setUniformInteger(uniformName, currentTextureBindings[texture.id]);
@@ -2720,8 +2702,8 @@ var Scene = module.exports = function() {
 				}
 			}
 
-			if(!mesh.id || mesh.id != currentMeshId || mesh.dirty) {
-				if(!mesh.id) {	// mesh was changed on object since originally added to scene
+			if (!mesh.id || mesh.id != currentMeshId || mesh.dirty) {
+				if (!mesh.id) {	// mesh was changed on object since originally added to scene
 					object.meshId = mesh.add(mesh);
 				}
 				currentMeshId = mesh.id;
@@ -2747,7 +2729,7 @@ var Scene = module.exports = function() {
 			r.draw(mesh.renderMode, mesh.indexed ? mesh.indexBuffer.numItems : mesh.vertexBuffer.numItems, mesh.indexed, 0);
 		};
 
-		if(parameters && parameters.camera) {
+		if (parameters && parameters.camera) {
 			scene.addCamera(parameters.camera);
 		}
 
@@ -2755,8 +2737,7 @@ var Scene = module.exports = function() {
 	};
 
 	return exports;
-}();
-
+})();
 },{"./bounds":2,"./indexedMap":8,"./material":10,"./maths":11,"./mesh":12,"./prefab":15,"./renderer":16,"./transform":20}],18:[function(require,module,exports){
 // Shader Class for use with Fury Scene
 const r = require('./renderer');
@@ -2925,7 +2906,7 @@ module.exports = (function() {
 		}
 	};
 
-	exports.createShaders = () => {
+	exports.createShaders = function() {
 		exports.UnlitColor = Shader.create(unlitColor);
 		exports.Sprite = Shader.create(sprite);
 	};
@@ -2965,7 +2946,7 @@ module.exports = (function() {
 module.exports = (function(){
 	let exports = {};
 
-	exports.createScaledImage = (config) => {
+	exports.createScaledImage = function(config) {
 		let canvas = document.createElement("canvas");
 		canvas.style = "display: none";
 		canvas.width = config.image.width * config.scale;
