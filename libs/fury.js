@@ -137,40 +137,40 @@ module.exports = (function() {
 		return sqrDistance < sphere.radius * sphere.radius;
 	};
 
-	exports.create = function(parameters) {
-			// Note - you are expected to recalculate min/max when position or extents change
-			// or alternatively if you change min/max you can recalculate extents/size/center
-			let aabb = Object.create(prototype);
+	exports.create = function({ center, size, extents, min, max }) {
+		// Note - you are expected to recalculate min/max when position or extents change
+		// or alternatively if you change min/max you can recalculate extents/size/center
+		let aabb = Object.create(prototype);
 
-			if (parameters.center || parameters.size || parameters.extents) {
-				if (parameters.center) {
-					aabb.center = parameters.center;
-				} else {
-					aabb.center = vec3.create();
-				}
-
-				if (parameters.size) {
-					aabb.size = parameters.size;
-					aabb.extents = vec3.fromValues(0.5 * aabb.size[0], 0.5 * aabb.size[1], 0.5 * aabb.size[2])
-				} else if (parameters.extents) {
-					aabb.extents = parameters.extents;
-					aabb.size = vec3.fromValues(2 * aabb.extents[0], 2 * aabb.extents[1], 2 * aabb.extents[2]);
-				}
-				aabb.min = vec3.create();
-				aabb.max = vec3.create();
-
-				aabb.recalculateMinMax();
+		if (center || size || extents) {
+			if (center) {
+				aabb.center = center;
 			} else {
-				// Could check min < max on all axes to make this easier to use
-				aabb.min = parameters.min;
-				aabb.max = parameters.max;
 				aabb.center = vec3.create();
-				aabb.size = vec3.create();
-				aabb.extents = vec3.create();
-				aabb.recalculateExtents();
 			}
 
-			return aabb;
+			if (size) {
+				aabb.size = size;
+				aabb.extents = vec3.fromValues(0.5 * aabb.size[0], 0.5 * aabb.size[1], 0.5 * aabb.size[2])
+			} else if (extents) {
+				aabb.extents = extents;
+				aabb.size = vec3.fromValues(2 * aabb.extents[0], 2 * aabb.extents[1], 2 * aabb.extents[2]);
+			}
+			aabb.min = vec3.create();
+			aabb.max = vec3.create();
+
+			aabb.recalculateMinMax();
+		} else {
+			// Could check min < max on all axes to make this easier to use
+			aabb.min = min;
+			aabb.max = max;
+			aabb.center = vec3.create();
+			aabb.size = vec3.create();
+			aabb.extents = vec3.create();
+			aabb.recalculateExtents();
+		}
+
+		return aabb;
 	};
 
 	return exports;
@@ -323,25 +323,31 @@ module.exports = (function() {
 		}
 	};
 
-	exports.create = function(parameters) {
+	exports.create = function(config) {
 		let camera = Object.create(prototype);
-		// TODO: Arguement Checking
-		camera.type = parameters.type ? parameters.type : Type.Perspective;
-		camera.near = parameters.near;
-		camera.far = parameters.far;
-		camera.clear = parameters.clear === undefined || !!parameters.clear;
 
-		if(camera.type == Type.Perspective) {
-			// vertical field of view, ratio (aspect) determines horizontal fov
-			camera.fov = parameters.fov;
-		} else if (camera.type == Type.Orthonormal) {
-			camera.height = parameters.height;
-		} else {
-			throw new Error("Unrecognised Camera Type '" + camera.type + "'");
+		let { type = Type.Perspective, near, far, ratio = 1.0, clear = true } = config;
+		camera.type = type;
+		camera.near = near;
+		camera.far = far;
+		camera.ratio = ratio;
+		camera.clear = clear;
+
+		switch (type) {
+			case Type.Perspective:
+				// vertical field of view, ratio (aspect) determines horizontal fov
+				camera.fov = config.fov;
+				break;
+			case Type.Orthonormal:
+				camera.height = config.height;
+				break;
+			default:
+				throw new Error("Unrecognised Camera Type '" + type + "'");
 		}
-		camera.ratio = parameters.ratio ? parameters.ratio : 1.0;
-		camera.position = parameters.position ? parameters.position : vec3.create();
-		camera.rotation = parameters.rotation ? parameters.rotation : quat.create();
+
+		let { position = vec3.create(), rotation = quat.create() } = config;
+		camera.position = position;
+		camera.rotation = rotation;
 
 		camera.planes = [];
 		// Stored as plane normal, distance from plane to origin in direction of normal
@@ -371,88 +377,88 @@ module.exports = (function() {
 window.Fury = require('./fury.js');
 },{"./fury.js":6}],5:[function(require,module,exports){
 module.exports = (function() {
-    // Reference:
-    // https://gist.github.com/gre/1650294
-    // http://haiyang.me/easing/Easings.html
-    
-    // Could arguably use npm muodule https://github.com/AndrewRayCode/easing-utils instead
-    // Comparison: easeBack has more terms when from haiyang.me,
-    // formulation of bounce has been rearranged but is probably the same.
+	// Reference:
+	// https://gist.github.com/gre/1650294
+	// http://haiyang.me/easing/Easings.html
+	
+	// Could arguably use npm muodule https://github.com/AndrewRayCode/easing-utils instead
+	// Comparison: easeBack has more terms when from haiyang.me,
+	// formulation of bounce has been rearranged but is probably the same.
 
-    let exports = {};
+	let exports = {};
 
-    // Ease Back Consts
-    const c1 = 1.70158;
-    const c2 = c1 * 1.525;
-    const c3 = c1 + 1;
-    // Ease Elastic Consts
-    const c4 = (2 * Math.PI) / 3.0;
-    const c5 = (2 * Math.PI) / 4.5;
-    // Ease Bounce Consts
-    const n1 = 7.5625;
-    const d1 = 2.75;
-    let bounce = t =>  {
-        if (t < 1 / d1) {
-            return n1 * t * t;
-        } else if ( t < 2 / d1) {
-            return n1 * (t - 1.5) / d1 * (t - 1.5) + 0.75;
-        } else if (t < 2.5 / d1) {
-            return n1 * (t - 2.25) / d1 * (t - 2.25) + 0.9375; 
-        } else {
-            return n1 * (t - 2.625) / d1 * (t - 2.625) + 0.984375;
-        }
-    };
-    exports.smoothStep = t => t * t * (3 - 2 * t);
-    exports.inQuad = t => t * t;
-    exports.outQuad = t =>  t * ( 2 - t ); // 1 - (1 - t) * (1 - t)
-    exports.inOutQuad = t => t < 0.5 
-        ? 2 * t * t 
-        : -1 + (4 - 2 * t) * t;
-    exports.inCubic = t => t * t * t;
-    exports.outCubic = t => (--t) * t * t + 1;
-    exports.inOutCubic = t => t < 0.5 
-        ? 4 * t * t * t 
-        : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
-    exports.inQuart = t => t * t * t * t;
-    exports.outQuart = t => 1 - (--t) * t * t * t; 
-    exports.inOutQuart = t => t < 0.5 
-        ? 8 * t * t * t * t 
-        : 1 - 8 * (--t) * t * t * t;
-    exports.inQuint = t => t * t * t * t *t;
-    exports.outQuint = t => 1 + (--t) * t * t * t * t;
-    exports.inOutQuint = t => t < 0.5 
-        ? 16 * t * t * t * t 
-        : 1 + 16 * (--t) * t * t * t * t; 
-    exports.inSine = t => 1 - Math.cos(t * Math.PI * 0.5);
-    exports.outSine = t => Math.sin(t * Math.PI * 0.5);
-    exports.inOutSine = t => - 0.5 * (Math.cost(Math.PI * t) - 1);
-    exports.inExpo = t => t === 0 ? 0 : Math.pow(2, 10 * t - 10);
-    exports.outExpo = t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
-    exports.inOutExpo = t => t === 0 ? 0 : t === 1 ? 1 : t < 0.5 
-        ? 0.5 * Math.pow(2, 20 * t - 10) 
-        : 0.5 * (2 - Math.pow(2, -20 * t + 10));
-    exports.inCirc = t => 1 - Math.sqrt(1 - t * t);
-    exports.outCirc = t => Math.sqrt(1 - (t - 1) * (t - 1));
-    exports.inOutCirc = t => t < 0.5 
-        ? 0.5 * (1 - Math.sqrt(1 - Math.pow(2 * t, 2))) 
-        : 0.5 * (Math.sqrt(1 - Math.pow(-2 * t + 2, 2)) + 1);
-    exports.inBack = t => c3 * t * t * t - c1 * t * t;
-    exports.outBack =  t => 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-    exports.inOutBack = t => t < 0.5 
-        ? 0.5 * (Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) 
-        : 0.5 * (Math.pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2); 
-    exports.inElastic = t => t === 0 ? 0 : t === 1 ? 1 : -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4);
-    exports.outElastic = t => t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
-    exports.intOutElastic = t => t === 0 ? 0 : t === 1 ? 1 : t < 0.5 
-        ? -(Math.pow(2, 20 * t - 10) * Math.sin((20 * t - 11.125) * c5)) * 0.5
-        : (Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c5)) * 0.5 + 1;
-    exports.inBounce = t => 1 - bounce(1 - t);
-    exports.outBounce = t => bounce(t);
-    exports.inOutBounce = t => t < 0.5 
-        ? (1 - bounce(1 - 2 * t)) * 0.5
-        : (1 + bounce(2 * t - 1)) * 0.5;
+	// Ease Back Consts
+	const c1 = 1.70158;
+	const c2 = c1 * 1.525;
+	const c3 = c1 + 1;
+	// Ease Elastic Consts
+	const c4 = (2 * Math.PI) / 3.0;
+	const c5 = (2 * Math.PI) / 4.5;
+	// Ease Bounce Consts
+	const n1 = 7.5625;
+	const d1 = 2.75;
+	let bounce = t =>  {
+		if (t < 1 / d1) {
+			return n1 * t * t;
+		} else if ( t < 2 / d1) {
+			return n1 * (t - 1.5) / d1 * (t - 1.5) + 0.75;
+		} else if (t < 2.5 / d1) {
+			return n1 * (t - 2.25) / d1 * (t - 2.25) + 0.9375; 
+		} else {
+			return n1 * (t - 2.625) / d1 * (t - 2.625) + 0.984375;
+		}
+	};
+	exports.smoothStep = t => t * t * (3 - 2 * t);
+	exports.inQuad = t => t * t;
+	exports.outQuad = t =>  t * ( 2 - t ); // 1 - (1 - t) * (1 - t)
+	exports.inOutQuad = t => t < 0.5 
+		? 2 * t * t 
+		: -1 + (4 - 2 * t) * t;
+	exports.inCubic = t => t * t * t;
+	exports.outCubic = t => (--t) * t * t + 1;
+	exports.inOutCubic = t => t < 0.5 
+		? 4 * t * t * t 
+		: (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+	exports.inQuart = t => t * t * t * t;
+	exports.outQuart = t => 1 - (--t) * t * t * t; 
+	exports.inOutQuart = t => t < 0.5 
+		? 8 * t * t * t * t 
+		: 1 - 8 * (--t) * t * t * t;
+	exports.inQuint = t => t * t * t * t *t;
+	exports.outQuint = t => 1 + (--t) * t * t * t * t;
+	exports.inOutQuint = t => t < 0.5 
+		? 16 * t * t * t * t 
+		: 1 + 16 * (--t) * t * t * t * t; 
+	exports.inSine = t => 1 - Math.cos(t * Math.PI * 0.5);
+	exports.outSine = t => Math.sin(t * Math.PI * 0.5);
+	exports.inOutSine = t => - 0.5 * (Math.cost(Math.PI * t) - 1);
+	exports.inExpo = t => t === 0 ? 0 : Math.pow(2, 10 * t - 10);
+	exports.outExpo = t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+	exports.inOutExpo = t => t === 0 ? 0 : t === 1 ? 1 : t < 0.5 
+		? 0.5 * Math.pow(2, 20 * t - 10) 
+		: 0.5 * (2 - Math.pow(2, -20 * t + 10));
+	exports.inCirc = t => 1 - Math.sqrt(1 - t * t);
+	exports.outCirc = t => Math.sqrt(1 - (t - 1) * (t - 1));
+	exports.inOutCirc = t => t < 0.5 
+		? 0.5 * (1 - Math.sqrt(1 - Math.pow(2 * t, 2))) 
+		: 0.5 * (Math.sqrt(1 - Math.pow(-2 * t + 2, 2)) + 1);
+	exports.inBack = t => c3 * t * t * t - c1 * t * t;
+	exports.outBack =  t => 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+	exports.inOutBack = t => t < 0.5 
+		? 0.5 * (Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) 
+		: 0.5 * (Math.pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2); 
+	exports.inElastic = t => t === 0 ? 0 : t === 1 ? 1 : -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4);
+	exports.outElastic = t => t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+	exports.intOutElastic = t => t === 0 ? 0 : t === 1 ? 1 : t < 0.5 
+		? -(Math.pow(2, 20 * t - 10) * Math.sin((20 * t - 11.125) * c5)) * 0.5
+		: (Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c5)) * 0.5 + 1;
+	exports.inBounce = t => 1 - bounce(1 - t);
+	exports.outBounce = t => bounce(t);
+	exports.inOutBounce = t => t < 0.5 
+		? (1 - bounce(1 - 2 * t)) * 0.5
+		: (1 + bounce(2 * t - 1)) * 0.5;
 
-    return exports;
+	return exports;
 })();
 },{}],6:[function(require,module,exports){
 // Fury Module can be used with 'require'
@@ -535,14 +541,14 @@ module.exports = (function() {
 
 	let lastTime = 0;
 
-	exports.init = function(parameters) {
-		if (parameters.maxFrameTimeMs && typeof(parameters.maxFrameTimeMs) === 'number') {
+	exports.init = function({ loop, maxFrameTimeMs: maxMs }) {
+		if (maxMs && typeof(maxMs) === 'number') {
 			// Optional max frame time to keep physics calculations sane
-			maxFrameTimeMs = parameters.maxFrameTimeMs;
+			maxFrameTimeMs = maxMs;
 		}
 
-		if (parameters.loop && typeof(parameters.loop) === 'function') {
-			loopDelegate = parameters.loop;
+		if (loop && typeof(loop) === 'function') {
+			loopDelegate = loop;
 		} else {
 			console.error("You must provide GameLoop.init with a loop parameter of type function");
 		}
@@ -1136,23 +1142,23 @@ module.exports = (function(){
 		}
 	};
 
-	exports.create = function(parameters) {
+	exports.create = function({ shader, textures, texture, properties }) {
 		let material = Object.create(prototype);
 
-		if(!parameters.shader) {
+		if(!shader) {
 			throw new Error("Shader must be provided");
 		}
-		material.shader = parameters.shader;
+		material.shader = shader;
 
 		material.textures = {};
-		if (parameters.textures) {
-			material.setTextures(parameters.textures);
-		} else if (parameters.texture) {
-			material.setTexture(parameters.texture);
+		if (textures) {
+			material.setTextures(textures);
+		} else if (texture) {
+			material.setTexture(texture);
 		}
 
-		if (parameters.properties) {
-			material.setProperties(parameters.properties);
+		if (properties) {
+			material.setProperties(properties);
 		}
 
 		if (material.shader.validateMaterial) {
@@ -1545,6 +1551,7 @@ module.exports = (function(){
 			this.bounds.recalculateExtents();
 		},
 		// TODO: Method to calculate normals from vertex information + winding info
+		// TODO: Support updating arbitary buffers and support when meshConfig.isTypedBuffers == true
 		updateVertices: function() {
 			// TODO: If vertexBuffers exists we should delete the existing buffer?
 			// or we should use the existing buffer and bind different data
@@ -1584,89 +1591,87 @@ module.exports = (function(){
 		}
 	};
 
-	exports.create = function(parameters) {
+	exports.create = function(config) {
 		let mesh = Object.create(prototype);
 
 		mesh.bounds = Bounds.create({ min: vec3.create(), max: vec3.create() });
 
-		if (parameters) {
-			if (parameters.renderMode) {
-				mesh.renderMode = parameters.renderMode;
-			} else {
-				mesh.renderMode = r.RenderMode.Triangles;
-			}
+		if (config) {
+			let { renderMode = r.RenderMode.Triangles, boundingRadius = 0 } = config;
+			mesh.renderMode = renderMode;
+			mesh.boundingRadius = boundingRadius;
 
-			mesh.boundingRadius = parameters.boundingRadius | 0;
+			let { isTypedBuffers, vertices, textureCoordinates, normals, indices } = config;
+			if (isTypedBuffers) {
+				let { vertexCount, textureCoordinatesCount, normalsCount, indexCount, customBuffers } = config;
 
-			if (parameters.buffers) {
-				// NOTE: update<X> methods will not work when providing buffers directly
-				// if the mesh needs to be manipulated at run time, it's best to convert the buffers
-				// to JS arrays create the mesh data with that.
-				if (parameters.vertices && parameters.vertexCount) {
-					mesh.vertices = parameters.vertices;
+				if (vertices && vertexCount) {
+					mesh.vertices = vertices;
 					mesh.calculateBounds();
-					mesh.vertexBuffer = r.createArrayBuffer(parameters.vertices, 3, parameters.vertexCount);
+					mesh.vertexBuffer = r.createArrayBuffer(vertices, 3, vertexCount);
 				}
-				if (parameters.textureCoordinates && parameters.textureCoordinatesCount) {
-					mesh.textureBuffer = r.createArrayBuffer(parameters.textureCoordinates, 2, parameters.textureCoordinatesCount);
+				if (textureCoordinates && textureCoordinatesCount) {
+					mesh.textureBuffer = r.createArrayBuffer(textureCoordinates, 2, textureCoordinatesCount);
 				}
-				if (parameters.normals && parameters.normalsCount) {
-					mesh.normalBuffer = r.createArrayBuffer(parameters.normals, 3, parameters.normalsCount);
+				if (normals && normalsCount) {
+					mesh.normalBuffer = r.createArrayBuffer(normals, 3, normalsCount);
 				}
 
-				if (parameters.customBuffers && parameters.customBuffers.length) {
+				if (customBuffers && customBuffers.length) {
 					mesh.customBuffers = [];
-					for (let i = 0, l = parameters.customBuffers.length; i < l; i++) {
-						let customBuffer = parameters.customBuffers[i];
-						switch (customBuffer.componentType) {
+					for (let i = 0, l = customBuffers.length; i < l; i++) {
+						let { name, componentType, buffer, size, count } = customBuffers[i];
+						switch (componentType) {
 							case 5126: // Float32
-								mesh.customBuffers[customBuffer.name] = r.createArrayBuffer(customBuffer.buffer, customBuffer.size, customBuffer.count);
+								mesh.customBuffers[name] = r.createArrayBuffer(buffer, size, count);
 								break;
 							case 5123: // Int16
-								mesh.customBuffers[customBuffer.name] = r.createElementArrayBuffer(customBuffer.buffer, customBuffer.size, customBuffer.count);
+								mesh.customBuffers[name] = r.createElementArrayBuffer(buffer, size, count);
 								// UNTESTED
 								break;
 						}
 					}
 				}
 
-				if (parameters.indices && parameters.indexCount) {
-					mesh.indexBuffer = r.createElementArrayBuffer(parameters.indices, 1, parameters.indexCount);
+				if (indices && indexCount) {
+					mesh.indexBuffer = r.createElementArrayBuffer(indices, 1, indexCount);
 					mesh.indexed = true;
 				} else {
 					mesh.indexed = false;
 				}
 			} else {
-				if (parameters.vertices) {
-					mesh.vertices = parameters.vertices;
+				let { customAttributes } = config;
+
+				if (vertices) {
+					mesh.vertices = vertices;
 					mesh.calculateBounds();
 					mesh.updateVertices();
 				}
-				if (parameters.textureCoordinates) {
-					mesh.textureCoordinates = parameters.textureCoordinates;
+				if (textureCoordinates) {
+					mesh.textureCoordinates = textureCoordinates;
 					mesh.updateTextureCoordinates();
 				}
-				if (parameters.normals) {
-					mesh.normals = parameters.normals;
+				if (normals) {
+					mesh.normals = normals;
 					mesh.updateNormals();
 				}
-				if (parameters.indices) {
-					mesh.indices = parameters.indices;
+				if (indices) {
+					mesh.indices = indices;
 					mesh.updateIndexBuffer();
 				} else {
 					mesh.indexed = false;
 				}
 
-				if (parameters.customAttributes && parameters.customAttributes.length) {
-					for (let i = 0, l = parameters.customAttributes.length; i < l; i++) {
-						let a = parameters.customAttributes[i]; 
+				if (customAttributes && customAttributes.length) {
+					for (let i = 0, l = customAttributes.length; i < l; i++) {
+						let { name, source, size } = customAttributes[i]; 
 						// Maybe should validate name isn't already used?
-						mesh[a.name] = r.createBuffer(parameters[a.source], a.size);
+						mesh[name] = r.createBuffer(config[source], size);
 						// Note - dynamic not currently supported for custom attributes
 					}
 				}
 
-				if (!parameters.dynamic) {
+				if (!config.dynamic) {
 					// clear mesh data if not mesh does not need to be dynamically updated
 					mesh.vertices = null;
 					mesh.textureCoordinates = null;
@@ -1701,20 +1706,20 @@ module.exports = (function() {
 			// TODO: Option to provide data as JS arrays (i.e. buffers: false)
 			// This is so we can have the data available to JS for runtime manipulation
 			let meshData = {
-				buffers: true
+				isTypedBuffers: true
 			};
 
 			let attributes = json.meshes[0].primitives[0].attributes;
-			let positionIndex = attributes.POSITION;    // index into accessors
-			let normalsIndex = attributes.NORMAL;       // index into accessors
-			let uvIndex = attributes.TEXCOORD_0;        // index into accessors
+			let positionIndex = attributes.POSITION;	// index into accessors
+			let normalsIndex = attributes.NORMAL;		// index into accessors
+			let uvIndex = attributes.TEXCOORD_0;		// index into accessors
 			let colorIndices = [];
 
 			let propertyName = "COLOR_";
 			let propertyNameIndex = 0;
 			while (attributes.hasOwnProperty(propertyName + propertyNameIndex)) {
-			  colorIndices.push(attributes[propertyName + propertyNameIndex]);
-			  propertyNameIndex++;
+				colorIndices.push(attributes[propertyName + propertyNameIndex]);
+				propertyNameIndex++;
 			}
 
 			let indicesIndex = json.meshes[0].primitives[0].indices;
@@ -1851,20 +1856,10 @@ module.exports = (function(){
 			return Box.intersectSphere(sphere, box);
 		};
 		
-		exports.create = function(parameters) {
+		exports.create = function({ center = vec3.create(), radius = 0 }) {
 			let sphere = Object.create(prototype);
-		
-			if (parameters.center) {
-				sphere.center = parameters.center;
-			} else {
-				sphere.center = vec3.create();
-			}
-			if (parameters.radius) {
-				sphere.radius = parameters.radius;
-			} else {
-				sphere.radius = 0;
-			}
-
+			sphere.center = center;
+			sphere.radius = radius;
 			return sphere;
 		};
 	
@@ -1880,11 +1875,11 @@ module.exports = (function(){
 
 	let prefabs = exports.prefabs = { keys: "Can't touch this, doo doo doo, do do, do do" };
 
-	exports.create = function(parameters) {
-		if(!parameters || !parameters.name || prefabs[parameters.name]) {
+	exports.create = function(config) {
+		if (!config || !config.name || prefabs[config.name]) {
 			throw new Error("Please provide a valid and unique name parameter for your prefab");
 		} else {
-			prefabs[parameters.name] = parameters;
+			prefabs[config.name] = config;
 		}
 	};
 
@@ -1919,7 +1914,7 @@ exports.init = function(canvas, contextAttributes) {
 };
 
 // TODO: This cshould be called setClearColor
-exports.clearColor = function(r,g,b,a) {
+exports.clearColor = function(r, g, b, a) {
 	gl.clearColor(r, g, b, a);
 };
 
@@ -1969,6 +1964,8 @@ exports.createShaderProgram = function(vertexShader, fragmentShader) {
 		throw new Error("Could not create shader program");
 	}
 	return program;
+	// TODO: Consider returning wrapper so that additional properties are not set on the gl object
+	// See #5. https://webglfundamentals.org/webgl/lessons/webgl-anti-patterns.html
 };
 
 exports.useShaderProgram = function(shaderProgram) {
@@ -1993,21 +1990,21 @@ exports.createBuffer = function(data, itemSize, indexed) {
 };
 
 exports.createArrayBuffer = function(data, itemSize, numItems) {
-    let buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-    buffer.itemSize = itemSize;
-    buffer.numItems = numItems;
-    return buffer;
+	let buffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+	gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+	buffer.itemSize = itemSize;
+	buffer.numItems = numItems;
+	return buffer;
 };
 
 exports.createElementArrayBuffer = function(data, itemSize, numItems) {
-    let buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, data, gl.STATIC_DRAW);
-    buffer.itemSize = itemSize;
-    buffer.numItems = numItems;
-    return buffer;
+	let buffer = gl.createBuffer();
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, data, gl.STATIC_DRAW);
+	buffer.itemSize = itemSize;
+	buffer.numItems = numItems;
+	return buffer;
 };
 
 // Textures
@@ -2280,7 +2277,7 @@ exports.draw = function(renderMode, count, indexed, offset) {
 			}
 			break;
 		default:
-			throw new Error("Unrecognised renderMode '"+renderMode+"'");
+			throw new Error("Unrecognised renderMode '" + renderMode + "'");
 	}
 };
 
@@ -2293,10 +2290,7 @@ const Prefab = require('./prefab');
 const Transform = require('./transform');
 const Maths = require('./maths');
 const Bounds = require('./bounds');
-const mat3 = Maths.mat3,
-	mat4 = Maths.mat4,
-	quat = Maths.quat,
-	vec3 = Maths.vec3;
+const { mat3, mat4, quat, vec3 } = Maths;
 
 module.exports = (function() {
 	let nextSceneId = 0;
@@ -2324,7 +2318,7 @@ module.exports = (function() {
 	let currentShaderId, currentMaterialId, currentMeshId, pMatrixRebound = false;
 	let nextTextureLocation = 0, currentTextureBindings = {}, currentTextureLocations = [];	// keyed on texture.id to binding location, keyed on binding location to texture.id
 
-	exports.create = function(parameters) {
+	exports.create = function({ camera, enableFrustumCulling, forceSphereCulling}) {
 		let cameras = {};
 		let cameraNames = [];
 		let mainCameraName = "main";
@@ -2334,8 +2328,7 @@ module.exports = (function() {
 
 		let scene = {};
 		scene.id = (nextSceneId++).toString();
-		scene.enableFrustumCulling = !!parameters.enableFrustumCulling;
-		let forceSphereCulling = !!parameters.forceSphereCulling;
+		scene.enableFrustumCulling = !!enableFrustumCulling;
 
 		// these renderObjects / instances on prefabs need to contain at minimum materialId, meshId, and transform (currently object just has material and mesh as well as transform)
 		let renderObjects = IndexedMap.create(); // TODO: use materialId / meshId to bind
@@ -2428,14 +2421,15 @@ module.exports = (function() {
 		};
 
 		// Add Render Object
-		scene.add = function(parameters) {
+		scene.add = function(config) {
 			let object = {};
-			if (!parameters || !parameters.mesh || !parameters.material) {
+			
+			let { mesh, material, static = false, active = true } = config;
+			object.material = material;
+			object.mesh = mesh;
+			if (!mesh || !material) {
 				throw new Error("Mesh and Material must be present on the object.");
 			}
-
-			object.material = parameters.material;
-			object.mesh = parameters.mesh;
 
 			// Note: indexedMap.add adds id property to object added and does not add duplicates
 			object.meshId = meshes.add(object.mesh);
@@ -2447,16 +2441,16 @@ module.exports = (function() {
 			// Probably want to move to a stronger ECS concept
 			// Adding a transform component is probably fine
 			// as the renderer requires it.
-			object.transform = Transform.create(parameters);
+			object.transform = Transform.create(config);
 
 			// For now just sort by material on add
 			object.sceneId = renderObjects.add(object, sortByMaterial); 
 			// Would probably be more performant to dynamic changes if kept a record of start and end index
 			// of all materials and could simply inject at the correct point - TODO: Profile
-			object.static = !!parameters.static;
-			object.active = parameters.active === undefined || !!parameters.active;
+			object.static = static;
+			object.active = active;
 
-			createObjectBounds(object, object.mesh, parameters.rotation);
+			createObjectBounds(object, object.mesh, object.transform.rotation);
 
 			return object;
 		};
@@ -2484,18 +2478,21 @@ module.exports = (function() {
 		};
 
 		// Instantiate prefab instance
-		scene.instantiate = function(parameters) {
+		scene.instantiate = function(config) {
 			let prefab;
-			if (!parameters || !parameters.name || !Prefab.prefabs[parameters.name]) {
+
+			if (!config || !config.name || !Prefab.prefabs[config.name]) {
 				throw new Error("You must provide a valid prefab name");
 			}
-			if (!prefabs[parameters.name]) {
-				let defn = Prefab.prefabs[parameters.name];
+
+			let name = config.name;
+			if (!prefabs[name]) {
+				let defn = Prefab.prefabs[name];
 				if (!defn.materialConfig || !defn.meshConfig) {
 					throw new Error("Requested prefab must have a material and a mesh config present");
 				}
 				prefab = {
-					name: parameters.name,
+					name: name,
 					instances: IndexedMap.create(),
 					mesh: Mesh.create(defn.meshConfig),
 					material: Material.create(defn.materialConfig)
@@ -2505,19 +2502,20 @@ module.exports = (function() {
 				prefab.shaderId = shaders.add(prefab.material.shader);
 				prefab.material.shaderId = prefab.shaderId;
 				addTexturesToScene(prefab.material);
-				prefabs[parameters.name] = prefab;
-				prefabs.keys.push(parameters.name);
+				prefabs[name] = prefab;
+				prefabs.keys.push(name);
 			} else {
-				prefab = prefabs[parameters.name];
+				prefab = prefabs[name];
 			}
 			let instance = Object.create(prefab);
-			instance.transform = Transform.create(parameters);
+			instance.transform = Transform.create(config);
 
+			let { static = false, active = true } = config;
 			instance.id = prefab.instances.add(instance);
-			instance.static = !!parameters.static;
-			instance.active = parameters.active === undefined || !!parameters.active;
+			instance.static = static;
+			instance.active = active;
 
-			createObjectBounds(instance, prefab.mesh, parameters.rotation);
+			createObjectBounds(instance, prefab.mesh, instance.transform.rotation);
 
 			return instance;
 		};
@@ -2729,8 +2727,8 @@ module.exports = (function() {
 			r.draw(mesh.renderMode, mesh.indexed ? mesh.indexBuffer.numItems : mesh.vertexBuffer.numItems, mesh.indexed, 0);
 		};
 
-		if (parameters && parameters.camera) {
-			scene.addCamera(parameters.camera);
+		if (camera) {
+			scene.addCamera(camera);
 		}
 
 		return scene;
@@ -2745,60 +2743,60 @@ const r = require('./renderer');
 module.exports = (function() {
 	let exports = {};
 
-	exports.create = function(parameters) {
+	exports.create = function(config) {
 		let shader = {};
 
 		// Argument Validation
-		if (!parameters) {
-			throw new Error("No paramter object supplied, shader source must be provided");
+		if (!config) {
+			throw new Error("No config object supplied, shader source must be provided");
 		}
-		if (!parameters.vsSource) {
+		if (!config.vsSource) {
 			throw new Error("No Vertex Shader Source 'vsSource'");
 		}
-		if (!parameters.fsSource) {
+		if (!config.fsSource) {
 			throw new Error("No Fragment Shader Source 'fsSource'");
 		}
 
-		shader.vs = r.createShader("vertex", parameters.vsSource);
-		shader.fs = r.createShader("fragment", parameters.fsSource);
+		shader.vs = r.createShader("vertex", config.vsSource);
+		shader.fs = r.createShader("fragment", config.fsSource);
 		shader.shaderProgram = r.createShaderProgram(shader.vs, shader.fs);
-		if (parameters.attributeNames) {	// Could parse these from the shader
-			for (let i = 0, l = parameters.attributeNames.length; i < l; i++) {
-				r.initAttribute(shader.shaderProgram, parameters.attributeNames[i]);
+		if (config.attributeNames) {	// Could parse these from the shader
+			for (let i = 0, l = config.attributeNames.length; i < l; i++) {
+				r.initAttribute(shader.shaderProgram, config.attributeNames[i]);
 			}
 		}
-		if (parameters.uniformNames) {	// Could parse these from the shader
-			for (let i = 0, l = parameters.uniformNames.length; i < l; i++) {
-				r.initUniform(shader.shaderProgram, parameters.uniformNames[i]);
+		if (config.uniformNames) {	// Could parse these from the shader
+			for (let i = 0, l = config.uniformNames.length; i < l; i++) {
+				r.initUniform(shader.shaderProgram, config.uniformNames[i]);
 			}
 		}
-		if (parameters.textureUniformNames) {
-			if (parameters.textureUniformNames.length > r.TextureLocations.length) {
+		if (config.textureUniformNames) {
+			if (config.textureUniformNames.length > r.TextureLocations.length) {
 				throw new Error("Shader can not use more texture than total texture locations (" + r.TextureLocations.length + ")");
 			}
-			shader.textureUniformNames = parameters.textureUniformNames;	// Again could parse from the shader, and could also not require duplicate between uniformNames and textureUniformNames
+			shader.textureUniformNames = config.textureUniformNames;	// Again could parse from the shader, and could also not require duplicate between uniformNames and textureUniformNames
 		} else {
 			shader.textureUniformNames = [];
 		}
 
-		if (!parameters.bindMaterial || typeof(parameters.bindMaterial) !== 'function') {
+		if (!config.bindMaterial || typeof(config.bindMaterial) !== 'function') {
 			throw new Error("You must provide a material binding function 'bindMaterial'");
 		}
-		shader.bindMaterial = parameters.bindMaterial;
+		shader.bindMaterial = config.bindMaterial;
 
-		if (!parameters.bindBuffers || typeof(parameters.bindBuffers) !== 'function') {
+		if (!config.bindBuffers || typeof(config.bindBuffers) !== 'function') {
 			throw new Error("You must provide a mesh binding function 'bindBuffers'");
 		}
-		shader.bindBuffers = parameters.bindBuffers;
+		shader.bindBuffers = config.bindBuffers;
 
-		if (parameters.validateMaterial && typeof(parameters.validateMaterial) === 'function') {
-			shader.validateMaterial = parameters.validateMaterial;
+		if (config.validateMaterial && typeof(config.validateMaterial) === 'function') {
+			shader.validateMaterial = config.validateMaterial;
 		}
 
-		shader.pMatrixUniformName = parameters.pMatrixUniformName || "pMatrix";
-		shader.mvMatrixUniformName = parameters.mvMatrixUniformName || "mvMatrix";
-		shader.nMatrixUniformName = parameters.nMatrixUniformName;
-		shader.mMatrixUniformName = parameters.mMatrixUniformName;
+		shader.pMatrixUniformName = config.pMatrixUniformName || "pMatrix";
+		shader.mvMatrixUniformName = config.mvMatrixUniformName || "mvMatrix";
+		shader.nMatrixUniformName = config.nMatrixUniformName;
+		shader.mMatrixUniformName = config.mMatrixUniformName;
 
 		// TODO: decide how to deal with non-standard uniforms
 
@@ -2919,23 +2917,11 @@ const quat = Maths.quat, vec3 = Maths.vec3;
 
 module.exports = (function() {
 	let exports = {};
-	exports.create = function(parameters) {
+	exports.create = function({ position = vec3.create(), rotation = quat.create(), scale = vec3.fromValues(1.0, 1.0, 1.0) }) {
 		let transform = {};
-		if (!parameters.position) {
-			transform.position = vec3.create();
-		} else {
-			transform.position = parameters.position;
-		}
-		if (!parameters.rotation) {
-			transform.rotation = quat.create();
-		} else {
-			transform.rotation = parameters.rotation;
-		}
-		if (!parameters.scale) {
-			transform.scale = vec3.fromValues(1.0, 1.0, 1.0);
-		} else {
-			transform.scale = parameters.scale;
-		}
+		transform.position = position;
+		transform.rotation = rotation;
+		transform.scale = scale;
 		return transform;
 	};
 	return exports;
