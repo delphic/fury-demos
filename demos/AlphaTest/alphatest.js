@@ -56,7 +56,7 @@ var shader = Fury.Shader.create({
 });
 
 // Create Materials
-var whiteMaterial = Fury.Material.create({ shader: shader, properties: { alpha: true, tint: vec4.fromValues(1.0, 1.0, 1.0, 1.0) } });
+var whiteMaterial = Fury.Material.create({ shader: shader, properties: { alpha: false, tint: vec4.fromValues(1.0, 1.0, 1.0, 1.0) } }); // Ooops
 var redMaterial = Fury.Material.create({ shader : shader, properties: { alpha: true, tint: vec4.fromValues(1.0, 0.0, 0.0, 0.75) } });
 var greenMaterial = Fury.Material.create({ shader: shader, properties: { alpha: true, tint: vec4.fromValues(0.0, 1.0, 0.0, 0.75) } });
 var blueMaterial = Fury.Material.create({ shader: shader, properties: { alpha: true, tint: vec4.fromValues(0.0, 0.0, 1.0, 0.75) } });
@@ -199,7 +199,7 @@ image1.onload = function() {
 	blueMaterial.textures["uSampler"] = texture;
 	image1Loaded = true;
 	if(image1Loaded && image2Loaded) {
-	   loop();
+		loop();
 	}
 };
 image2.onload = function() {
