@@ -44,6 +44,9 @@ window.onload = (event) => {
 	});
 	scene = Fury.Scene.create({ camera: camera });
 
+	document.getElementById("btnTranslate").addEventListener('click', () => { testTranslation = !testTranslation; });
+	document.getElementById("btnRotate").addEventListener('click', () => { testRotation = !testRotation });
+
 	// Create material
 	material = Fury.Material.create({ 
 		shader : Fury.Shaders.Sprite,
