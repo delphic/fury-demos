@@ -917,8 +917,6 @@ let characterController = CharacterController.create({
 let inputVector = vec3.create();
 let localForward = vec3.create();
 let hitPoint = vec3.create();
-let temp = vec3.create();
-let temp2 = vec3.create(); // TODO: vec3 Pool
 
 // Mouse look 
 let mouseLookSpeed = 0.1;
@@ -983,6 +981,7 @@ let loop = function(elapsed) {
 
 	// Instant rocket launcher spawn impulse on mouse down
 	if (Fury.Input.mouseDown(0, true)) {
+		let temp = Maths.vec3Pool.request();
 		let hit = false;
 		let closestDistance = 100;
 		vec3.negate(localForward, localForward); // camera faces -z so invert
@@ -1010,9 +1009,12 @@ let loop = function(elapsed) {
 				grounded = false;
 			}
 		}
+		Maths.vec3Pool.return(temp);
 	}
 
 	// Look for trigger volume - this another example of external force
+	let temp = Maths.vec3Pool.request();
+	let temp2 = Maths.vec3Pool.request();
 	for (let i = 0, l = triggerVolumes.length; i < l; i++) {
 		triggerVolumes[i].update(elapsed);
 		if (triggerVolumes[i].tryIntersectBox(playerBox)) {
@@ -1032,6 +1034,8 @@ let loop = function(elapsed) {
 			}
 		}
 	}
+	Maths.vec3Pool.return(temp);
+	Maths.vec3Pool.return(temp2);
 
 	// Calculate Target Velocity
 	if (grounded) {
