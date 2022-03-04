@@ -7760,6 +7760,135 @@ THE SOFTWARE.
 })));
 
 },{}],2:[function(require,module,exports){
+const Maths = require('./maths');
+const Prefab = require('./prefab');
+const Renderer = require('./renderer');
+const Shaders = require('./shaders');
+const Primitives = require('./primitives');
+
+module.exports = (function(){
+	let exports = {};
+
+	let getAtlasIndex = (atlas, name) => {
+		let map = atlas.map;
+		for (let i = 0, l = map.length; i < l; i++) {
+			if (map[i] == name) {
+				return i;
+			}
+		}
+		return 0;
+	};
+
+	let getPrefabName = (atlas, atlasIndex, color, alpha) => {
+		let name = atlas.id + "_" + atlasIndex;
+		if (alpha !== undefined && alpha != atlas.materialConfig.properties.alpha) {
+			name += "_" + (alpha ? "a1" : "a0");
+		}
+
+		if (color !== undefined && (color[0] != 1 || color[1] != 1 || color[2] != 1 || color[3] != 1)) {
+			name += "_" + color[0] + "_" + color[1] + "_" + color[2] + "_" + color[3];
+		}
+		return name;
+	}
+
+	let setMaterialOffset = (config, atlasIndex, width, height) => {
+		let offsetU = (atlasIndex % width) / width;
+		let offsetV = 1 - (Math.floor(atlasIndex / width) + 1) / height;
+		config.properties.offset = [ offsetU, offsetV ];
+	};
+
+	exports.setMaterialOffset = (config, atlas, tile) => {
+		let atlasIndex = getAtlasIndex(atlas, tile);
+		setMaterialOffset(config, atlasIndex, atlas.width, atlas.height);
+	};
+
+	let hasVariableTileWidths = exports.hasVariableTileWidths = (atlas) => {
+		return atlas.customTileWidths && atlas.customTileWidths.length;
+	};
+
+	let getTileWidth = exports.getTileWidth = (atlas, tile) => {
+		// TODO: build a lookup instead
+		let tileWidth = atlas.tileWidth;
+		if (atlas.customTileWidths && atlas.customTileWidths.length) {
+			for (let i = 0, l = atlas.customTileWidths.length; i < l; i++) {
+				let { width, tiles } = atlas.customTileWidths[i];
+				if (tiles.includes(tile)) {
+					tileWidth = width;
+					break;
+				}
+			}
+		}
+		return tileWidth;
+	};
+
+	exports.createTilePrefab = (config) => {
+		let { atlas, tile, color, alpha } = config;
+		let { width, height } = atlas;
+		let atlasIndex = getAtlasIndex(atlas, tile);
+		let prefabName = getPrefabName(atlas, atlasIndex, color, alpha);
+
+		if (Prefab.prefabs[prefabName] === undefined) {
+			let materialConfig = Object.create(atlas.materialConfig);
+			if (alpha !== undefined) {
+				materialConfig.properties.alpha = alpha;
+			}
+			if (color !== undefined) {
+				materialConfig.properties.color = color;
+			} else {
+				 // This shouldn't be necessary, however it is
+				materialConfig.properties.color = Maths.vec4.fromValues(1,1,1,1);
+			}
+			setMaterialOffset(materialConfig, atlasIndex, width, height);
+
+			let tileWidth = getTileWidth(atlas, tile);
+
+			Prefab.create({
+				name: prefabName, 
+				meshConfig: atlas.meshConfigs[tileWidth],
+				materialConfig: materialConfig
+			});
+		}
+		return prefabName;
+	};
+
+	exports.create = (config, image) => {
+		if (!config.id || !config.map || !config.width || !config.height || !config.tileWidth || !config.tileHeight) {
+			console.error("Invalid atlas definition provided, must contain properties: id, map, width, height, tileWidth and tileHeight");
+		}
+		let atlas = Object.create(config);
+		atlas.alpha = atlas.alpha === undefined ? true : !!atlas.alpha;
+		atlas.texture = Renderer.createTexture(image, "low");
+		atlas.materialConfig = {
+			shader: Shaders.Sprite,
+			texture: atlas.texture,
+			properties: {
+				alpha: atlas.alpha,
+				offset: [ 0, 0 ],
+				scale: [ 1 / atlas.width, 1 / atlas.height ]
+			}
+		};
+		atlas.meshConfigs = {};
+		atlas.meshConfigs[atlas.tileWidth] = Primitives.createQuadMeshConfig(atlas.tileWidth, atlas.tileHeight);
+		if (hasVariableTileWidths(atlas)) {
+			for (let i = 0, l = atlas.customTileWidths.length; i < l; i++) {
+				let { width } = atlas.customTileWidths[i];
+				atlas.meshConfigs[width] = Primitives.createQuadMeshConfig(atlas.tileWidth, atlas.tileHeight);
+			}
+		}
+		return atlas;
+	};
+
+	exports.load = (config, callback) => {
+		let image = new Image();
+		image.onload = () => {
+			callback(exports.create(config, image));
+		};
+		image.src = config.path;
+	};
+
+	return exports;
+})();
+},{"./maths":12,"./prefab":16,"./primitives":17,"./renderer":19,"./shaders":22}],3:[function(require,module,exports){
 const vec3 = require('./maths').vec3;
 
 module.exports = (function() {
@@ -7907,7 +8036,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./maths":11}],3:[function(require,module,exports){
+},{"./maths":12}],4:[function(require,module,exports){
 const Maths = require('./maths');
 const vec3 = Maths.vec3, vec4 = Maths.vec4, mat4 = Maths.mat4, quat = Maths.quat;
 
@@ -8100,13 +8229,13 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./maths":11}],4:[function(require,module,exports){
+},{"./maths":12}],5:[function(require,module,exports){
 // Client.js - for using Fury old school style as a JS file which adds a
 // global which you can use. 
 
 // Create Fury Global
 window.Fury = require('./fury.js');
-},{"./fury.js":6}],5:[function(require,module,exports){
+},{"./fury.js":7}],6:[function(require,module,exports){
 module.exports = (function() {
 	// Reference:
 	// https://gist.github.com/gre/1650294
@@ -8191,13 +8320,14 @@ module.exports = (function() {
 
 	return exports;
 })();
-},{}],6:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 // Fury Module can be used with 'require'
 module.exports = (function() {
 	let Fury = {};
 	let canvas;
 
 	// Modules
+	Fury.Atlas = require('./atlas')
 	Fury.Bounds = require('./bounds');
 	Fury.Camera = require('./camera');
 	Fury.GameLoop = require('./gameLoop');
@@ -8208,10 +8338,14 @@ module.exports = (function() {
 	Fury.Model = require('./model');
 	Fury.Physics = require('./physics');
 	Fury.Prefab = require('./prefab');
+	Fury.Primitives = require('./primitives');
+	Fury.Random = require('./random');
 	Fury.Renderer = require('./renderer');
 	Fury.Scene = require('./scene');
 	Fury.Shader = require('./shader');
 	Fury.Shaders = require('./shaders');
+	Fury.TextMesh = require('./textmesh');
+	Fury.TileMap = require('./tilemap');
 	Fury.Transform = require('./transform');
 	Fury.Utils = require('./utils');
 
@@ -8252,7 +8386,7 @@ module.exports = (function() {
 	return Fury;
 })();
 
-},{"./bounds":2,"./camera":3,"./gameLoop":7,"./input":9,"./material":10,"./maths":11,"./mesh":12,"./model":13,"./physics":14,"./prefab":15,"./renderer":16,"./scene":17,"./shader":18,"./shaders":19,"./transform":20,"./utils":21}],7:[function(require,module,exports){
+},{"./atlas":2,"./bounds":3,"./camera":4,"./gameLoop":8,"./input":10,"./material":11,"./maths":12,"./mesh":13,"./model":14,"./physics":15,"./prefab":16,"./primitives":17,"./random":18,"./renderer":19,"./scene":20,"./shader":21,"./shaders":22,"./textmesh":23,"./tilemap":24,"./transform":25,"./utils":26}],8:[function(require,module,exports){
 const Input = require('./input');
 
 module.exports = (function() {
@@ -8356,7 +8490,7 @@ module.exports = (function() {
 
 	return exports;
 })();
-},{"./input":9}],8:[function(require,module,exports){
+},{"./input":10}],9:[function(require,module,exports){
 module.exports = (function(){
 	// This creates a dictionary that provides its own keys
 	// It also contains an array of keys for quick enumeration
@@ -8425,7 +8559,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{}],9:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 const Maths = require('./maths');
 
 module.exports = (function() {
@@ -8829,7 +8963,7 @@ module.exports = (function() {
 
 	return exports;
 })();
-},{"./maths":11}],10:[function(require,module,exports){
+},{"./maths":12}],11:[function(require,module,exports){
 module.exports = (function(){
 	let exports = {};
 	
@@ -8898,25 +9032,31 @@ module.exports = (function(){
 
 		return material;
 	};
+
+	exports.clone = function(material) {
+		let clone = Object.assign(Object.create(prototype), material);
+		clone.id = null;
+		return clone;
+	};
 	
 	return exports;
 })();
-},{}],11:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 // This is a centralised point for importing glMatrix
 // Also provides a helper for globalizing for ease of use
-let glMatrix = require('../libs/gl-matrix');
+let { glMatrix, mat2, mat3, mat4, quat, quat2, vec2, vec3, vec4  } = require('../libs/gl-matrix');
 
 let globalize = () => {
 	// Lets create some globals!
 	if (window) {
-		window.mat2 = glMatrix.mat2;
-		window.mat3 = glMatrix.mat3;
-		window.mat4 = glMatrix.mat4;
-		window.quat = glMatrix.quat;
-		window.quat2 = glMatrix.quat2;
-		window.vec2 = glMatrix.vec2;
-		window.vec3 = glMatrix.vec3;
-		window.vec4 = glMatrix.vec4;
+		window.mat2 = mat2;
+		window.mat3 = mat3;
+		window.mat4 = mat4;
+		window.quat = quat;
+		window.quat2 = quat2;
+		window.vec2 = vec2;
+		window.vec3 = vec3;
+		window.vec4 = vec4;
 	}
 };
 
@@ -8926,18 +9066,22 @@ let globalize = () => {
 // then we can extend it here for clarity?
 
 module.exports = (function() {
+	// Modern Browsers perform better using native arrays rather than typed arrays
+	// It also (de)serializes more cleanly so...
+	glMatrix.setMatrixArrayType(Array);
+
 	let exports = {
 		glMatrix: glMatrix,
-		toRadian: glMatrix.glMatrix.toRadian,
-		equals: glMatrix.glMatrix.equals,
-		mat2: glMatrix.mat2,
-		mat3: glMatrix.mat3,
-		mat4: glMatrix.mat4,
-		quat: glMatrix.quat,
-		quat2: glMatrix.quat2,
-		vec2: glMatrix.vec2,
-		vec3: glMatrix.vec3,
-		vec4:  glMatrix.vec4
+		toRadian: glMatrix.toRadian,
+		equals: glMatrix.equals,
+		mat2: mat2,
+		mat3: mat3,
+		mat4: mat4,
+		quat: quat,
+		quat2: quat2,
+		vec2: vec2,
+		vec3: vec3,
+		vec4: vec4
 	};
 
 	exports.Ease = require('./ease');
@@ -8945,16 +9089,16 @@ module.exports = (function() {
 	// TODO: Add plane 'class' - it's a vec4 with 0-2 being the normal vector and 3 being the distance to the origin from the plane along the normal vector
 	// I.e. the dot product of the offset point?
 
-	let vec3X = exports.vec3X = glMatrix.vec3.fromValues(1,0,0);
-	let vec3Y = exports.vec3Y = glMatrix.vec3.fromValues(0,1,0);
-	let vec3Z = exports.vec3Z = glMatrix.vec3.fromValues(0,0,1);
-	exports.vec3Zero = glMatrix.vec3.fromValues(0,0,0);
-	exports.vec3One = glMatrix.vec3.fromValues(1,1,1);
+	let vec3X = exports.vec3X = vec3.fromValues(1,0,0);
+	let vec3Y = exports.vec3Y = vec3.fromValues(0,1,0);
+	let vec3Z = exports.vec3Z = vec3.fromValues(0,0,1);
+	exports.vec3Zero = vec3.fromValues(0,0,0);
+	exports.vec3One = vec3.fromValues(1,1,1);
 
 	exports.vec3Pool = (function(){
 		let stack = [];
 		for (let i = 0; i < 5; i++) {
-			stack.push(glMatrix.vec3.create());
+			stack.push(vec3.create());
 		}
 		
 		return {
@@ -8963,7 +9107,7 @@ module.exports = (function() {
 				if (stack.length > 0) {
 					return stack.pop();
 				}
-				return glMatrix.vec3.create();
+				return vec3.create();
 			}
 		}
 	})();
@@ -8971,7 +9115,7 @@ module.exports = (function() {
 	exports.quatPool = (function(){
 		let stack = [];
 		for (let i = 0; i < 5; i++) {
-			stack.push(glMatrix.quat.create());
+			stack.push(quat.create());
 		}
 		
 		return {
@@ -8980,12 +9124,12 @@ module.exports = (function() {
 				if (stack.length > 0) {
 					return stack.pop();
 				}
-				return glMatrix.quat.create();
+				return quat.create();
 			}
 		}
 	})();
 
-	let equals = glMatrix.glMatrix.equals;
+	let equals = glMatrix.equals;
 
 	let approximately = exports.approximately = (a, b, epsilon) => {
 		// Was using adpated version of https://floating-point-gui.de/errors/comparison/
@@ -9045,14 +9189,14 @@ module.exports = (function() {
 	// TODO: Tests
 
 	exports.vec3Slerp = (() => {
-		let an = glMatrix.vec3.create(), bn = glMatrix.vec3.create();
+		let an = vec3.create(), bn = vec3.create();
 		return (out, a, b, t) => {
-			glMatrix.vec3.normlize(an, a);
-			glMatrix.vec3.normlize(bn, b);
-			let dot = glMatrix.vec3.dot(an, bn);
+			vec3.normlize(an, a);
+			vec3.normlize(bn, b);
+			let dot = vec3.dot(an, bn);
 			if (approximately(Math.abs(dot), 1.0, angleDotEpison)) {
 				// lerp
-				glMatrix.vec3.lerp(out, a, b, t);
+				vec3.lerp(out, a, b, t);
 			} else {
 				// Slerp
 				// a * sin ( theta * (1 - t) / sin (theta)) + b * (sin(theta * t) / sin(theta)) where theta = acos(|a|.|b|)
@@ -9068,28 +9212,25 @@ module.exports = (function() {
 	})(); 
 
 	exports.vec3MoveTowards = (() => {
-		let delta = glMatrix.vec3.create();
+		let delta = vec3.create();
 		return (out, a, b, maxDelta) => {
-			glMatrix.vec3.sub(delta, b, a);
-			let sqrLen = glMatrix.vec3.sqrDist(a, b); 
+			vec3.sub(delta, b, a);
+			let sqrLen = vec3.sqrDist(a, b); 
 			let sqrMaxDelta = maxDelta * maxDelta;
 			if (sqrMaxDelta >= sqrLen) {
-				glMatrix.vec3.copy(out, b);
+				vec3.copy(out, b);
 			} else {
-				glMatrix.vec3.scaleAndAdd(a, delta, sqrMaxDelta / sqrLen)
+				vec3.scaleAndAdd(a, delta, sqrMaxDelta / sqrLen)
 			}
 		}; 
 	})();
 
 	exports.vec3RotateTowards = (() => {
-		let an = glMatrix.vec3.create();
-		let bn = glMatrix.vec3.create();
-		let cross = glMatrix.vec3.create();
-		let q = glMatrix.quat.create();
+		let an = vec3.create();
+		let bn = vec3.create();
+		let cross = vec3.create();
+		let q = quat.create();
 		return (out, a, b, maxRadiansDelta, maxMagnitudeDelta) => {
-			let vec3 = glMatrix.vec3;
-			let quat = glMatrix.quat;
-
 			let aLen = vec3.length(a);
 			let bLen = vec3.length(b);
 			vec3.normlize(an, a);
@@ -9126,10 +9267,10 @@ module.exports = (function() {
 	})();
 
 	exports.vec3SmoothDamp = (() => {
-		let delta = glMatrix.vec3.create();
-		let temp = glMatrix.vec3.create();
+		let delta = vec3.create();
+		let temp = vec3.create();
 		return (out, a, b, velocity, smoothTime, maxSpeed, elapsed) => { // Q: Should have outVelocity?
-			let vec3 = glMatrix.vec3;
+			let vec3 = vec3;
 			if (vec3.equals(a, b)) {
 				vec3.copy(out, b);
 			} else {
@@ -9170,8 +9311,8 @@ module.exports = (function() {
 	exports.vec3ToString = (v) => { return "(" + v[0] + ", " + v[1] + ", " + v[2] + ")"; };
 
 	exports.quatEuler = (x, y, z) => {
-		let q = glMatrix.quat.create();
-		glMatrix.quat.fromEuler(q, x, y, z);
+		let q = quat.create();
+		quat.fromEuler(q, x, y, z);
 		return q;
 	};
 
@@ -9181,17 +9322,17 @@ module.exports = (function() {
 	};
 
 	exports.quatRotate = (function() {
-		let i = glMatrix.quat.create();
+		let i = quat.create();
 		return (out, q, rad, axis) => {
-			glMatrix.quat.setAxisAngle(i, axis, rad);
-			return glMatrix.quat.multiply(out, i, q);
+			quat.setAxisAngle(i, axis, rad);
+			return quat.multiply(out, i, q);
 		};
 	})();
 
 	exports.quatLocalAxes = (q, localX, localY, localZ) => {
-		glMatrix.vec3.transformQuat(localX, vec3X, q);
-		glMatrix.vec3.transformQuat(localY, vec3Y, q);
-		glMatrix.vec3.transformQuat(localZ, vec3Z, q);
+		vec3.transformQuat(localX, vec3X, q);
+		vec3.transformQuat(localY, vec3Y, q);
+		vec3.transformQuat(localZ, vec3Z, q);
 	};
 
 	// See https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
@@ -9229,7 +9370,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"../libs/gl-matrix":1,"./ease":5}],12:[function(require,module,exports){
+},{"../libs/gl-matrix":1,"./ease":6}],13:[function(require,module,exports){
 const r = require('./renderer');
 const Bounds = require('./bounds');
 const vec3 = require('./maths').vec3;
@@ -9416,7 +9557,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{"./bounds":2,"./maths":11,"./renderer":16}],13:[function(require,module,exports){
+},{"./bounds":3,"./maths":12,"./renderer":19}],14:[function(require,module,exports){
 module.exports = (function() {
 	let exports = {};
 
@@ -9556,7 +9697,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{}],14:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 const vec3 = require('./maths').vec3;
 
 module.exports = (function(){
@@ -9600,7 +9741,7 @@ module.exports = (function(){
 	return exports;
 })();
 
-},{"./bounds":2,"./maths":11}],15:[function(require,module,exports){
+},{"./bounds":3,"./maths":12}],16:[function(require,module,exports){
 module.exports = (function(){
 	let exports = {};
 
@@ -9616,7 +9757,128 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{}],16:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
+const { RenderMode } = require('./renderer');
+
+module.exports = (function(){
+	let exports = {};
+
+	exports.createQuadMeshConfig = (w, h) => {
+		return {
+			vertices: [ 
+				w, h, 0.0,
+				0, h, 0.0, 
+				w, 0, 0.0,
+				0, 0, 0.0 ],
+			normals: [
+				0.0, 0.0, 1.0,
+				0.0, 0.0, 1.0,
+				0.0, 0.0, 1.0,
+				0.0, 0.0, 1.0 ],
+			textureCoordinates: [
+				1.0, 1.0,
+				0.0, 1.0,
+				1.0, 0.0,
+				0.0, 0.0 ],
+			renderMode: RenderMode.TriangleStrip
+		};
+	};
+
+	return exports;
+})();
+},{"./renderer":19}],18:[function(require,module,exports){
+module.exports = (function(){
+	// Seedable Random
+
+	// Hasing function (to generate good seed) and generators taken from
+	// https://github.com/bryc/code/blob/master/jshash/PRNGs.md
+	function xmur3(str) {
+		for(var i = 0, h = 1779033703 ^ str.length; i < str.length; i++) {
+			h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+			h = h << 13 | h >>> 19;
+		} return function() {
+			h = Math.imul(h ^ (h >>> 16), 2246822507);
+			h = Math.imul(h ^ (h >>> 13), 3266489909);
+			return (h ^= h >>> 16) >>> 0;
+		}
+	}
+	
+	// 128-bit state - fast
+	function sfc32(a, b, c, d) {
+		return function() {
+			a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0; 
+			let t = (a + b) | 0;
+			a = b ^ b >>> 9;
+			b = c + (c << 3) | 0;
+			c = (c << 21 | c >>> 11);
+			d = d + 1 | 0;
+			t = t + d | 0;
+			c = c + t | 0;
+			return (t >>> 0) / 4294967296;
+		}
+	}
+
+	// 32-bit state - faster
+	function mulberry32(a) {
+		return function() {
+			let t = a += 0x6D2B79F5;
+			t = Math.imul(t ^ t >>> 15, t | 1);
+			t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+			return ((t ^ t >>> 14) >>> 0) / 4294967296;
+		}
+	}
+
+	let seed = null;
+	let rand = Math.random;
+
+	exports.generateSeed = function(length) {
+		// Generates random seed string from easy to copy chars
+		let r = rand;
+		rand = Math.random;
+		if (length === undefined) {
+			length = 8;
+		}
+		let seedChars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+		let seedStr = "";
+		for (let i = 0; i < length; i++) {
+			seedStr += seedChars[exports.integer(0, seedChars.length)];
+		}
+		rand = r;
+		return seedStr;
+	};
+
+	exports.setSeed = function(seed, use128) {
+		seed = xmur3("" + seed);
+		if (use128) {
+			rand = sfc32(seed(), seed(), seed(), seed());
+		} else {
+			rand = mulberry32(seed());
+		}
+	};
+
+	exports.value = function() {
+		return rand();
+	};
+
+	exports.range = function(min, max) {
+		return min + rand() * (max - min);
+	};
+
+	exports.integer = function(min, max) {
+		min = Math.ceil(min);
+		max = Math.floor(max);
+		return Math.floor(min +  rand() * (max - min));
+	};
+
+	exports.roll = function(min, max) {
+		min = Math.ceil(min);
+		max = Math.floor(max);
+		return Math.floor(min + rand() * (max - min + 1));
+	};
+
+	return exports;
+})();
+},{}],19:[function(require,module,exports){
 // This module is essentially a GL Context Facade
 // There are - of necessity - a few hidden logical dependencies in this class
 // mostly with the render functions, binding buffers before calling a function draw
@@ -9927,6 +10189,9 @@ exports.setUniformFloat2 = function(name, value1, value2) {
 exports.setUniformFloat3 = function(name, value1, value2, value3) {
 	gl.uniform3f(currentShaderProgram.uniformLocations[name], value1, value2, value3);
 };
+exports.setUniformFloat4 = function(name, value1, value2, value3, value4) {
+	gl.uniform4f(currentShaderProgram.uniformLocations[name], value1, value2, value3, value4);
+}
 exports.setUniformInteger = function(name, value) {
 	gl.uniform1i(currentShaderProgram.uniformLocations[name], value);
 };
@@ -10014,7 +10279,7 @@ exports.draw = function(renderMode, count, indexed, offset) {
 	}
 };
 
-},{}],17:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 const r = require('./renderer');
 const IndexedMap = require('./indexedMap');
 const Material = require('./material');
@@ -10069,6 +10334,14 @@ module.exports = (function() {
 		// TODO: Should have an equivilent to indexedMap but where you supply the keys, keyedMap?.
 		let alphaRenderObjects = [];
 		let depths = {};
+		depths.get = (o) => {
+			let id = o.sceneId !== undefined ? o.sceneId : o.id;
+			return depths[id];
+		};
+		depths.set = (o, depth) => {
+			let id = o.sceneId !== undefined ? o.sceneId : o.id;
+			depths[id] = depth;
+		};
 
 		let addTexturesToScene = function(material) {
 			for (let i = 0, l = material.shader.textureUniformNames.length; i < l; i++) {
@@ -10101,14 +10374,14 @@ module.exports = (function() {
 
 		let addToAlphaList = function(object, depth) {
 			// TODO: Profile using Array sort instead of insertion sorting, also test add/remove from list rather than clear
-			depths[object.sceneId] = depth;
+			depths.set(object, depth);
 			// Binary search
 			// Could technically do better by batching up items with the same depth according to material / mesh like scene graph
 			// However this is only relevant for 2D games with orthographic projection
 			let less, more, itteration = 1, inserted = false, index = Math.floor(alphaRenderObjects.length/2);
 			while (!inserted) {
-				less = (index === 0 || depths[alphaRenderObjects[index-1].sceneId] <= depth);
-				more = (index >= alphaRenderObjects.length || depths[alphaRenderObjects[index].sceneId] >= depth);
+				less = (index === 0 || depths.get(alphaRenderObjects[index-1]) <= depth);
+				more = (index >= alphaRenderObjects.length || depths.get(alphaRenderObjects[index]) >= depth);
 				if (less && more) {
 					alphaRenderObjects.splice(index, 0, object);
 					inserted = true;
@@ -10171,12 +10444,10 @@ module.exports = (function() {
 			object.material.shaderId = object.shaderId;
 			addTexturesToScene(object.material);
 
-			// Probably want to move to a stronger ECS concept
-			// Adding a transform component is probably fine
-			// as the renderer requires it.
 			object.transform = Transform.create(config);
 
 			// For now just sort by material on add
+			// Ideally would group materials with the same shader and textures together
 			object.sceneId = renderObjects.add(object, sortByMaterial); 
 			// Would probably be more performant to dynamic changes if kept a record of start and end index
 			// of all materials and could simply inject at the correct point - TODO: Profile
@@ -10350,7 +10621,7 @@ module.exports = (function() {
 			r.disableBlending();
 		};
 
-		let bindAndDraw = function(object) {	// TODO: Separate binding and drawing
+		let bindAndDraw = function(object) {
 			let shader = object.material.shader;
 			let material = object.material;
 			let mesh = object.mesh;
@@ -10362,13 +10633,21 @@ module.exports = (function() {
 			// TODO: When scene graph implemented - check material.shaderId & object.shaderId against shader.id, and object.materialId against material.id and object.meshId against mesh.id
 			// as this indicates that this object needs reordering in the graph (as it's been changed).
 
-			let shaderChanged = false;
-			let materialChanged = false;
+			let shouldRebindShader = false;
+			let shouldRebindMaterial = false;
 			if (!shader.id || shader.id != currentShaderId) {
-				shaderChanged = true;
-				if(!shader.id) {	// Shader was changed on the material since originally added to scene
+				shouldRebindShader = true;
+				// Check if shader was changed on the material since originally added to scene
+				if(!shader.id) {
 					material.shaderId = shaders.add(shader);
 					object.shaderId = material.shaderId;
+				} else {
+					if (material.shaderId != shader.id) {
+						material.shaderId = shader.id;
+					} 
+					if (object.shaderId != shader.id) {
+						object.shaderId = shader.id;
+					}
 				}
 				currentShaderId = shader.id;
 				r.useShaderProgram(shader.shaderProgram);
@@ -10383,18 +10662,22 @@ module.exports = (function() {
 
 			if (!material.id || material.id != currentMaterialId || material.dirty) {
 				if (!material.dirty) {
-					materialChanged = true;
+					shouldRebindMaterial = true;
 				} else {
 					material.dirty = false;
 				}
-				if (!material.id) {	// material was changed on object since originally added to scene
+				// check if material was changed on object since originally 
+				// added to scene TODO: Ideally would mark object for resorting
+				if (!material.id) {
 					object.materialId = materials.add(material);
+				} else if (object.materialId != material.id) {
+					object.materialId = material.id;
 				}
 				currentMaterialId = material.id;
 				shader.bindMaterial.call(r, material);
 			}
 
-			if (shaderChanged || materialChanged) {
+			if (shouldRebindShader || shouldRebindMaterial) {
 				// Texture Rebinding dependencies
 				// If the shader has changed you DON'T need to rebind, you only need to rebind if the on the uniforms have changed since the shaderProgram was last used...
 					// NOTE Large Changes needed because of this
@@ -10434,8 +10717,11 @@ module.exports = (function() {
 			}
 
 			if (!mesh.id || mesh.id != currentMeshId || mesh.dirty) {
-				if (!mesh.id) {	// mesh was changed on object since originally added to scene
+				// Check if mesh was changed on object since originally added to scene
+				if (!mesh.id) {
 					object.meshId = mesh.add(mesh);
+				} else if (object.meshId != mesh.id) {
+					object.meshId = mesh.id;
 				}
 				currentMeshId = mesh.id;
 				shader.bindBuffers.call(r, mesh);
@@ -10469,7 +10755,7 @@ module.exports = (function() {
 
 	return exports;
 })();
-},{"./bounds":2,"./indexedMap":8,"./material":10,"./maths":11,"./mesh":12,"./prefab":15,"./renderer":16,"./transform":20}],18:[function(require,module,exports){
+},{"./bounds":3,"./indexedMap":9,"./material":11,"./maths":12,"./mesh":13,"./prefab":16,"./renderer":19,"./transform":25}],21:[function(require,module,exports){
 // Shader Class for use with Fury Scene
 const r = require('./renderer');
 
@@ -10539,7 +10825,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./renderer":16}],19:[function(require,module,exports){
+},{"./renderer":19}],22:[function(require,module,exports){
 const Shader = require('./shader');
 
 module.exports = (function() {
@@ -10609,18 +10895,25 @@ module.exports = (function() {
 	
 		"uniform sampler2D uSampler;",
 	
+		"uniform vec4 uColor;",
+	
 		"void main(void) {",
-			"gl_FragColor = texture2D(uSampler, vec2(uOffset.x + (uScale.x * vTextureCoord.s), uOffset.y + (uScale.y * vTextureCoord.t)));",
+			"gl_FragColor = texture2D(uSampler, vec2(uOffset.x + (uScale.x * vTextureCoord.s), uOffset.y + (uScale.y * vTextureCoord.t))) * uColor;",
 		"}"].join('\n'),
 	
 		attributeNames: [ "aVertexPosition", "aTextureCoord" ],
-		uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler", "uOffset", "uScale" ],
+		uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler", "uOffset", "uScale", "uColor" ],
 		textureUniformNames: [ "uSampler" ],
 		pMatrixUniformName: "uPMatrix",
 		mvMatrixUniformName: "uMVMatrix",
 		bindMaterial: function(material) {
 			this.setUniformVector2("uOffset", material.offset);
 			this.setUniformVector2("uScale", material.scale);
+			if (material.color) {
+				this.setUniformVector4("uColor", material.color);
+			} else {
+				this.setUniformFloat4("uColor", 1, 1, 1, 1);
+			}
 		},
 		bindBuffers: function(mesh) {
 			this.enableAttribute("aVertexPosition");
@@ -10644,7 +10937,195 @@ module.exports = (function() {
 
 	return exports;
 })();
-},{"./shader":18}],20:[function(require,module,exports){
+},{"./shader":21}],23:[function(require,module,exports){
+// Simple single line text mesh using Atlas
+// Broadly similar to tilemap, however supports varying position based on custom tile widths
+// Prefabs generated by Atlas do not adjust for variable width so there is unnecessary blending / overdraw
+
+const Atlas = require('./atlas');
+const { vec3 } = require('./maths');
+
+module.exports = (function(){
+	let exports = {};
+
+	let Alignment = exports.Alignment = {
+		"left": 0,
+		"center": 1,
+		"right": 2
+	};
+
+	let atlasWidths = {};
+
+	let generateCharWidthLookup = (atlas) => {
+		let lookup = {};
+		if (hasVariableTileWidths(atlas)) {
+			for (let i = 0, l = atlas.customTileWidths.length; i < l; i++) {
+				let { width, tiles } = atlas.customTileWidths[i];
+				for (let j = 0, n = tiles.length; j < n; j++) {
+					lookup[tiles[j]] = width;
+				}
+			}
+		} 
+		atlasWidths[atlas.id] = lookup;
+	};
+
+	let hasVariableTileWidths = exports.hasVariableTileWidths = (atlas) => {
+		return atlas.customTileWidths && atlas.customTileWidths.length;
+	};
+
+	let getCharWidth = exports.getCharWidth = (atlas, char) => {
+		let tileWidth = atlas.tileWidth;
+		let lookup = atlasWidths[atlas.id];
+		if (lookup && lookup[char] !== undefined) {
+			tileWidth = lookup[char];
+		}
+		return tileWidth;
+	};
+
+	exports.create = (config) => {
+		let { text, scene, atlas, position, alignment, color, gridClamp } = config;
+
+		if (!atlasWidths[atlas.id]) {
+			generateCharWidthLookup(atlas);
+		}
+
+		let tiles = [];
+
+		let textMesh = {};
+		textMesh.remove = () => {
+			for (let i = 0, l = tiles.length; i < l; i++) {
+				scene.remove(tiles[i]);
+			}
+			tiles.length = 0;
+		};
+
+		let calculateWidth = textMesh.calculateWidth = (text) => {
+			let width = 0;
+			if (hasVariableTileWidths(atlas)) {
+				for (let i = 0, l = text.length; i < l; i++) {
+					width += getCharWidth(atlas, text[i]);
+				}
+			} else {
+				width = text.length * atlas.tileWidth;
+			}
+			return width;
+		};
+
+		textMesh.getText = () => text;
+		textMesh.setText = (value) => {
+			textMesh.remove();
+
+			let offset = 0;
+			if (alignment == Alignment.center) {
+				if (gridClamp && !hasVariableTileWidths(atlas)) {
+					offset = Math.floor(text.length / 2) * atlas.tileWidth;
+				} else {
+					offset = Math.floor(calculateWidth(value) / 2);
+				}
+			} else if (alignment == Alignment.right) {
+				offset = calculateWidth(value);
+			}
+			
+			let x = position[0] - offset, y = position[1], z = position[2];
+			for (let i = 0, l = value.length; i < l; i++) {
+				let char = value[i];
+				let name = Atlas.createTilePrefab({ atlas: atlas, tile: char, color: color });
+				tiles.push(scene.instantiate({
+					name: name,
+					position: vec3.fromValues(x, y, z)
+				}));
+				x += getCharWidth(atlas, char);
+			}
+			text = value;
+		};
+
+		textMesh.setText(text);
+
+		return textMesh;
+	};
+
+	return exports;
+})();
+},{"./atlas":2,"./maths":12}],24:[function(require,module,exports){
+// Really basic tilemap using prefabs per tile
+
+// Could probably be vastly improved by using a custom shader
+// and a lookup texture into the atlas texture 
+// (i.e. single quad, single material, easy to move etc)
+
+const Atlas = require('./atlas');
+const { vec3 } = require('./maths');
+
+module.exports = (function(){
+	let exports = {};
+
+	exports.create = (config) => {
+		let { scene, width: w, height: h, position: pos, atlas, defaultTile } = config;
+
+		let tileMap = {};
+		tileMap.width = w;
+		tileMap.height =  h;
+
+		let { tileWidth, tileHeight } = atlas;
+		let position = vec3.clone(pos);
+		let tiles = [];
+
+		tileMap.setTile = (x, y, tile, color) => {
+			let index = x + y * w;
+			if (index >= 0 && index < tiles.length) {
+				let name = Atlas.createTilePrefab({ atlas: atlas, tile: tile, color: color });
+				if (tiles[index]) { scene.remove(tiles[index]); }
+				tiles[index] = scene.instantiate({
+					name: name,
+					position: vec3.fromValues(position[0] + x * tileWidth, position[1] + y * tileHeight, position[2])
+				});
+			}
+		};
+
+		tileMap.fill = (tile, color) => {
+			let name = Atlas.createTilePrefab({ atlas: atlas, tile: tile, color: color });
+			for (let y = 0; y < h; y++) {
+				for (let x = 0; x < w; x++) {
+					let index = x + w * y;
+					if (tiles[index]) { scene.remove(tiles[index]); }
+					tiles[x + w * y] = scene.instantiate({
+						name: name,
+						position: vec3.fromValues(position[0] + x * tileWidth, position[1] + y * tileHeight, position[2])
+					});
+				}
+			}
+		};
+
+		tileMap.isTileActive = (x, y) => {
+			if (x >= 0 && y >= 0 && x < w && y < h) {
+				return tiles[x + y * w].active;
+			}
+		};
+		
+		tileMap.setTileActive = (x, y, active) => {
+			if (x >= 0 && y >= 0 && x < w && y < h) {
+				tiles[x + y * w].active = active;
+			}
+		};
+
+		tileMap.remove = () => {
+			for (let i = 0, l = tiles.length; i < l; i++) {
+				scene.remove(tiles[i]);
+			}
+		};
+
+		if (defaultTile !== undefined) {
+			tileMap.fill(defaultTile);
+		} else {
+			tiles.length = w * h;
+		}
+
+		return tileMap;
+	};
+
+	return exports;
+})();
+},{"./atlas":2,"./maths":12}],25:[function(require,module,exports){
 const Maths = require('./maths');
 const quat = Maths.quat, vec3 = Maths.vec3;
 
@@ -10660,7 +11141,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./maths":11}],21:[function(require,module,exports){
+},{"./maths":12}],26:[function(require,module,exports){
 // Utils
 module.exports = (function(){
 	let exports = {};
@@ -10680,4 +11161,4 @@ module.exports = (function(){
 
 	return exports
 })();
-},{}]},{},[4]);
+},{}]},{},[5]);
