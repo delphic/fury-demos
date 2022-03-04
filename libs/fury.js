@@ -7802,25 +7802,6 @@ module.exports = (function(){
 		setMaterialOffset(config, atlasIndex, atlas.width, atlas.height);
 	};
 
-	let hasVariableTileWidths = exports.hasVariableTileWidths = (atlas) => {
-		return atlas.customTileWidths && atlas.customTileWidths.length;
-	};
-
-	let getTileWidth = exports.getTileWidth = (atlas, tile) => {
-		// TODO: build a lookup instead
-		let tileWidth = atlas.tileWidth;
-		if (atlas.customTileWidths && atlas.customTileWidths.length) {
-			for (let i = 0, l = atlas.customTileWidths.length; i < l; i++) {
-				let { width, tiles } = atlas.customTileWidths[i];
-				if (tiles.includes(tile)) {
-					tileWidth = width;
-					break;
-				}
-			}
-		}
-		return tileWidth;
-	};
-
 	exports.createTilePrefab = (config) => {
 		let { atlas, tile, color, alpha } = config;
 		let { width, height } = atlas;
@@ -7840,11 +7821,9 @@ module.exports = (function(){
 			}
 			setMaterialOffset(materialConfig, atlasIndex, width, height);
 
-			let tileWidth = getTileWidth(atlas, tile);
-
 			Prefab.create({
 				name: prefabName, 
-				meshConfig: atlas.meshConfigs[tileWidth],
+				meshConfig: atlas.meshConfig,
 				materialConfig: materialConfig
 			});
 		}
@@ -7867,14 +7846,7 @@ module.exports = (function(){
 				scale: [ 1 / atlas.width, 1 / atlas.height ]
 			}
 		};
-		atlas.meshConfigs = {};
-		atlas.meshConfigs[atlas.tileWidth] = Primitives.createQuadMeshConfig(atlas.tileWidth, atlas.tileHeight);
-		if (hasVariableTileWidths(atlas)) {
-			for (let i = 0, l = atlas.customTileWidths.length; i < l; i++) {
-				let { width } = atlas.customTileWidths[i];
-				atlas.meshConfigs[width] = Primitives.createQuadMeshConfig(atlas.tileWidth, atlas.tileHeight);
-			}
-		}
+		atlas.meshConfig = Primitives.createQuadMeshConfig(atlas.tileWidth, atlas.tileHeight);
 		return atlas;
 	};
 
@@ -10954,6 +10926,18 @@ module.exports = (function(){
 		"right": 2
 	};
 
+	// Determines how round initial left most position when aligning
+	// No rounding, floor to integer, or floor to the atlas.tileSize
+	// Note: grid only works with atlases with static tile widths
+	let AlignmentStyle = exports.AlignmentStyle = {
+		"free": 0,
+		"integer": 1,
+		"grid": 2,
+	};
+
+	// Default alignment style - Assumes UI is pixel perfect, so integer
+	exports.alignmentStyle = AlignmentStyle.integer;
+
 	let atlasWidths = {};
 
 	let generateCharWidthLookup = (atlas) => {
@@ -10983,7 +10967,11 @@ module.exports = (function(){
 	};
 
 	exports.create = (config) => {
-		let { text, scene, atlas, position, alignment, color, gridClamp } = config;
+		let { text, scene, atlas, position, alignment, color, alignmentStyle } = config;
+
+		if (alignmentStyle === undefined || alignmentStyle === null) {
+			alignmentStyle = exports.alignmentStyle;
+		}
 
 		if (!atlasWidths[atlas.id]) {
 			generateCharWidthLookup(atlas);
@@ -11011,20 +10999,28 @@ module.exports = (function(){
 			return width;
 		};
 
+		let calculateAlignmentOffset = (alignment, text) => {
+			let offset = 0;
+			if (alignment == Alignment.center) {
+				if (alignmentStyle == AlignmentStyle.grid && !hasVariableTileWidths(atlas)) {
+					offset = Math.floor(text.length / 2) * atlas.tileWidth;
+				} else {
+					offset = calculateWidth(text) / 2;
+				}
+			} else if (alignment == alignment.right) {
+				offset = calculateWidth(text);
+			}
+			if (offset && alignmentStyle == AlignmentStyle.integer) {
+				offset = Math.floor(offset);
+			}
+			return offset;
+		};
+
 		textMesh.getText = () => text;
 		textMesh.setText = (value) => {
 			textMesh.remove();
 
-			let offset = 0;
-			if (alignment == Alignment.center) {
-				if (gridClamp && !hasVariableTileWidths(atlas)) {
-					offset = Math.floor(text.length / 2) * atlas.tileWidth;
-				} else {
-					offset = Math.floor(calculateWidth(value) / 2);
-				}
-			} else if (alignment == Alignment.right) {
-				offset = calculateWidth(value);
-			}
+			let offset = calculateAlignmentOffset(alignment, value);
 			
 			let x = position[0] - offset, y = position[1], z = position[2];
 			for (let i = 0, l = value.length; i < l; i++) {
