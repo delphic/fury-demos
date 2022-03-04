@@ -62,7 +62,7 @@ window.onload = (event) => {
 
 let loadTexture = function(texturePath) {
 	// Create Texture
-	let image = new Image(); // TODO: Use Fetch Request
+	let image = new Image();
 	image.onload = function() {	
 		material.setTexture(Fury.Renderer.createTexture(image, "low", true));
 		
@@ -81,7 +81,6 @@ let loadTexture = function(texturePath) {
 let loop = function(elapsed) {
 	time += elapsed;
 
-	// TODO: Alternate between rotation and translation - a JS coroutine could work here
 	if (testTranslation) {
 		let position = sprite.transform.position;
 		position[0] = 32 * Math.sin(time);
