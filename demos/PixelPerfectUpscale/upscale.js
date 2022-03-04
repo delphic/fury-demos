@@ -95,7 +95,3 @@ let loop = function(elapsed) {
 
 	scene.render();
 };
-
-
-
-
