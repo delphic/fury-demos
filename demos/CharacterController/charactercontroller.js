@@ -962,7 +962,8 @@ let loop = function(elapsed) {
 	inputX = Fury.Input.getAxis("d", "a"); // 0.05, Fury.Maths.Ease.inQuad
 	// Note: Input smoothing removed from Fury 
 	// TODO: Input smoother which listens for key presses and then smoothes on press and release
-	// accounting for if full press or full release was reached on subsequent releases or presses. 
+	// accounting for if full press or full release was reached on subsequent releases or presses.
+	// or could just use SmoothDamp, c.f. https://github.com/delphic/asteria-combat/commit/f3c3376ab9e54eeba510f7badf1110eb53346c71
 
 	// Calculate local axes for camera - ignoring roll
 	// This would be easier with a character transform
