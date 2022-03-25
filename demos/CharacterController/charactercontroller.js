@@ -1164,18 +1164,18 @@ let loop = function(elapsed) {
 	playerVelocity[1] -= gravity * elapsed;
 
 	if (Fury.Input.keyDown("Space", true)) {
-		if (grounded || canCoyote && (Date.now() - lastGroundedTime < 1000 * coyoteTime)) {
+		if (grounded || canCoyote && (Fury.GameLoop.time - lastGroundedTime < coyoteTime)) {
 			jump();
 		} else {
-			lastJumpAttemptTime = Date.now();
+			lastJumpAttemptTime = Fury.GameLoop.time;
 		}
 	}
 
 	// Y Move - playerContacts[1] = -1 if hit ground
 	characterController.moveY(playerContacts, playerVelocity, elapsed)
 	if (playerContacts[1] == -1) {
-		lastGroundedTime = Date.now();
-		if (!grounded && lastGroundedTime - lastJumpAttemptTime < 1000 * coyoteTime) {
+		lastGroundedTime = Fury.GameLoop.time;
+		if (!grounded && lastGroundedTime - lastJumpAttemptTime < coyoteTime) {
 			jump();
 		} else {
 			grounded = true;
