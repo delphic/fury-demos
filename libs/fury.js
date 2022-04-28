@@ -7779,7 +7779,7 @@ module.exports = (function(){
 		return 0;
 	};
 
-	let getPrefabName = (atlas, atlasIndex, color, alpha) => {
+	let getPrefabName = (atlas, atlasIndex, color, alpha, centered) => {
 		let name = atlas.id + "_" + atlasIndex;
 		if (alpha !== undefined && alpha != atlas.materialConfig.properties.alpha) {
 			name += "_" + (alpha ? "a1" : "a0");
@@ -7788,27 +7788,39 @@ module.exports = (function(){
 		if (color !== undefined && (color[0] != 1 || color[1] != 1 || color[2] != 1 || color[3] != 1)) {
 			name += "_" + color[0] + "_" + color[1] + "_" + color[2] + "_" + color[3];
 		}
+
+		if (centered) {
+			name += "_c";
+		}
+
 		return name;
 	}
 
-	let setMaterialOffset = (config, atlasIndex, width, height) => {
-		let offsetU = (atlasIndex % width) / width;
-		let offsetV = 1 - (Math.floor(atlasIndex / width) + 1) / height;
-		config.properties.offset = [ offsetU, offsetV ];
+	let setOffset = (out, atlasIndex, width, height) => {
+		out[0] = (atlasIndex % width) / width;
+		out[1] = 1 - (Math.floor(atlasIndex / width) + 1) / height;
 	};
 
-	exports.setMaterialOffset = (config, atlas, tile) => {
+	let setMaterialConfigOffset = (config, atlasIndex, width, height) => {
+		config.properties.offset = [0,0]; // Create new offset array per prefab
+		setOffset(config.properties.offset, atlasIndex, width, height);
+	};
+
+	exports.setMaterialOffset = (material, atlas, tile) => {
 		let atlasIndex = getAtlasIndex(atlas, tile);
-		setMaterialOffset(config, atlasIndex, atlas.width, atlas.height);
+		if (!material.offset) { material.offset = [0,0]; }
+		setOffset(material.offset, atlasIndex, atlas.width, atlas.height);
 	};
 
 	exports.createTilePrefab = (config) => {
-		let { atlas, tile, color, alpha } = config;
+		let { atlas, tile, color, alpha, centered } = config;
 		let { width, height } = atlas;
 		let atlasIndex = getAtlasIndex(atlas, tile);
-		let prefabName = getPrefabName(atlas, atlasIndex, color, alpha);
+		let prefabName = getPrefabName(atlas, atlasIndex, color, alpha, centered);
 
 		if (Prefab.prefabs[prefabName] === undefined) {
+			let meshConfig = centered ? atlas.centerdMeshConfig : atlas.meshConfig;
+
 			let materialConfig = Object.create(atlas.materialConfig);
 			if (alpha !== undefined) {
 				materialConfig.properties.alpha = alpha;
@@ -7819,11 +7831,11 @@ module.exports = (function(){
 				 // This shouldn't be necessary, however it is
 				materialConfig.properties.color = Maths.vec4.fromValues(1,1,1,1);
 			}
-			setMaterialOffset(materialConfig, atlasIndex, width, height);
+			setMaterialConfigOffset(materialConfig, atlasIndex, width, height);
 
 			Prefab.create({
 				name: prefabName, 
-				meshConfig: atlas.meshConfig,
+				meshConfig: meshConfig,
 				materialConfig: materialConfig
 			});
 		}
@@ -7847,6 +7859,7 @@ module.exports = (function(){
 			}
 		};
 		atlas.meshConfig = Primitives.createQuadMeshConfig(atlas.tileWidth, atlas.tileHeight);
+		atlas.centerdMeshConfig = Primitives.createCenteredQuadMeshConfig(atlas.tileWidth, atlas.tileHeight);
 		return atlas;
 	};
 
@@ -9463,10 +9476,10 @@ module.exports = (function(){
 					for (let i = 0, l = customBuffers.length; i < l; i++) {
 						let { name, componentType, buffer, size, count } = customBuffers[i];
 						switch (componentType) {
-							case 5126: // Float32
+							case r.DataType.FLOAT: // Float32
 								mesh.customBuffers[name] = r.createArrayBuffer(buffer, size, count);
 								break;
-							case 5123: // Int16
+							case r.DataType.SHORT: // Int16
 								mesh.customBuffers[name] = r.createElementArrayBuffer(buffer, size, count);
 								// UNTESTED
 								break;
@@ -9507,7 +9520,12 @@ module.exports = (function(){
 					for (let i = 0, l = customAttributes.length; i < l; i++) {
 						let { name, source, size } = customAttributes[i]; 
 						// Maybe should validate name isn't already used?
-						mesh[name] = r.createBuffer(config[source], size);
+						let data = config[source];
+						if (data.buffer) {
+							mesh[name] = r.createArrayBuffer(data, size, data.length);
+						} else {
+							mesh[name] = r.createBuffer(data, size);
+						}
 						// Note - dynamic not currently supported for custom attributes
 					}
 				}
@@ -9753,6 +9771,28 @@ module.exports = (function(){
 		};
 	};
 
+	exports.createCenteredQuadMeshConfig = (w, h) => {
+		let sx = w/2, sy = h/2;
+		return {
+			vertices: [ 
+				sx, sy, 0.0,
+				-sx, sy, 0.0, 
+				sx, -sy, 0.0,
+				-sx, -sy, 0.0 ],
+			normals: [
+				0.0, 0.0, 1.0,
+				0.0, 0.0, 1.0,
+				0.0, 0.0, 1.0,
+				0.0, 0.0, 1.0 ],
+			textureCoordinates: [
+				1.0, 1.0,
+				0.0, 1.0,
+				1.0, 0.0,
+				0.0, 0.0 ],
+			renderMode: RenderMode.TriangleStrip
+		};
+	};
+
 	return exports;
 })();
 },{"./renderer":19}],18:[function(require,module,exports){
@@ -9938,6 +9978,16 @@ exports.useShaderProgram = function(shaderProgram) {
 };
 
 // Buffers
+exports.DataType = {
+	"BYTE": 5120, // signed 8-bit integer
+	"SHORT": 5122, // signed 16-bit integer
+	"INT": 5124, // signed 32-bit integer
+	"UNSIGNED_BYTE": 5121, // unsigned 8-bit integer
+	"UNSIGNED_SHORT": 5123, // unsigned 16-bit integer
+	"UNSIGNED_INT": 5125, // unsigned 32-bit integer
+	"FLOAT": 5126, // 32-bit IEEE floating point number
+	"HALF_FLOAT": 5131, // 16-bit IEEE floating point number
+};
 
 exports.createBuffer = function(data, itemSize, indexed) {
 	let buffer = gl.createBuffer();
@@ -10141,8 +10191,18 @@ exports.setAttribute = function(name, buffer) {
 	gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 	gl.vertexAttribPointer(currentShaderProgram.attributeLocations[name], buffer.itemSize, gl.FLOAT, false, 0, 0);
 };
+exports.setAttributeFloat = function(name, buffer, type) {
+	/* Supported types: gl.BYTE, gl.SHORT, gl.UNSIGNED_BYTE, gl.UNSIGNED_SHORT, gl.FLOAT, gl.HALF_FLOAT: */
+	gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+	gl.vertexAttribPointer(currentShaderProgram.attributeLocations[name], buffer.itemSize, type, false, 0, 0);
+};
+exports.setAttributeInteger = function(name, buffer, type) {
+	/* Supported types: gl.BYTE, gl.UNSIGNED_BYTE, gl.SHORT, gl.UNSIGNED_SHORT, gl.INT, gl.UNSIGNED_INT */
+	gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+	gl.vertexAttribIPointer(currentShaderProgram.attributeLocations[name], buffer.itemSize, type, 0, 0);
+};
 
-exports.setIndexedAttribute = function(buffer) {	// Should arguably be renamed - there's isn't an index attribute
+exports.setIndexedAttribute = function(buffer) {
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
 };
 
@@ -10785,8 +10845,6 @@ module.exports = (function() {
 		shader.mvMatrixUniformName = config.mvMatrixUniformName || "mvMatrix";
 		shader.nMatrixUniformName = config.nMatrixUniformName;
 		shader.mMatrixUniformName = config.mMatrixUniformName;
-
-		// TODO: decide how to deal with non-standard uniforms
 
 		return shader;
 	};
