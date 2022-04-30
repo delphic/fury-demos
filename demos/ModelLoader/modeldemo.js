@@ -117,8 +117,8 @@ if (!useColors) {
 			this.setAttribute("aVertexPosition", mesh.vertexBuffer);
 			this.setAttribute("aVertexNormal", mesh.normalBuffer);
 			this.setAttribute("aTextureCoord", mesh.textureBuffer);
-			this.setAttribute("aColor0", mesh.customBuffers["COLOR_0"]);
-			this.setAttribute("aColor1", mesh.customBuffers["COLOR_1"]);
+			this.setAttribute("aColor0", mesh["COLOR_0"]);
+			this.setAttribute("aColor1", mesh["COLOR_1"]);
 			this.setIndexedAttribute(mesh.indexBuffer);
 		}
 	});
