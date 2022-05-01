@@ -9399,9 +9399,9 @@ module.exports = (function(){
 	let createBuffer = function(data, size, indexed) {
 		if (data.buffer) {
 			if (!indexed) {
-				return r.createArrayBuffer(data, size, Math.round(data.length / size));
+				return r.createArrayBuffer(data, size);
 			} else {
-				return r.createElementArrayBuffer(data, size, data.length);
+				return r.createElementArrayBuffer(data, size);
 			}
 		} else {
 			return r.createBuffer(data, size, indexed);
@@ -9451,7 +9451,7 @@ module.exports = (function(){
 					if (!mesh[name]) {
 						let data = config[source];
 						if (data.buffer) {
-							mesh[name] = r.createArrayBuffer(data, size, data.length);
+							mesh[name] = r.createArrayBuffer(data, size);
 						} else {
 							mesh[name] = r.createBuffer(data, size);
 						}
@@ -9578,7 +9578,7 @@ module.exports = (function() {
 					}
 				}
 
-				callback({ meshData: [ meshData ]});
+				callback({ meshData: [ meshData ] });
 
 			}).catch((error) => {
 				console.error(error);
@@ -9909,25 +9909,25 @@ exports.createBuffer = function(data, itemSize, indexed) {
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(data), gl.STATIC_DRAW);
 	}
 	buffer.itemSize = itemSize;
-	buffer.numItems = data.length / itemSize;
+	buffer.numItems = Math.round(data.length / itemSize);
 	return buffer;
 };
 
-exports.createArrayBuffer = function(data, itemSize, numItems) {
+exports.createArrayBuffer = function(data, itemSize) {
 	let buffer = gl.createBuffer();
 	gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 	gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
 	buffer.itemSize = itemSize;
-	buffer.numItems = numItems;
+	buffer.numItems = Math.round(data.length / itemSize);
 	return buffer;
 };
 
-exports.createElementArrayBuffer = function(data, itemSize, numItems) {
+exports.createElementArrayBuffer = function(data, itemSize) {
 	let buffer = gl.createBuffer();
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
 	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, data, gl.STATIC_DRAW);
 	buffer.itemSize = itemSize;
-	buffer.numItems = numItems;
+	buffer.numItems = Math.round(data.length / itemSize);;
 	return buffer;
 };
 
