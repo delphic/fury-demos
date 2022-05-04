@@ -1227,7 +1227,7 @@ let loadMapTextures = function(namedMaterials, texelsPerUnit) {
 		let textureName = keys[i];
 		images[textureName] = new Image();
 		images[textureName].onload = function() {
-			namedMaterials[textureName].textures["uSampler"] = Fury.Renderer.createTexture(images[textureName], "pixel", false, true);
+			namedMaterials[textureName].textures["uSampler"] = Fury.Renderer.createTexture(images[textureName], "pixel", false, true, true);
 			namedMaterials[textureName].sScale *= texelsPerUnit / images[textureName].width;
 			namedMaterials[textureName].tScale *= texelsPerUnit / images[textureName].height;
 

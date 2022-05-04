@@ -9475,8 +9475,12 @@ module.exports = (function() {
 	// In future can be extended to include material information
 	exports.load = (uri, callback) => {
 		// TODO: Check file extension, only gltf currently supported
-		// https://github.com/KhronosGroup/glTF/tree/master/specification/2.0
+		// https://github.com/KhronosGroup/glTF -> https://github.com/KhronosGroup/glTF/tree/master/specification/2.0
+		// https://github.com/KhronosGroup/glTF/blob/main/specification/2.0/figures/gltfOverview-2.0.0b.png
+		// https://www.khronos.org/registry/glTF/specs/2.0/glTF-2.0.html
 
+		let model = { meshData: [], images: [] };
+		
 		fetch(uri).then((response) => {
 			return response.json();
 		}).then((json) => {
@@ -9551,6 +9555,8 @@ module.exports = (function() {
 				}
 			}
 
+			let assetsLoading = 0;
+			assetsLoading++;
 			fetch(json.buffers[positionBufferView.buffer].uri).then((response) => {
 				return response.arrayBuffer();
 			}).then((arrayBuffer) => {
@@ -9578,13 +9584,43 @@ module.exports = (function() {
 					}
 				}
 
-				callback({ meshData: [ meshData ] });
+				model.meshData.push(meshData);
+				assetsLoading--;
+
+				if (assetsLoading == 0) {
+					callback(model);
+				}
 
 			}).catch((error) => {
 				console.error(error);
 				console.error("Unable to fetch data buffer from model");
 			});
 
+			if (json.images && json.images.length) {
+				// TODO: Load images and using the index from textures array instead of directly
+				for (let i = 0, l = json.images.length; i < l; i++) {
+					assetsLoading++;
+					fetch(json.images[i].uri).then(response => response.blob()).then(blob => {
+						let image = new Image();
+						image.src = URL.createObjectURL(blob);
+						// Note if we wanted to unload the model
+						// we would need to call URL.revokeObjectURL(image.src)
+						image.decode().then(() => {
+							model.images.push(image);
+							assetsLoading--;
+							if (assetsLoading == 0) {
+								callback(model);
+							}
+						}).catch((error) => {
+							console.error(error);
+							console.error("Unable to decode provide image data");
+						});
+					}).catch((error) => {
+						console.error(error);
+						console.error("Unable to fetch image data from model");
+					});	
+				}
+			}
 		}).catch((error) => {
 			console.error(error);
 			console.error("Unable to load model at " + uri);
@@ -9943,10 +9979,12 @@ let TextureQuality = exports.TextureQuality = {
 	Low: "low"				// Uses nearest pixel
 };
 
-exports.createTexture = function(source, quality, clamp, disableAniso) {
+exports.createTexture = function(source, quality, clamp, flip, disableAniso) {
+	if (flip === undefined) flip = true;
+
 	let texture = gl.createTexture();
 	gl.bindTexture(gl.TEXTURE_2D, texture);
-	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flip);
 	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
 	// If we want to create mipmaps manually provide an array source and put them into
 	// different levels in texImage2D - you must provide all mipmap levels
