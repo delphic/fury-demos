@@ -550,7 +550,14 @@ let image = new Image();
 image.onload = function() {
 	let upscaled = Fury.Utils.createScaledImage({ image: image, scale: 8 });
 	let textureSize = upscaled.width, textureCount = Math.round(upscaled.height / upscaled.width);
-	let textureArray = Fury.Renderer.createTextureArray(upscaled, textureSize, textureSize, textureCount, "pixel", true);
+	let textureArray = Fury.Texture.createTextureArray({ 
+		source: upscaled,
+		width: textureSize,
+		height: textureSize,
+		imageCount: textureCount,
+		quality: "pixel",
+		clamp: true 
+	});
 	atlasMaterial.setTexture(textureArray);
 	awake();
 };

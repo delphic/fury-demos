@@ -90,7 +90,14 @@ var loop = function(){
 // Create Texture
 var image = new Image();
 image.onload = function() {
-	material.textures["uSampler"] = Fury.Renderer.createTextureArray(image, 64, 64, 3, "pixel", true);
+	material.textures["uSampler"] = Fury.Texture.createTextureArray({ 
+		source: image,
+		width: 64,
+		height: 64,
+		imageCount: 3,
+		quality: "pixel",
+		clamp: true
+	});
 	loop();
 };
 image.src = "block_texture.png";
