@@ -145,7 +145,7 @@ var loop = function(){
 // This is a bit syntaxically messy
 var texture, image = new Image();
 image.onload = function() {
-	texture = r.createTexture(image, "high");
+	texture = r.createTexture(image);
 	r.setTexture(0, texture); 	// Note don't actually need to set tex0 uniform to 0, unlike in WebGL playground demo code
 	loop();
 	// window.setTimeout(testContextLoss, 1000); 
@@ -241,7 +241,7 @@ canvas.addEventListener('webglcontextrestored', function(e) {
 	r.enableAttribute("aTextureCoordinates");
 
 	// Recreate the texture and set
-	texture = r.createTexture(image, "high");
+	texture = r.createTexture(image);
 	r.setTexture(0, texture);
 	
 	// In chrome - the canvas remains blank until you mouseover / mouse off the trigger button

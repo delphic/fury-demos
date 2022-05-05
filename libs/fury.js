@@ -7848,7 +7848,7 @@ module.exports = (function(){
 		}
 		let atlas = Object.create(config);
 		atlas.alpha = atlas.alpha === undefined ? true : !!atlas.alpha;
-		atlas.texture = Renderer.createTexture(image, "low");
+		atlas.texture = Renderer.createTexture(image, false, true);
 		atlas.materialConfig = {
 			shader: Shaders.Sprite,
 			texture: atlas.texture,
@@ -9975,44 +9975,41 @@ exports.createElementArrayBuffer = function(data, itemSize) {
 
 let TextureLocations = exports.TextureLocations = [];
 
-let TextureQuality = exports.TextureQuality = {
-	Pixel: "pixel",			// Uses Mips and nearest pixel
-	Highest: "highest",		// Uses Mips & Interp (trilinear)
-	High: "high",			// Uses Mips & Interp (bilinear)
-	Medium: "medium",		// Linear Interp
-	Low: "low"				// Uses nearest pixel
+exports.FilterType = {
+	NEAREST: 9728,
+	LINEAR: 9729,
+	LINEAR_MIPMAP_NEAREST: 9985,
+	LINEAR_MIPMAP_LINEAR: 9987
 };
 
-exports.createTexture = function(source, quality, clamp, flip, disableAniso) {
-	if (flip === undefined) flip = true;
-
+exports.createTexture = function(source, clamp, flipY, mag, min, generateMipmap, enableAniso) {
 	let texture = gl.createTexture();
 	gl.bindTexture(gl.TEXTURE_2D, texture);
-	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flip);
+	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, !!flipY);
 	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
 	// If we want to create mipmaps manually provide an array source and put them into
 	// different levels in texImage2D - you must provide all mipmap levels
 
-	setTextureQuality(gl.TEXTURE_2D, quality, disableAniso);
+	setTextureQuality(gl.TEXTURE_2D, mag, min, generateMipmap, enableAniso);
 
 	if (clamp) {
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 	}
+
 	gl.bindTexture(gl.TEXTURE_2D, null);
 	texture.glTextureType = gl.TEXTURE_2D;
 	return texture;
 };
 
 /// width and height are of an individual texture
-exports.createTextureArray = function(source, width, height, imageCount, quality, clamp) {
+exports.createTextureArray = function(source, width, height, imageCount, clamp, flipY, mag, min, generateMipmap, enableAniso) {
 	let texture = gl.createTexture();
-	// gl.activeTexture(gl.TEXTURE0);
 	gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
-	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flipY);
 	gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA, width, height, imageCount, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
 
-	setTextureQuality(gl.TEXTURE_2D_ARRAY, quality);
+	setTextureQuality(gl.TEXTURE_2D_ARRAY, mag, min, generateMipmap, enableAniso);
 
 	if (clamp) {
 		gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -10024,39 +10021,16 @@ exports.createTextureArray = function(source, width, height, imageCount, quality
 	return texture;
 };
 
-let setTextureQuality = function(glTextureType, quality, disableAniso) {
-	if (quality == TextureQuality.Pixel) {
-		gl.texParameteri(glTextureType, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-		gl.texParameteri(glTextureType, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-		if (!disableAniso && anisotropyExt) {
-			// Unfortunately you can't use MAG_FILTER NEAREST with MIN_FILTER MIPMAP when using the anisotropy extension
-			// you can without it however, so there is a trade off on crisp near pixels against blurry textures at severe angles
-			
-			// Could investigate using multiple samplers in a version 300 ES Shader and blending between them,
-			// or using multiple texture with different settings, potentially using dFdx and dFdy to determine / estimate MIPMAP level
-			gl.texParameterf(glTextureType, anisotropyExt.TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
-		}
+let setTextureQuality = function(glTextureType, mag, min, generateMipmap, enableAniso) {
+	if (!mag) mag = gl.NEAREST;
+	if (!min) min = gl.NEAREST; 
+	gl.texParameteri(glTextureType, gl.TEXTURE_MAG_FILTER, mag);
+	gl.texParameteri(glTextureType, gl.TEXTURE_MIN_FILTER, min);
+	if (enableAniso && anisotropyExt) {
+		gl.texParameterf(glTextureType, anisotropyExt.TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
+	}
+	if (generateMipmap) {
 		gl.generateMipmap(glTextureType);
-	} else if (quality === TextureQuality.Highest) {
-		gl.texParameteri(glTextureType, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-		gl.texParameteri(glTextureType, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-		if (!disableAniso && anisotropyExt) {
-			gl.texParameterf(glTextureType, anisotropyExt.TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
-		}
-		gl.generateMipmap(glTextureType);
-	} else if (quality === TextureQuality.High) {
-		gl.texParameteri(glTextureType, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-		gl.texParameteri(glTextureType, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
-		if (!disableAniso && anisotropyExt) {
-			gl.texParameterf(glTextureType, anisotropyExt.TEXTURE_MAX_ANISOTROPY_EXT, Math.round(maxAnisotropy/2));
-		}
-		gl.generateMipmap(glTextureType);
-	} else if (quality === TextureQuality.Medium) {
-		gl.texParameteri(glTextureType, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-		gl.texParameteri(glTextureType, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-	} else {
-		gl.texParameteri(glTextureType, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-		gl.texParameteri(glTextureType, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 	}
 };
 
@@ -11055,34 +11029,110 @@ const Renderer = require('./renderer');
 module.exports = (function(){
     let exports = {};
 
-    let TextureQuality = exports.TextureQuality = Renderer.TextureQuality;
+    let FilterType = exports.FilterType = Renderer.FilterType;
+
+    let TextureQuality = exports.TextureQuality = {
+        Pixel: "pixel",			// Uses Mips and nearest pixel
+        Highest: "highest",		// Uses Mips & Interp (trilinear)
+        High: "high",			// Uses Mips & Interp (bilinear)
+        Medium: "medium",		// Linear Interp
+        Low: "low"				// Uses nearest pixel
+    };
+
+    let QualitySettings = exports.QualitySettings = {};
+    QualitySettings[TextureQuality.Low] = {
+        mag: FilterType.NEAREST,
+        min: FilterType.NEAREST
+    };
+    QualitySettings[TextureQuality.Medium] = {
+        mag: FilterType.LINEAR,
+        min: FilterType.LINEAR
+    };
+    QualitySettings[TextureQuality.High] = {
+        mag: FilterType.LINEAR,
+        min: FilterType.LINEAR_MIPMAP_NEAREST,
+        enableAnisotropicFiltering: true,
+        generateMipmaps: true
+    };
+    QualitySettings[TextureQuality.Highest] = {
+        mag: FilterType.LINEAR,
+        min: FilterType.LINEAR_MIPMAP_LINEAR,
+        enableAnisotropicFiltering: true,
+        generateMipmaps: true
+    };
+    QualitySettings[TextureQuality.Pixel] = {
+        // Unfortunately you can't use MAG_FILTER NEAREST with MIN_FILTER MIPMAP when using the anisotropy extension
+        // you can without it however, so there is a trade off on crisp near pixels against blurry textures at severe angles
+        mag: FilterType.NEAREST,
+        min: FilterType.LINEAR_MIPMAP_LINEAR,
+        enableAnisotropicFiltering: true,
+        generateMipmaps: true
+        // Could investigate using multiple samplers in a version 300 ES Shader and blending between them,
+		// or using multiple texture with different settings, potentially using dFdx and dFdy to determine / estimate MIPMAP level
+    };
 
     exports.create = (config) => {
-        let { source, quality = TextureQuality.Low, clamp = false, flipY = true, disableAnsio = false } = config;
-
-        // HACK: disableAnsio exists only due to the lack of ability to configure
-        // texture filtering and should be removed once this capability is added
+        let { 
+            source,
+            quality = TextureQuality.Low,
+            clamp = false,
+            flipY = true,
+        } = config;
 
         if (!source) {
             console.error("Null source provided to Texture.create config");
             return null;
         }
 
-        // For now this just enables use of config object for improved readability
-        // Arguably should extract concept of texture quality from Renderer and just pass min max filters,
-        // generateMipMaps, & enableAnsio
-        return Renderer.createTexture(source, quality, clamp, flipY, disableAnsio);
+        let settings = QualitySettings[quality]; 
+        if (!settings) {
+            console.error("Unexpected quality value: " + quality);
+            return null;
+        }
+
+        return Renderer.createTexture(
+            source,
+            clamp,
+            flipY,
+            settings.mag,
+            settings.min,
+            settings.generateMipmaps,
+            settings.enableAnisotropicFiltering);
     };
 
     exports.createTextureArray = (config) => {
-        let { source, width, height, imageCount, quality = TextureQuality.Low, clamp = false } = config;
+        let {
+            source,
+            width,
+            height,
+            imageCount,
+            quality = TextureQuality.Low,
+            clamp = false,
+            flipY = true
+        } = config;
 
         if (!source || !width || !height || !imageCount) {
             console.error("Texture array config requires source, width, height and imageCount, provided " + JSON.stringify(config));
             return null;
         }
 
-        return Renderer.createTextureArray(source, width, height, imageCount, quality, clamp);
+        let settings = QualitySettings[quality]; 
+        if (!settings) {
+            console.error("Unexpected quality value: " + quality);
+            return null;
+        }
+
+        return Renderer.createTextureArray(
+            source,
+            width,
+            height,
+            imageCount,
+            clamp,
+            flipY,
+            settings.mag,
+            settings.min,
+            settings.generateMipmaps,
+            settings.enableAnisotropicFiltering);
     };
 
     return exports;

@@ -14,6 +14,8 @@ Fury.Maths.globalize();
 
 // Init Fury
 Fury.init({ canvasId: "fury" });
+// Disable Aniso Filtering for this demo
+Fury.Texture.QualitySettings["pixel"].enableAnisotropicFiltering = false;
 
 // Create Camera & Scene
 let camera = Fury.Camera.create({ near: 0.1, far: 1000000.0, fov: Fury.Maths.toRadian(60), ratio: 1.0, position: vec3.fromValues(0.0, 1.0, 0.0) });
@@ -1229,8 +1231,7 @@ let loadMapTextures = function(namedMaterials, texelsPerUnit) {
 		images[textureName].onload = function() {
 			namedMaterials[textureName].textures["uSampler"] = Fury.Texture.create({
 				source: images[textureName],
-				quality: "pixel",
-				disableAnsio: true
+				quality: "pixel"
 			});
 			namedMaterials[textureName].sScale *= texelsPerUnit / images[textureName].width;
 			namedMaterials[textureName].tScale *= texelsPerUnit / images[textureName].height;
