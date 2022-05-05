@@ -1,5 +1,5 @@
 // Render a Crate!
-// Testing Fury's Scene, Shader, Mesh and Material Classes
+// Testing Fury's Scene, Shader, Mesh, Material and Texture Modules
 // Compare to Arbitary Shader demo which just uses the GL Facade (renderer)
 
 // globalize glMatrix
@@ -153,7 +153,7 @@ var loop = function(){
 // Create Texture
 var image = new Image();
 image.onload = function() {
-	material.textures["uSampler"] = Fury.Renderer.createTexture(image, "high");
+	material.textures["uSampler"] = Fury.Texture.create({ source: image, quality: "high"});
 	loop();
 };
 image.src = "crate.gif";

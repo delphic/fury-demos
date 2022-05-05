@@ -183,12 +183,12 @@ var loop = function(){
 var loaded1 = false, loaded2 = false;
 var image1 = new Image(), image2 = new Image();
 image1.onload = function() {
-	cubeMaterialConfig.texture = Fury.Renderer.createTexture(image1, "high");
+	cubeMaterialConfig.texture = Fury.Texture.create({ source: image1, quality: "high" });
 	loaded1 = true;
 	if(loaded1 && loaded2) { awake(); }
 };
 image2.onload = function() {
-	teapotMaterialConfig.texture = Fury.Renderer.createTexture(image2, "high");
+	teapotMaterialConfig.texture = Fury.Texture.create({ source: image2, quality: "high" });
 	loaded2 = true;
 	if(loaded1 && loaded2) { awake(); }
 };

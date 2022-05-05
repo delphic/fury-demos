@@ -147,7 +147,11 @@ let selectConfig = (value) => {
 			// Load texture from model
 			let texture = null;
 			if (model.images.length) {
-				texture = Fury.Renderer.createTexture(model.images[0], "low", false, false);
+				Fury.Texture.create({
+					source: model.images[0],
+					quality: "low",
+					flipY: false
+				});
 			}
 
 			let material = null;

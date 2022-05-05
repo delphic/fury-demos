@@ -193,7 +193,7 @@ var loop = function(){
 var image1Loaded = false, image2Loaded = false;
 var texture, image1 = new Image(), image2 = new Image();
 image1.onload = function() {
-	var texture = Fury.Renderer.createTexture(image1, "high", true);
+	var texture = Fury.Texture.create({ source: image1, quality: "high", clamp: true });
 	redMaterial.textures["uSampler"] = texture;
 	greenMaterial.textures["uSampler"] = texture;
 	blueMaterial.textures["uSampler"] = texture;
@@ -203,7 +203,7 @@ image1.onload = function() {
 	}
 };
 image2.onload = function() {
-	var texture = Fury.Renderer.createTexture(image2, "high");
+	var texture = Fury.Texture.create({ source: image2, quality: "high", clamp: true });
 	whiteMaterial.textures["uSampler"] = texture;
 	image2Loaded = true;
 	if(image1Loaded && image2Loaded) {

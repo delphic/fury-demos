@@ -64,7 +64,7 @@ let loadTexture = function(texturePath) {
 	// Create Texture
 	let image = new Image();
 	image.onload = function() {	
-		material.setTexture(Fury.Renderer.createTexture(image, "low", true));
+		material.setTexture(Fury.Texture.create({ source: image, clamp: true }));
 		
 		sprite = scene.add({ material: material, mesh: createQuad(image.width, image.height) });
 

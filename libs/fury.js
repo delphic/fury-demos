@@ -8330,6 +8330,7 @@ module.exports = (function() {
 	Fury.Shader = require('./shader');
 	Fury.Shaders = require('./shaders');
 	Fury.TextMesh = require('./textmesh');
+	Fury.Texture = require('./texture');
 	Fury.TileMap = require('./tilemap');
 	Fury.Transform = require('./transform');
 	Fury.Utils = require('./utils');
@@ -8371,7 +8372,7 @@ module.exports = (function() {
 	return Fury;
 })();
 
-},{"./atlas":2,"./bounds":3,"./camera":4,"./gameLoop":8,"./input":10,"./material":11,"./maths":12,"./mesh":13,"./model":14,"./physics":15,"./prefab":16,"./primitives":17,"./random":18,"./renderer":19,"./scene":20,"./shader":21,"./shaders":22,"./textmesh":23,"./tilemap":24,"./transform":25,"./utils":26}],8:[function(require,module,exports){
+},{"./atlas":2,"./bounds":3,"./camera":4,"./gameLoop":8,"./input":10,"./material":11,"./maths":12,"./mesh":13,"./model":14,"./physics":15,"./prefab":16,"./primitives":17,"./random":18,"./renderer":19,"./scene":20,"./shader":21,"./shaders":22,"./textmesh":23,"./texture":24,"./tilemap":25,"./transform":26,"./utils":27}],8:[function(require,module,exports){
 const Input = require('./input');
 
 module.exports = (function() {
@@ -9472,7 +9473,8 @@ module.exports = (function() {
 
 	// Takes a URI of a glTF file to load
 	// Returns an object containing an array meshdata ready for use with Fury.Mesh
-	// In future can be extended to include material information
+	// As well as an array of images to use in material creation
+	// In future can be extended to include material (texture + sampler) information from the model
 	exports.load = (uri, callback) => {
 		// TODO: Check file extension, only gltf currently supported
 		// https://github.com/KhronosGroup/glTF -> https://github.com/KhronosGroup/glTF/tree/master/specification/2.0
@@ -9487,6 +9489,8 @@ module.exports = (function() {
 			// Find first mesh and load it
 			// TODO: Load all meshes
 			// TODO: Load all sets of texture coordinates
+			// TODO: Load TANGENT, JOINTS_n & WEIGHTS_n once supported by Fury.Mesh
+			// c.f. https://www.khronos.org/registry/glTF/specs/2.0/glTF-2.0.html#meshes-overview
 
 			let meshData = {};
 
@@ -10732,7 +10736,7 @@ module.exports = (function() {
 
 	return exports;
 })();
-},{"./bounds":3,"./indexedMap":9,"./material":11,"./maths":12,"./mesh":13,"./prefab":16,"./renderer":19,"./transform":25}],21:[function(require,module,exports){
+},{"./bounds":3,"./indexedMap":9,"./material":11,"./maths":12,"./mesh":13,"./prefab":16,"./renderer":19,"./transform":26}],21:[function(require,module,exports){
 // Shader Class for use with Fury Scene
 const r = require('./renderer');
 
@@ -11046,6 +11050,30 @@ module.exports = (function(){
 	return exports;
 })();
 },{"./atlas":2,"./maths":12}],24:[function(require,module,exports){
+const Renderer = require('./renderer');
+
+module.exports = (function(){
+    let exports = {};
+
+    let TextureQuality = exports.TextureQuality = Renderer.TextureQuality;
+
+    exports.create = (config) => {
+        let { source, quality = TextureQuality.Low, clamp = false, flipY = true, disableAnsio = false } = config;
+
+        if (!source) {
+            console.error("No source provided to Texture.create");
+            return null;
+        }
+
+        // For now this just enables use of config object for improved readability
+        // Arguably should extract concept of texture quality from Renderer and just pass min max filters,
+        // generateMipMaps, & enableAnsio
+        return Renderer.createTexture(source, quality, clamp, flipY, disableAnsio);
+    };
+
+    return exports;
+})();
+},{"./renderer":19}],25:[function(require,module,exports){
 // Really basic tilemap using prefabs per tile
 
 // Could probably be vastly improved by using a custom shader
@@ -11124,7 +11152,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{"./atlas":2,"./maths":12}],25:[function(require,module,exports){
+},{"./atlas":2,"./maths":12}],26:[function(require,module,exports){
 const Maths = require('./maths');
 const quat = Maths.quat, vec3 = Maths.vec3;
 
@@ -11140,7 +11168,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./maths":12}],26:[function(require,module,exports){
+},{"./maths":12}],27:[function(require,module,exports){
 // Utils
 module.exports = (function(){
 	let exports = {};

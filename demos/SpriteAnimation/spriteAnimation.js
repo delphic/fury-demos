@@ -148,8 +148,11 @@ var init = function() {
 			ctx = canvas.getContext("2d");
 			renderSpriteToCanvas(spriteData, palleteData, 0);
 
-			material.setTexture(Fury.Renderer.createTexture(canvas, "low", true));
-
+			material.setTexture(Fury.Texture.create({ 
+				source: canvas,
+				clamp: true
+			}));
+			
 			lastTime = Date.now()/1000;
 			setMaterialOffset(intialSpriteIndex);
 			spriteIndex = intialSpriteIndex;
