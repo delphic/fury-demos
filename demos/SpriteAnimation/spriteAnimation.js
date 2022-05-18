@@ -1,13 +1,4 @@
-// Helpers
-var requestJson = function(path, callback) {
-	// TODO: Use fetch API
-	var request = new XMLHttpRequest();
-	request.open("GET", path, true);
-	request.onload = function() { callback(request.responseText); }
-	request.send();
-};
-
-var createQuad = function(size) {
+let createQuad = function(size) {
 	return Fury.Mesh.create({
 		vertices: [ size * 0.5, size * 0.5, 0.0, size * -0.5,  size * 0.5, 0.0, size * 0.5, size * -0.5, 0.0, size * -0.5, size * -0.5, 0.0 ],
 		textureCoordinates: [ 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0 ],
@@ -15,158 +6,75 @@ var createQuad = function(size) {
 	});
 };
 
-// TODO:
-// Replace Zergling with Lena - aseprite json lonading -> image load playback with frame timings
+let spriteData = null;
 
-// Something that'd be actually interesting is the ability to read the original SC binary spritesheets 
-// Rather than this massive exported JSON - reverse engineering the file format from Kirke and this...
-// Maybe an electron app to interface with it might be fun, then the user can specify the sprite files.
-
-// globalize glMatrix
-Fury.Maths.globalize();
-
-var scale = 1;
-var canvas, ctx, clearColour = "#111111";
-var spritesPerRow, spritesPerColumn, spriteWidth, spriteHeight;
-var renderSpriteToCanvas = function(spriteData, paletteData) {
-
-	var minSpritesPerRow = Math.ceil(Math.sqrt(spriteData.frames.length));
-	spriteWidth = nextPowerOfTwo(scale * spriteData.groupWidth * minSpritesPerRow);
-	spritesPerRow = Math.floor(spriteWidth / (spriteData.groupWidth * scale));
-	spritesPerColumn = Math.ceil(spriteData.frames.length / spritesPerRow);
-	spriteHeight = nextPowerOfTwo(scale * spriteData.groupHeight * spritesPerColumn);
-	spritesPerColumn = Math.floor(spriteHeight / (spriteData.groupHeight * scale));
-
-	canvas.width = spriteWidth;
-	canvas.height = spriteHeight;
-
-	var offsetX = 0, offsetY = 0, spritesInRow = 0;
-	for(var i = 0, n = spriteData.frames.length; i < n; i++) {
-		var frame = spriteData.frames[i];
-		var data = frame.frameData;
-		for(var y = 0, l = data.length; y < l; y++) {
-			for(var x = 0, m = data[y].length; x < m; x++) {
-				var paletteIndex = data[y][x];
-				if(paletteIndex) { // 0 is transparent
-					drawPixel(paletteData.colours[paletteIndex], x + frame.offsetX + offsetX, y + frame.offsetY + offsetY);
-				}
-			}
-		}
-		spritesInRow++;
-		if(spritesInRow == spritesPerRow) {
-			spritesInRow = 0;
-			offsetX = 0;
-			offsetY += spriteData.groupHeight;
-		} else {
-			offsetX += spriteData.groupWidth;
-		}
-	}
-
-	material.scale[0] = 1/spritesPerRow;
-	material.scale[1] = 1/spritesPerColumn;
-};
-
-var drawPixel = function(colour, x, y) {
-	ctx.fillStyle = "rgb(" + colour[0] + ", " + colour[1] + ", " + colour[2] + ")";
-	ctx.fillRect(scale*x, scale*y, scale, scale);
-};
-
-var nextPowerOfTwo = function(x) {
-	var powerOfTwo = 1;
-	while(powerOfTwo < x) {
-		powerOfTwo *= 2;
-	}
-	return powerOfTwo;
-};
-
-var setMaterialOffset = function(frameIndex) {
-	material.offset[0] = material.scale[0] * (frameIndex % spritesPerRow);
-	material.offset[1] = material.scale[1] * (spritesPerColumn - 1 - Math.floor(frameIndex / spritesPerRow));
+let setFrame = function(index) {
+	let frameData = spriteData.frames[index].frame;
+	let w = spriteData.meta.size.w, h = spriteData.meta.size.h;
+	material.scale[0] = frameData.w / w;
+	material.scale[1] = frameData.h / h;
+	material.offset[0] = frameData.x / w;
+	material.offset[1] = (h - (frameData.y + frameData.h)) / h;
 	material.dirty = true;
-}
+};
 
-// Init Fury
 Fury.init({ canvasId: "fury" });
 
-// Create material
-var material = Fury.Material.create({ 
+let material = Fury.Material.create({ 
 	shader : Fury.Shaders.Sprite, 
 	properties: { 
 		alpha: true,
-		offset: vec2.fromValues(0, 0),
-		scale: vec2.fromValues(1, 1)
+		offset: [0, 0],
+		scale: [1, 1]
 	}
 });
 
-var camera = Fury.Camera.create({
+let camera = Fury.Camera.create({
 	type: Fury.Camera.Type.Orthonormal,
 	near: 0.1,
 	far: 1000000.0,
 	height: 1.0,
 	ratio: 1,
-	position: vec3.fromValues(0.0, 0.0, 1.0)
+	position: [ 0.0, 0.0, 1.0 ]
 });
 
-var scene = Fury.Scene.create({ camera: camera });
+let scene = Fury.Scene.create({ camera: camera });
 
-var sprite = scene.add({ material: material, mesh: createQuad(1) });
-var spriteData, palleteData;
+let sprite = scene.add({ material: material, mesh: createQuad(1) });
 
-var time = 0, lastTime = 0;
+let time = 0, lastTime = 0, lastSwitchTime =  0;
+let currentSpriteIndex = 0;
 
-var lastSwitchTime = 0, spriteIndex = 0, intialSpriteIndex = 12, numberOfItterations = 5, currentItteration = 0, framesToIncrease = 17;
-
-var loop = function() {
-	var elapsed = (Date.now()/1000 - lastTime);
-	lastTime = Date.now()/1000;
+let loop = function() {
+	let now = Date.now();
+	let elapsed = now - lastTime;
 	time += elapsed;
 
-
-	if(time - lastSwitchTime > 0.1) {
+	if(time - lastSwitchTime > spriteData.frames[currentSpriteIndex].duration) {
 		lastSwitchTime = time;
-		spriteIndex += framesToIncrease;
-		currentItteration++;
-		if(currentItteration > numberOfItterations || spriteIndex >= spriteData.frames.length) {
-			currentItteration = 0;
-			spriteIndex = intialSpriteIndex;
-		}
-		setMaterialOffset(spriteIndex);
+		currentSpriteIndex = (currentSpriteIndex + 1) % spriteData.frames.length;
+		setFrame(currentSpriteIndex);
 	}
 
 	scene.render();
 
+	lastTime = now;
 	window.requestAnimationFrame(loop);
 };
 
 var init = function() {
-	var thingsToLoad = 2;
-
-	var finishedLoadingItem = function() {
-		thingsToLoad--;
-		if(!thingsToLoad) {
-			canvas = document.getElementById("spriteCanvas");
-			ctx = canvas.getContext("2d");
-			renderSpriteToCanvas(spriteData, palleteData, 0);
-
-			material.setTexture(Fury.Texture.create({ 
-				source: canvas,
-				clamp: true
-			}));
+	fetch("LenaShoot.json").then(response => response.json()).then(json => {
+		spriteData = json;
+		let image = new Image();
+		image.onload = () => {
+			material.setTexture(Fury.Texture.create({ source: image }));
 			
-			lastTime = Date.now()/1000;
-			setMaterialOffset(intialSpriteIndex);
-			spriteIndex = intialSpriteIndex;
+			setFrame(currentSpriteIndex);
+			
+			lastTime = Date.now();
 			loop();
-		}
-	};
-
-	requestJson("zergling.json", function(responseText){
-		spriteData = JSON.parse(responseText);
-		finishedLoadingItem();
-	});
-	requestJson("Units.json", function(responseText){
-		palleteData = JSON.parse(responseText);
-		finishedLoadingItem();
+		};
+		image.src = spriteData.meta.image;
 	});
 };
 
