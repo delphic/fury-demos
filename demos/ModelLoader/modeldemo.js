@@ -6,7 +6,8 @@ Fury.Maths.globalize();
 let configurations = {
 	"frog": { uri: "frog.gltf", position: [ 0, 0, 1 ], sceneObjects: null },
 	"cube": { uri: "colored_cube.gltf", position: [ 0, 0, 6 ], sceneObjects: null },
-	"animation_test": { uri: "animation_test.gltf", position: [ 0, 0, 1.5], sceneObjects: null, animation_uri: "animation_test_animation.json" }
+	"animation_test": { uri: "animation_test.gltf", position: [ 0, 0, 1.5], sceneObjects: null, animation_uri: "animation_test_animation.json" },
+	"tiny_person": { uri: "tiny_person.gltf", position: [0, 0.5, 2 ], sceneObjects: null }
 };
 let currentConfig = null;
 
