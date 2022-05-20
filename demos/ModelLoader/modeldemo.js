@@ -128,12 +128,10 @@ let colorShader =  Fury.Shader.create({
 
 let loop = () => {
 	// TODO: Input to move the camera instead
-	// if (currentConfig && currentConfig.sceneObjects) {
-	// 	for (let i = 0, l = currentConfig.sceneObjects.length; i < l; i++) {
-	// 		let rotation = currentConfig.sceneObjects[i].transform.rotation;
-	// 		quat.rotateY(rotation, rotation, 0.005);
-	// 	}
-	// }
+	if (currentConfig && currentConfig.sceneObjects) {
+		let rotation = currentConfig.model.hierarchy.transform.rotation;
+		quat.rotateY(rotation, rotation, 0.005);
+	}
 	scene.render();
 	window.requestAnimationFrame(loop);
 };
@@ -175,11 +173,32 @@ let selectConfig = (value) => {
 				}
 			}
 
+			currentConfig.model = model;
 			currentConfig.sceneObjects = [];
-			for (let i = 0, l = model.meshData.length; i < l; i++) {
-				let mesh = Fury.Mesh.create(model.meshData[i]);
-				let material = model.materials[model.meshData[i].modelMaterialIndex];
-				currentConfig.sceneObjects[i] = scene.add({ material: material, mesh: mesh }); // TODO: read mesh position offsets
+
+			let nodes = [ model.hierarchy ];
+			while (nodes.length > 0) {
+				let node = nodes.pop();
+				if (!isNaN(node.modelMeshIndex)) {
+					let i = node.modelMeshIndex;
+					let mesh = Fury.Mesh.create(model.meshData[i]);
+					let material = model.materials[node.modelMaterialIndex];
+					// This breaks if the node doesn't have a modelMaterialIndex which is possible
+						
+					currentConfig.sceneObjects.push(scene.add({
+						material: material,
+						mesh: mesh,
+						transform: node.transform
+					}));
+				}
+
+				if (node.children) {
+					let childIndex = node.children.length - 1;
+					while (childIndex >= 0) {
+						nodes.push(node.children[childIndex]);
+						childIndex--;
+					}
+				}
 			}
 		});
 	} else {

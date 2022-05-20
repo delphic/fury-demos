@@ -9468,6 +9468,8 @@ module.exports = (function(){
 	return exports;
 })();
 },{"./bounds":3,"./maths":12,"./renderer":19}],14:[function(require,module,exports){
+const Transform = require('./transform');
+
 module.exports = (function() {
 	let exports = {};
 
@@ -9479,6 +9481,7 @@ module.exports = (function() {
 
 		let primitive = json.meshes[meshIndex].primitives[0];
 		// TODO: Consider support for multiple primitives
+		// Note createSceneHierarchy has single primitive assumption baked
 
 		let attributes = primitive.attributes;
 		let positionIndex = attributes.POSITION;	// index into accessors
@@ -9496,9 +9499,6 @@ module.exports = (function() {
 
 		let indicesIndex = primitive.indices;
 		// ^^ I think this is the index and not the index count, should check with a more complex / varied model
-
-		// Further baking in the assumption of 1 primitive per mesh here
-		meshData.modelMaterialIndex = primitive.material;
 
 		// Calculate bounding radius
 		let max = json.accessors[positionIndex].max;
@@ -9583,12 +9583,51 @@ module.exports = (function() {
 		});
 	};
 
+	let createSceneHierarchy = (json, index, parent) => {
+		let nodes = json.nodes;
+		let { name, mesh, children, translation, rotation, scale } = nodes[index];
+
+		let result = {};
+		
+		result.name = name;
+		result.modelMeshIndex = mesh;
+		if (!isNaN(mesh)) {
+			result.modelMaterialIndex = json.meshes[mesh].primitives[0].material;
+		}
+
+		result.transform = Transform.create({
+			position: translation,
+			rotation: rotation,
+			scale: scale
+		});
+
+		if (parent) {
+			result.transform.parent = parent.transform;
+		}
+		result.transform.children = [];
+		result.children = [];
+
+		if (children) {
+			for (let i = 0, l = children.length; i < l; i++) {
+				let childNode = createSceneHierarchy(
+					json,
+					children[i],
+					result);
+				result.children.push(childNode);
+				result.transform.children.push(childNode.transform);
+			}
+		}
+
+		return result;
+	};
+
 	// Takes a URI of a glTF file to load
 	// Returns an object containing an array meshdata ready for use with Fury.Mesh
 	// As well as an array of images to use in material creation
 	// Includes a cut down set of information on materialData and textureData arrays 
 	// however these are not ready to be used with Fury.Material and Fury.Texture
 	// and must be manipulated further
+	// Might be sensible to separate the asset load and format conversions
 	exports.load = (uri, callback) => {
 		// TODO: Check file extension, only gltf currently supported
 		// https://github.com/KhronosGroup/glTF -> https://github.com/KhronosGroup/glTF/tree/master/specification/2.0
@@ -9610,10 +9649,19 @@ module.exports = (function() {
 
 			for (let i = 0, l = json.meshes.length; i < l; i++) {
 				assetsLoading++;
+				// TODO: Fetch buffer data via fetch *then* create mesh data objects
+				// Can then also decouple dependency on all bufferViews requiring the same buffer
 				extractMeshData(json, i, (meshData) => {
-					model.meshData.push(meshData);
+					model.meshData[i] = meshData;
 					onAssetLoadComplete();
 				});
+			}
+
+			// Hierarchy information
+			if (json.scenes && json.scenes.length) {
+				let scene = json.scenes[json.scene]; // Only one scene currently supported
+				let nodeIndex = scene.nodes[0]; // Expect single scene node
+				model.hierarchy = createSceneHierarchy(json, nodeIndex);
 			}
 
 			if (json.materials && json.materials.length) {
@@ -9624,7 +9672,7 @@ module.exports = (function() {
 					if (material.pbrMetallicRoughness 
 						&& material.pbrMetallicRoughness.baseColorTexture) {
 						let index = material.pbrMetallicRoughness.baseColorTexture.index; 
-						textureIndex = index !== undefined && index !== null ? index : -1;
+						textureIndex = !isNaN(index) ? index : -1;
 					}
 
 					// Only texture index is currently relevant
@@ -9654,7 +9702,7 @@ module.exports = (function() {
 						// Note if we wanted to unload the model
 						// we would need to call URL.revokeObjectURL(image.src)
 						image.decode().then(() => {
-							model.images.push(image);
+							model.images[i] = image;
 							onAssetLoadComplete();
 						}).catch((error) => {
 							console.error(error);
@@ -9675,7 +9723,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{}],15:[function(require,module,exports){
+},{"./transform":26}],15:[function(require,module,exports){
 const vec3 = require('./maths').vec3;
 
 module.exports = (function(){
@@ -9883,6 +9931,7 @@ module.exports = (function(){
 // There are - of necessity - a few hidden logical dependencies in this class
 // mostly with the render functions, binding buffers before calling a function draw
 let gl, currentShaderProgram, anisotropyExt, maxAnisotropy;
+let activeTexture = null;
 
 exports.init = function(canvas, contextAttributes) {
 	gl = canvas.getContext('webgl2', contextAttributes);
@@ -9904,6 +9953,10 @@ exports.init = function(canvas, contextAttributes) {
 		TextureLocations.push(gl["TEXTURE" + i.toString()]);
 		i++;
 	}
+};
+
+exports.getContext = function() {
+	return gl;
 };
 
 exports.getContextLossExtension = function() {
@@ -10025,7 +10078,8 @@ exports.FilterType = {
 
 exports.createTexture = function(source, clamp, flipY, mag, min, generateMipmap, enableAniso) {
 	let texture = gl.createTexture();
-	gl.bindTexture(gl.TEXTURE_2D, texture);
+	
+	gl.bindTexture(gl.TEXTURE_2D, texture); // Binds into currently active texture location
 	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, !!flipY);
 	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
 	// If we want to create mipmaps manually provide an array source and put them into
@@ -10038,7 +10092,7 @@ exports.createTexture = function(source, clamp, flipY, mag, min, generateMipmap,
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 	}
 
-	gl.bindTexture(gl.TEXTURE_2D, null);
+	gl.bindTexture(gl.TEXTURE_2D, activeTexture); // rebind the active texture
 	texture.glTextureType = gl.TEXTURE_2D;
 	return texture;
 };
@@ -10078,6 +10132,7 @@ let setTextureQuality = function(glTextureType, mag, min, generateMipmap, enable
 exports.setTexture = function(location, texture) {
 	gl.activeTexture(TextureLocations[location]);
 	gl.bindTexture(texture.glTextureType, texture);
+	activeTexture = texture;
 };
 
 // Blending
@@ -10440,7 +10495,11 @@ module.exports = (function() {
 			object.material.shaderId = object.shaderId;
 			addTexturesToScene(object.material);
 
-			object.transform = Transform.create(config);
+			if (config.transform) {
+				object.transform = config.transform;
+			} else {
+				object.transform = Transform.create(config);
+			}
 
 			// For now just sort by material on add
 			// Ideally would group materials with the same shader and textures together
@@ -10724,14 +10783,12 @@ module.exports = (function() {
 				mesh.dirty = false;
 			}
 
-			// TODO: If going to use child coordinate systems then will need a stack of mvMatrices and a multiply here
-			mat4.fromRotationTranslation(mvMatrix, object.transform.rotation, object.transform.position);
-			mat4.scale(mvMatrix, mvMatrix, object.transform.scale);
+			object.transform.updateMatrix();
 			if (shader.mMatrixUniformName) {
 				// TODO: Arguably should send either MV Matrix or M and V Matrices
-				r.setUniformMatrix4(shader.mMatrixUniformName, mvMatrix);
+				r.setUniformMatrix4(shader.mMatrixUniformName, object.transform.matrix);
 			}
-			mat4.multiply(mvMatrix, cameraMatrix, mvMatrix);
+			mat4.multiply(mvMatrix, cameraMatrix, object.transform.matrix);
 			r.setUniformMatrix4(shader.mvMatrixUniformName, mvMatrix);
 
 			if (shader.nMatrixUniformName) {
@@ -11258,16 +11315,29 @@ module.exports = (function(){
 	return exports;
 })();
 },{"./atlas":2,"./maths":12}],26:[function(require,module,exports){
-const Maths = require('./maths');
-const quat = Maths.quat, vec3 = Maths.vec3;
+const { quat, vec3, mat4 } = require('./maths');
 
 module.exports = (function() {
 	let exports = {};
+
+	let prototype = {
+		updateMatrix: function() {
+			mat4.fromRotationTranslation(this.matrix, this.rotation, this.position);
+				mat4.scale(this.matrix, this.matrix, this.scale);
+				let parent = this.parent;
+				if (parent) {
+					parent.updateMatrix();
+					mat4.multiply(this.matrix, parent.matrix, this.matrix);
+				}
+		}
+	};
+
 	exports.create = function({ position = vec3.create(), rotation = quat.create(), scale = vec3.fromValues(1.0, 1.0, 1.0) }) {
-		let transform = {};
+		let transform = Object.create(prototype);
 		transform.position = position;
 		transform.rotation = rotation;
 		transform.scale = scale;
+		transform.matrix = mat4.create();
 		return transform;
 	};
 	return exports;
