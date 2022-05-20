@@ -16,6 +16,7 @@ Fury.init("fury");
 let cameraPosition = vec3.create();
 let cameraRotation = Fury.Maths.quatEuler(-30, 135, 0);
 
+Fury.Renderer.clearColor(0.1, 0.1, 0.2, 1.0);
 let camera = Fury.Camera.create({ near: 0.01, far: 10000.0, fov: 1.0472, ratio: 1.0, position: cameraPosition, rotation: cameraRotation });
 let scene = Fury.Scene.create({ camera: camera });
 
@@ -149,30 +150,35 @@ let selectConfig = (value) => {
 	if (!currentConfig.models) {
 		// This is what we're here to test!
 		Fury.Model.load(currentConfig.uri, (model) => {
-			// Load textures from model
-			let textures = [];
-			let materials = []; // TODO: Read more info from glTF
-
-			for (let i = 0, l = model.images.length; i < l; i++) {
-				textures[i] = Fury.Texture.create({
-					source: model.images[i],
+			model.textures = [];
+			for (let i = 0, l = model.textureData.length; i < l; i++) {
+				let imageIndex = model.textureData[i].imageIndex;
+				model.textures[i] = Fury.Texture.create({
+					source: model.images[imageIndex],
 					quality: "low",
 					flipY: false
 				});
-				materials[i] = Fury.Material.create({ shader : textureShader });
-				materials[i].textures["uSampler"] = textures[i];
 			}
 
-			// This logic is specific to the models we're using (the only vertex coloured model has no textures)
-			// but it should be possible to mix and match and to use vertex colours with textures
-			if (!materials.length) {
-				materials[0] = Fury.Material.create({ shader: colorShader });
+			model.materials = [];
+			for (let i = 0, l = model.materialData.length; i < l; i++) {
+				let textureIndex = model.materialData[i].textureIndex;
+				if (textureIndex >= 0) {
+					model.materials[i] = Fury.Material.create({ 
+						shader : textureShader,
+						texture: model.textures[textureIndex]
+					});
+				} else {
+					// This logic is specific to the models we're using (the only vertex coloured model has no textures)
+					// but it should be possible to mix and match and to use vertex colours with textures
+					model.materials[i] = Fury.Material.create({ shader: colorShader });
+				}
 			}
 
-			currentConfig.models = [];
+			currentConfig.models = []; // This is scene objects really
 			for (let i = 0, l = model.meshData.length; i < l; i++) {
 				let mesh = Fury.Mesh.create(model.meshData[i]);
-				let material = materials[Math.min(i, materials.length - 1)]; // TODO: Read from the glTF data 
+				let material = model.materials[model.meshData[i].modelMaterialIndex];
 				currentConfig.models[i] = scene.add({ material: material, mesh: mesh }); // TODO: read mesh position offsets
 			}
 		});
