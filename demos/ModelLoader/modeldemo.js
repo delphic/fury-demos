@@ -139,6 +139,8 @@ let loop = () => {
 		if (!animationName) {
 			animationName = Object.keys(currentConfig.model.animations)[0];
 			animationStart = Date.now();	
+		} else if (!currentConfig.model.animations[animationName]) {
+			animationName = null;
 		}
 	} else {
 		animationName = null;
