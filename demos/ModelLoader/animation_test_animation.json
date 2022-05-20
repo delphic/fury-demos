@@ -7,12 +7,18 @@
 			"bones": {
 				"central_cube": {
 					"position": {
-						"0.0": [0, 0, 0],
+						"0.0": {
+							"post": [0, 0, 0],
+							"lerp_mode": "catmullrom"
+						},
 						"1.5": {
 							"post": [0, 4, 0],
 							"lerp_mode": "catmullrom"
 						},
-						"3.0": [0, 0, 0]
+						"3.0": {
+							"post": [0, 0, 0],
+							"lerp_mode": "catmullrom"
+						}
 					}
 				},
 				"ring": {
@@ -20,8 +26,7 @@
 						"0.0": [0, 0, 0],
 						"1.5": [0, 360, 0],
 						"3.0": [0, 0, 0]
-					},
-					"position": [0, 0, 0]
+					}
 				},
 				"sphere": {
 					"scale": {
