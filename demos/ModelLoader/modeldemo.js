@@ -6,7 +6,7 @@ Fury.Maths.globalize();
 let configurations = {
 	"frog": { uri: "frog.gltf", position: [ 0, 0, 1 ], sceneObjects: null },
 	"cube": { uri: "colored_cube.gltf", position: [ 0, 0, 6 ], sceneObjects: null },
-	"animation_test": { uri: "animation_test.gltf", position: [ 0, 0, 1], sceneObjects: null, animation_uri: "animation_test_animation.json" }
+	"animation_test": { uri: "animation_test.gltf", position: [ 0, 0, 1.5], sceneObjects: null, animation_uri: "animation_test_animation.json" }
 };
 let currentConfig = null;
 
@@ -126,12 +126,71 @@ let colorShader =  Fury.Shader.create({
 	}
 });
 
+let animationStart = Date.now(), animationName = null;
+let vec3From = [], vec3To = [], vec4From = [], vec4To = [];
+
 let loop = () => {
 	// TODO: Input to move the camera instead
-	if (currentConfig && currentConfig.sceneObjects) {
-		let rotation = currentConfig.model.hierarchy.transform.rotation;
-		quat.rotateY(rotation, rotation, 0.005);
+	
+
+	// If model has animations play first
+	if (currentConfig && currentConfig.model && currentConfig.model.animations) {
+		if (!animationName) {
+			animationName = Object.keys(currentConfig.model.animations)[0];
+			animationStart = Date.now();	
+		}
+	} else {
+		animationName = null;
 	}
+
+	if (animationName) {
+		let animation = currentConfig.model.animations[animationName];
+		let time = ((Date.now() - animationStart) / 1000)  % animation.duration;
+
+		for (let i = 0, l = animation.channels.length; i < l; i++) {
+			let channel = animation.channels[i];
+			let times = channel.times;
+			let values = channel.values;
+			let prev = 0, next = 0;
+			while (times[next] < time && next < times.length) {
+				prev = next;
+				next = (next + 1) % times.length;
+			}
+			let from = times[prev], to = times[next];
+			if (to < from) {
+				to += animation.duration;
+			}
+			let delta = to - from;
+			let ratio = 0;
+			if (delta) {
+				ratio = (time - from) / delta;
+			}
+
+			switch (channel.type) {
+				case "translation":
+					Fury.Maths.vec3.set(vec3From, values[prev * 3], values[prev * 3 + 1], values[prev * 3 + 2]);
+					Fury.Maths.vec3.set(vec3To, values[next * 3], values[next * 3 + 1], values[next * 3 + 2]);
+					Fury.Maths.vec3.lerp(channel.transform.position, vec3From, vec3To, ratio);
+					break;
+				case "rotation":
+					Fury.Maths.vec4.set(vec4From, values[prev * 4], values[prev * 4 + 1], values[prev * 4 + 2], values[prev * 4 + 3]);
+					Fury.Maths.vec4.set(vec4To, values[next * 4], values[next * 4 + 1], values[next * 4 + 2], values[next * 4 + 3]);
+					Fury.Maths.quat.slerp(channel.transform.rotation, vec4From, vec4To, ratio);
+					break;
+				case "scale":
+					Fury.Maths.vec3.set(vec3From, values[prev * 3], values[prev * 3 + 1], values[prev * 3 + 2]);
+					Fury.Maths.vec3.set(vec3To, values[next * 3], values[next * 3 + 1], values[next * 3 + 2]);
+					Fury.Maths.vec3.lerp(channel.transform.scale, vec3From, vec3To, ratio);
+					break;
+			}
+		}
+	} else {
+		if (currentConfig && currentConfig.sceneObjects) {
+			let rotation = currentConfig.model.hierarchy.transform.rotation;
+			quat.rotateY(rotation, rotation, 0.005);
+		}
+	}
+
 	scene.render();
 	window.requestAnimationFrame(loop);
 };
