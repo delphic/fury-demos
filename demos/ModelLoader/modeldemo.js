@@ -4,9 +4,9 @@
 Fury.Maths.globalize();
 
 let configurations = {
-	"frog": { uri: "frog.gltf", position: [ 0, 0, 1 ], models: null },
-	"cube": { uri: "colored_cube.gltf", position: [ 0, 0, 6 ], models: null },
-	"animation_test": { uri: "animation_test.gltf", position: [ 0, 0, 1], models: null, animation_uri: "animation_test_animation.json" }
+	"frog": { uri: "frog.gltf", position: [ 0, 0, 1 ], sceneObjects: null },
+	"cube": { uri: "colored_cube.gltf", position: [ 0, 0, 6 ], sceneObjects: null },
+	"animation_test": { uri: "animation_test.gltf", position: [ 0, 0, 1], sceneObjects: null, animation_uri: "animation_test_animation.json" }
 };
 let currentConfig = null;
 
@@ -128,9 +128,9 @@ let colorShader =  Fury.Shader.create({
 
 let loop = () => {
 	// TODO: Input to move the camera instead
-	// if (currentConfig && currentConfig.models) {
-	// 	for (let i = 0, l = currentConfig.models.length; i < l; i++) {
-	// 		let rotation = currentConfig.models[i].transform.rotation;
+	// if (currentConfig && currentConfig.sceneObjects) {
+	// 	for (let i = 0, l = currentConfig.sceneObjects.length; i < l; i++) {
+	// 		let rotation = currentConfig.sceneObjects[i].transform.rotation;
 	// 		quat.rotateY(rotation, rotation, 0.005);
 	// 	}
 	// }
@@ -139,15 +139,15 @@ let loop = () => {
 };
 
 let selectConfig = (value) => {
-	if (currentConfig != null && currentConfig.models) {
-		for (let i = 0, l = currentConfig.models.length; i < l; i++) {
-			currentConfig.models[i].active = false;
+	if (currentConfig != null && currentConfig.sceneObjects) {
+		for (let i = 0, l = currentConfig.sceneObjects.length; i < l; i++) {
+			currentConfig.sceneObjects[i].active = false;
 		}
 	} 
 	currentConfig = configurations[value];
 	vec3.copy(cameraPosition, currentConfig.position);
 	vec3.transformQuat(cameraPosition, cameraPosition, cameraRotation);
-	if (!currentConfig.models) {
+	if (!currentConfig.sceneObjects) {
 		// This is what we're here to test!
 		Fury.Model.load(currentConfig.uri, (model) => {
 			model.textures = [];
@@ -175,16 +175,16 @@ let selectConfig = (value) => {
 				}
 			}
 
-			currentConfig.models = []; // This is scene objects really
+			currentConfig.sceneObjects = [];
 			for (let i = 0, l = model.meshData.length; i < l; i++) {
 				let mesh = Fury.Mesh.create(model.meshData[i]);
 				let material = model.materials[model.meshData[i].modelMaterialIndex];
-				currentConfig.models[i] = scene.add({ material: material, mesh: mesh }); // TODO: read mesh position offsets
+				currentConfig.sceneObjects[i] = scene.add({ material: material, mesh: mesh }); // TODO: read mesh position offsets
 			}
 		});
 	} else {
-		for (let i = 0, l = currentConfig.models.length; i < l; i++) {
-			currentConfig.models[i].active = true;
+		for (let i = 0, l = currentConfig.sceneObjects.length; i < l; i++) {
+			currentConfig.sceneObjects[i].active = true;
 		}
 	}
 };
