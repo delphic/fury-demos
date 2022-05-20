@@ -4,15 +4,15 @@
 Fury.Maths.globalize();
 
 let configurations = {
-	"frog": { uri: "frog.gltf", position: [ 0, 0, 1 ], model: null },
-	"cube": { uri: "colored_cube.gltf", position: [ 0, 0, 6 ], model: null }
+	"frog": { uri: "frog.gltf", position: [ 0, 0, 1 ], models: null },
+	"cube": { uri: "colored_cube.gltf", position: [ 0, 0, 6 ], models: null },
+	"animation_test": { uri: "animation_test.gltf", position: [ 0, 0, 1], models: null, animation_uri: "animation_test_animation.json" }
 };
 let currentConfig = null;
 
 Fury.init("fury");
 
 // TODO: Orbit camera view - zoom / rotate etc
-// TODO: Support models with multiple meshes
 let cameraPosition = vec3.create();
 let cameraRotation = Fury.Maths.quatEuler(-30, 135, 0);
 
@@ -126,51 +126,64 @@ let colorShader =  Fury.Shader.create({
 });
 
 let loop = () => {
-	if (currentConfig && currentConfig.model) {
-		let rotation = currentConfig.model.transform.rotation;
-		quat.rotateY(rotation, rotation, 0.005);
-	}
+	// TODO: Input to move the camera instead
+	// if (currentConfig && currentConfig.models) {
+	// 	for (let i = 0, l = currentConfig.models.length; i < l; i++) {
+	// 		let rotation = currentConfig.models[i].transform.rotation;
+	// 		quat.rotateY(rotation, rotation, 0.005);
+	// 	}
+	// }
 	scene.render();
 	window.requestAnimationFrame(loop);
 };
 
 let selectConfig = (value) => {
-	if (currentConfig != null && currentConfig.model) {
-		currentConfig.model.active = false;
+	if (currentConfig != null && currentConfig.models) {
+		for (let i = 0, l = currentConfig.models.length; i < l; i++) {
+			currentConfig.models[i].active = false;
+		}
 	} 
 	currentConfig = configurations[value];
 	vec3.copy(cameraPosition, currentConfig.position);
 	vec3.transformQuat(cameraPosition, cameraPosition, cameraRotation);
-	if (!currentConfig.model) {
+	if (!currentConfig.models) {
 		// This is what we're here to test!
 		Fury.Model.load(currentConfig.uri, (model) => {
-			// Load texture from model
-			let texture = null;
-			if (model.images.length) {
-				texture = Fury.Texture.create({
-					source: model.images[0],
+			// Load textures from model
+			let textures = [];
+			let materials = []; // TODO: Read more info from glTF
+
+			for (let i = 0, l = model.images.length; i < l; i++) {
+				textures[i] = Fury.Texture.create({
+					source: model.images[i],
 					quality: "low",
 					flipY: false
 				});
+				materials[i] = Fury.Material.create({ shader : textureShader });
+				materials[i].textures["uSampler"] = textures[i];
 			}
 
-			let material = null;
-			if (texture) {
-				material = Fury.Material.create({ shader : textureShader });
-				material.textures["uSampler"] = texture;
-			} else {
-				material = Fury.Material.create({ shader: colorShader });
+			// This logic is specific to the models we're using (the only vertex coloured model has no textures)
+			// but it should be possible to mix and match and to use vertex colours with textures
+			if (!materials.length) {
+				materials[0] = Fury.Material.create({ shader: colorShader });
 			}
 
-			let mesh = Fury.Mesh.create(model.meshData[0]);
-			currentConfig.model = scene.add({ material: material, mesh: mesh });
-			window.requestAnimationFrame(loop);
+			currentConfig.models = [];
+			for (let i = 0, l = model.meshData.length; i < l; i++) {
+				let mesh = Fury.Mesh.create(model.meshData[i]);
+				let material = materials[Math.min(i, materials.length - 1)]; // TODO: Read from the glTF data 
+				currentConfig.models[i] = scene.add({ material: material, mesh: mesh }); // TODO: read mesh position offsets
+			}
 		});
 	} else {
-		currentConfig.model.active = true;
+		for (let i = 0, l = currentConfig.models.length; i < l; i++) {
+			currentConfig.models[i].active = true;
+		}
 	}
 };
 
 let modelSelect = document.getElementById("model_select");
 modelSelect.addEventListener("input", (e) => { selectConfig(modelSelect.value) });
 selectConfig("frog");
+window.requestAnimationFrame(loop);
