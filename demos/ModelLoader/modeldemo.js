@@ -131,9 +131,6 @@ let animationStart = Date.now(), animationName = null;
 let vec3From = [], vec3To = [], vec4From = [], vec4To = [];
 
 let loop = () => {
-	// TODO: Input to move the camera instead
-	
-
 	// If model has animations play first
 	if (currentConfig && currentConfig.model && currentConfig.model.animations) {
 		if (!animationName) {
@@ -148,7 +145,7 @@ let loop = () => {
 
 	if (animationName) {
 		let animation = currentConfig.model.animations[animationName];
-		let time = ((Date.now() - animationStart) / 1000)  % animation.duration;
+		let time = ((Date.now() - animationStart) / 1000) % animation.duration;
 
 		for (let i = 0, l = animation.channels.length; i < l; i++) {
 			let channel = animation.channels[i];
@@ -188,6 +185,7 @@ let loop = () => {
 			}
 		}
 	} else {
+		// TODO: Input to move the camera instead
 		if (currentConfig && currentConfig.sceneObjects) {
 			let rotation = currentConfig.model.hierarchy.transform.rotation;
 			quat.rotateY(rotation, rotation, 0.005);
