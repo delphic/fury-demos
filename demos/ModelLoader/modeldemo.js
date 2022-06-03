@@ -211,36 +211,12 @@ let selectConfig = (value) => {
 	if (!currentConfig.sceneObjects) {
 		// This is what we're here to test!
 		Fury.Model.load(currentConfig.uri, (model) => {
-			model.textures = [];
-			for (let i = 0, l = model.textureData.length; i < l; i++) {
-				let imageIndex = model.textureData[i].imageIndex;
-				model.textures[i] = Fury.Texture.create({
-					source: model.images[imageIndex],
-					quality: "low",
-					flipY: false
-				});
-			}
-
-			model.materials = [];
-			for (let i = 0, l = model.materialData.length; i < l; i++) {
-				let textureIndex = model.materialData[i].textureIndex;
-				if (textureIndex >= 0) {
-					model.materials[i] = Fury.Material.create({ 
-						shader : textureShader,
-						texture: model.textures[textureIndex]
-					});
-				} else {
-					// This logic is specific to the models we're using (the only vertex coloured model has no textures)
-					// but it should be possible to mix and match and to use vertex colours with textures
-					model.materials[i] = Fury.Material.create({ shader: colorShader });
-				}
-			}
-
-			model.meshes = [];
-			for (let i = 0, l = model.meshData.length; i < l; i++) {
-				model.meshes[i] = Fury.Mesh.create(model.meshData[i]);
-			}
-
+			model.resources = {};
+			Fury.Model.createResources(model.resources, model, {
+				shader: textureShader,
+				texturelessShader: colorShader,
+				quality: "low"
+			});
 			currentConfig.model = model;
 
 			let instance = Fury.Model.instantiate(model, scene);

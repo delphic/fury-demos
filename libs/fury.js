@@ -9495,6 +9495,9 @@ module.exports = (function(){
 },{"./bounds":3,"./maths":12,"./renderer":19,"./utils":27}],14:[function(require,module,exports){
 const { vec3, quat } = require('./maths');
 const Transform = require('./transform');
+const Mesh = require('./mesh');
+const Texture = require('./texture');
+const Material = require('./material');
 
 module.exports = (function() {
 	let exports = {};
@@ -9643,7 +9646,7 @@ module.exports = (function() {
 		out[animation.name] = result;
 	};
 
-	let buildHierarhcy = (json, index) => {
+	let buildHierarchy = (json, index) => {
 		let nodes = json.nodes;
 		let { name, mesh, children, translation, rotation, scale } = nodes[index];
 
@@ -9663,7 +9666,7 @@ module.exports = (function() {
 		if (children) {
 			result.children = [];
 			for (let i = 0, l = children.length; i < l; i++) {
-				let childNode = buildHierarhcy(
+				let childNode = buildHierarchy(
 					json,
 					children[i]);
 				result.children.push(childNode);
@@ -9715,7 +9718,7 @@ module.exports = (function() {
 
 	exports.instantiate = (model, scene, resources) => {
 		if (!resources) {
-			resources = model;
+			resources = model.resources;
 		}
 		if (!resources.meshes) {
 			throw new Error("No mesh resources found to instantiate model, use Model.createResources to generate necessary Fury resources");
@@ -9728,13 +9731,45 @@ module.exports = (function() {
 		return instance;
 	};
 
+	exports.createResources = (out, model, { shader, texturelessShader = null, quality }) => {
+		out.textures = [];
+		for (let i = 0, l = model.textureData.length; i < l; i++) {
+			let imageIndex = model.textureData[i].imageIndex;
+			out.textures[i] = Texture.create({
+				source: model.images[imageIndex],
+				quality: quality,
+				flipY: false
+			});
+			out.textures[i].name = model.textureData[i].name;
+		}
+
+		out.materials = [];
+		for (let i = 0, l = model.materialData.length; i < l; i++) {
+			let textureIndex = model.materialData[i].textureIndex;
+			if (textureIndex >= 0) {
+				out.materials[i] = Material.create({ 
+					shader: shader,
+					texture: out.textures[textureIndex]
+				});
+			} else {
+				out.materials[i] = Material.create({
+					shader: texturelessShader ? texturelessShader : shader
+				});
+			}
+		}
+
+		out.meshes = [];
+		for (let i = 0, l = model.meshData.length; i < l; i++) {
+			out.meshes[i] = Mesh.create(model.meshData[i]);
+		}
+	};
+
 	// Takes a URI of a glTF file to load
 	// Returns an object containing an array meshdata ready for use with Fury.Mesh
 	// As well as an array of images to use in material creation
 	// Includes a cut down set of information on materialData and textureData arrays 
-	// however these are not ready to be used with Fury.Material and Fury.Texture
-	// and must be manipulated further
-	// Might be sensible to separate the asset load and format conversions
+	// however these are not ready to be used directly with Fury.Material and Fury.Texture
+	// and must be manipulated further, see exports.createResources
 	exports.load = (uri, callback) => {
 		// TODO: Check file extension, only gltf currently supported
 		// https://github.com/KhronosGroup/glTF -> https://github.com/KhronosGroup/glTF/tree/master/specification/2.0
@@ -9783,7 +9818,7 @@ module.exports = (function() {
 			if (json.scenes && json.scenes.length) {
 				let scene = json.scenes[json.scene]; // Only one scene currently supported
 				let nodeIndex = scene.nodes[0]; // Expect single scene node
-				model.hierarchy = buildHierarhcy(json, nodeIndex);
+				model.hierarchy = buildHierarchy(json, nodeIndex);
 			}
 
 			if (json.materials && json.materials.length) {
@@ -9845,7 +9880,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./maths":12,"./transform":26}],15:[function(require,module,exports){
+},{"./material":11,"./maths":12,"./mesh":13,"./texture":24,"./transform":26}],15:[function(require,module,exports){
 const vec3 = require('./maths').vec3;
 
 module.exports = (function(){
