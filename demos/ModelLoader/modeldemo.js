@@ -144,7 +144,8 @@ let loop = () => {
 	}
 
 	if (animationName) {
-		let animation = currentConfig.model.animations[animationName];
+		let model = currentConfig.model;
+		let animation = model.animations[animationName];
 		let time = ((Date.now() - animationStart) / 1000) % animation.duration;
 
 		for (let i = 0, l = animation.channels.length; i < l; i++) {
@@ -166,21 +167,22 @@ let loop = () => {
 				ratio = (time - from) / delta;
 			}
 
+			let transform = model.transforms[channel.node];
 			switch (channel.type) {
 				case "translation":
 					Fury.Maths.vec3.set(vec3From, values[prev * 3], values[prev * 3 + 1], values[prev * 3 + 2]);
 					Fury.Maths.vec3.set(vec3To, values[next * 3], values[next * 3 + 1], values[next * 3 + 2]);
-					Fury.Maths.vec3.lerp(channel.transform.position, vec3From, vec3To, ratio);
+					Fury.Maths.vec3.lerp(transform.position, vec3From, vec3To, ratio);
 					break;
 				case "rotation":
 					Fury.Maths.vec4.set(vec4From, values[prev * 4], values[prev * 4 + 1], values[prev * 4 + 2], values[prev * 4 + 3]);
 					Fury.Maths.vec4.set(vec4To, values[next * 4], values[next * 4 + 1], values[next * 4 + 2], values[next * 4 + 3]);
-					Fury.Maths.quat.slerp(channel.transform.rotation, vec4From, vec4To, ratio);
+					Fury.Maths.quat.slerp(transform.rotation, vec4From, vec4To, ratio);
 					break;
 				case "scale":
 					Fury.Maths.vec3.set(vec3From, values[prev * 3], values[prev * 3 + 1], values[prev * 3 + 2]);
 					Fury.Maths.vec3.set(vec3To, values[next * 3], values[next * 3 + 1], values[next * 3 + 2]);
-					Fury.Maths.vec3.lerp(channel.transform.scale, vec3From, vec3To, ratio);
+					Fury.Maths.vec3.lerp(transform.scale, vec3From, vec3To, ratio);
 					break;
 			}
 		}
@@ -234,14 +236,17 @@ let selectConfig = (value) => {
 			}
 
 			currentConfig.model = model;
+			// TODO: Move to below this to instantiate method
 			currentConfig.sceneObjects = [];
 
 			let nodes = [ model.hierarchy ];
+			model.transforms = [];
 			while (nodes.length > 0) {
 				let node = nodes.pop();
+				model.transforms[node.index] = node.transform;
 				if (!isNaN(node.modelMeshIndex)) {
 					let i = node.modelMeshIndex;
-					let mesh = Fury.Mesh.create(model.meshData[i]);
+					let mesh = Fury.Mesh.create(model.meshData[i]); // TODO: Move to createResources method
 					let material = model.materials[node.modelMaterialIndex];
 					// This breaks if the node doesn't have a modelMaterialIndex which is possible
 						
