@@ -9493,6 +9493,7 @@ module.exports = (function(){
 	return exports;
 })();
 },{"./bounds":3,"./maths":12,"./renderer":19,"./utils":27}],14:[function(require,module,exports){
+const { vec3, quat } = require('./maths');
 const Transform = require('./transform');
 
 module.exports = (function() {
@@ -9642,7 +9643,7 @@ module.exports = (function() {
 		out[animation.name] = result;
 	};
 
-	let createSceneHierarchy = (json, index, parent) => {
+	let buildHierarhcy = (json, index) => {
 		let nodes = json.nodes;
 		let { name, mesh, children, translation, rotation, scale } = nodes[index];
 
@@ -9655,30 +9656,76 @@ module.exports = (function() {
 			result.modelMaterialIndex = json.meshes[mesh].primitives[0].material;
 		}
 
-		result.transform = Transform.create({
-			position: translation,
-			rotation: rotation,
-			scale: scale
-		});
-
-		if (parent) {
-			result.transform.parent = parent.transform;
-		}
-		result.transform.children = [];
-		result.children = [];
+		result.translation = translation;
+		result.rotation = rotation;
+		result.scale = scale;
 
 		if (children) {
+			result.children = [];
 			for (let i = 0, l = children.length; i < l; i++) {
-				let childNode = createSceneHierarchy(
+				let childNode = buildHierarhcy(
 					json,
-					children[i],
-					result);
+					children[i]);
 				result.children.push(childNode);
-				result.transform.children.push(childNode.transform);
 			}
 		}
 
 		return result;
+	};
+
+	let instantiateNode = (node, instance, resources, scene, parent) => {
+		let transform = Transform.create({
+			position: node.translation ? vec3.clone(node.translation) : vec3.create(),
+			rotation: node.rotation ? quat.clone(node.rotation) : quat.create(),
+			scale: node.scale ? vec3.clone(node.scale) : vec3.fromValues(1.0, 1.0, 1.0)
+		});
+		if (parent) {
+			transform.parent = instance.transforms[parent.index];
+		}
+		instance.transforms[node.index] = transform;
+
+		if (!isNaN(node.modelMeshIndex)) {
+			let mesh = resources.meshes[node.modelMeshIndex];
+			let material = resources.materials[node.modelMaterialIndex];
+			// This breaks if the node doesn't have a modelMaterialIndex which is possible
+
+			instance.sceneObjects.push(scene.add({
+				material: material,
+				mesh: mesh,
+				transform: transform
+			}));
+		}
+
+		let children = node.children;
+		if (children) {
+			transform.children = [];
+			for (let i = 0, l = children.length; i < l; i++) {
+				instantiateNode(
+					children[i],
+					instance,
+					resources,
+					scene,
+					node);
+				transform.children.push(instance.transforms[children[i].index]);
+			}
+		}
+
+		return transform;
+	};
+
+	exports.instantiate = (model, scene, resources) => {
+		if (!resources) {
+			resources = model;
+		}
+		if (!resources.meshes) {
+			throw new Error("No mesh resources found to instantiate model, use Model.createResources to generate necessary Fury resources");
+		}
+
+		let instance = {};
+		instance.sceneObjects = [];
+		instance.transforms = [];
+		instance.transform = instantiateNode(model.hierarchy, instance, resources, scene, null);
+		return instance;
 	};
 
 	// Takes a URI of a glTF file to load
@@ -9736,7 +9783,7 @@ module.exports = (function() {
 			if (json.scenes && json.scenes.length) {
 				let scene = json.scenes[json.scene]; // Only one scene currently supported
 				let nodeIndex = scene.nodes[0]; // Expect single scene node
-				model.hierarchy = createSceneHierarchy(json, nodeIndex);
+				model.hierarchy = buildHierarhcy(json, nodeIndex);
 			}
 
 			if (json.materials && json.materials.length) {
@@ -9798,7 +9845,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./transform":26}],15:[function(require,module,exports){
+},{"./maths":12,"./transform":26}],15:[function(require,module,exports){
 const vec3 = require('./maths').vec3;
 
 module.exports = (function(){

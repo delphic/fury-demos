@@ -145,6 +145,7 @@ let loop = () => {
 
 	if (animationName) {
 		let model = currentConfig.model;
+		let instance = currentConfig.instance;
 		let animation = model.animations[animationName];
 		let time = ((Date.now() - animationStart) / 1000) % animation.duration;
 
@@ -167,7 +168,7 @@ let loop = () => {
 				ratio = (time - from) / delta;
 			}
 
-			let transform = model.transforms[channel.node];
+			let transform = instance.transforms[channel.node];
 			switch (channel.type) {
 				case "translation":
 					Fury.Maths.vec3.set(vec3From, values[prev * 3], values[prev * 3 + 1], values[prev * 3 + 2]);
@@ -189,7 +190,7 @@ let loop = () => {
 	} else {
 		// TODO: Input to move the camera instead
 		if (currentConfig && currentConfig.sceneObjects) {
-			let rotation = currentConfig.model.hierarchy.transform.rotation;
+			let rotation = currentConfig.instance.transform.rotation;
 			quat.rotateY(rotation, rotation, 0.005);
 		}
 	}
@@ -235,36 +236,17 @@ let selectConfig = (value) => {
 				}
 			}
 
-			currentConfig.model = model;
-			// TODO: Move to below this to instantiate method
-			currentConfig.sceneObjects = [];
-
-			let nodes = [ model.hierarchy ];
-			model.transforms = [];
-			while (nodes.length > 0) {
-				let node = nodes.pop();
-				model.transforms[node.index] = node.transform;
-				if (!isNaN(node.modelMeshIndex)) {
-					let i = node.modelMeshIndex;
-					let mesh = Fury.Mesh.create(model.meshData[i]); // TODO: Move to createResources method
-					let material = model.materials[node.modelMaterialIndex];
-					// This breaks if the node doesn't have a modelMaterialIndex which is possible
-						
-					currentConfig.sceneObjects.push(scene.add({
-						material: material,
-						mesh: mesh,
-						transform: node.transform
-					}));
-				}
-
-				if (node.children) {
-					let childIndex = node.children.length - 1;
-					while (childIndex >= 0) {
-						nodes.push(node.children[childIndex]);
-						childIndex--;
-					}
-				}
+			model.meshes = [];
+			for (let i = 0, l = model.meshData.length; i < l; i++) {
+				model.meshes[i] = Fury.Mesh.create(model.meshData[i]);
 			}
+
+			currentConfig.model = model;
+
+			let instance = Fury.Model.instantiate(model, scene);
+			currentConfig.instance = instance;
+			currentConfig.sceneObjects = instance.sceneObjects;
+
 		});
 	} else {
 		for (let i = 0, l = currentConfig.sceneObjects.length; i < l; i++) {
