@@ -74,11 +74,17 @@ let ParticleSystem = (function(){
 
     let nextId = 0;
     let createMaterialConfig = function({ color, texture }) {
+        let shader = Fury.Shader.copy(Fury.Shaders.UnlitColor);
+        shader.bindInstance = function(object) {
+            if (object.color) {
+                this.setUniformFloat3("uColor", object.color[0], object.color[1], object.color[2]);
+            }
+        };
         return {
-            shader: Fury.Shaders.UnlitColor,
+            shader: shader,
             texture: texture,
             properties: { color: color }
-        }
+        };
     };
 
     let createMeshConfig = function() {
@@ -102,6 +108,7 @@ let ParticleSystem = (function(){
             vec3.copy(particle.transform.position, position);
             vec3.set(particle.velocity, Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
             particle.lifetime = 3.0 * Math.random();
+            particle.elapsed = 0;
         };
 
         let particles = [];
@@ -109,6 +116,7 @@ let ParticleSystem = (function(){
             let particle = scene.instantiate({ name: prefabName, position: vec3.clone(position), scale: vec3.clone(scale) });
             particle.active = false;
             particle.velocity = [ 0, 0, 0 ];
+            particle.color = vec3.clone(color);
             particles.push(particle);
 
             if (i < burst) {
@@ -118,12 +126,15 @@ let ParticleSystem = (function(){
 
         let timeSinceLastSpawn = 0.0;
 
+        let targetColor = [ 0, 0, 0 ]; // TODO: move to configuration
         let particleSystem = {};
         particleSystem.simulate = (elapsed) => {
             for (let i = 0, l = particles.length; i < l; i++) {
                 let particle = particles[i];
                 if (particle.active) {
-                    // TODO: updates for individual material overrides, via bindInstance (new engine functionality)
+                    // TODO: Only lerp color if config says to
+                    // TODO: Lerp in HSV space not RGB
+                    vec3.lerp(particle.color, particle.material.color, targetColor, particle.elapsed / particle.lifetime);
                     // TODO: Velocity over lifetime delegate
                     vec3.scaleAndAdd(
                         particle.transform.position,
@@ -131,8 +142,8 @@ let ParticleSystem = (function(){
                         particle.velocity,
                         elapsed
                     );
-                    particle.lifetime = Math.max(0, particle.lifetime - elapsed);
-                    if (particle.lifetime <= 0) {
+                    particle.elapsed += elapsed;
+                    if (particle.lifetime <= particle.elapsed) {
                         particle.active = false;
                     }
                 }

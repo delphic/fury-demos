@@ -7812,6 +7812,11 @@ module.exports = (function(){
 		setOffset(material.offset, atlasIndex, atlas.width, atlas.height);
 	};
 
+	exports.setMaterialFrame = (material, atlas, frameIndex) => {
+		if (!material.offset) { material.offset = [0,0]; }
+		setOffset(material.offset, frameIndex, atlas.width, atlas.height);
+	};
+
 	exports.createTilePrefab = (config) => {
 		let { atlas, tile, color, alpha, centered } = config;
 		let { width, height } = atlas;
@@ -8763,8 +8768,8 @@ module.exports = (function() {
 	};
 
 	let handleMouseMove = function(event) {
-		MousePosition[0] = event.pageX;
-		MousePosition[1] = event.pageY;
+		MousePosition[0] = event.offsetX;
+		MousePosition[1] = event.offsetY;
 		MouseDelta[0] += event.movementX;
 		MouseDelta[1] += event.movementY;
 	};
@@ -9214,7 +9219,7 @@ module.exports = (function() {
 			if (sqrMaxDelta >= sqrLen) {
 				vec3.copy(out, b);
 			} else {
-				vec3.scaleAndAdd(a, delta, sqrMaxDelta / sqrLen)
+				vec3.scaleAndAdd(out, a, delta, maxDelta / Math.sqrt(sqrLen));
 			}
 		}; 
 	})();
@@ -10954,6 +10959,10 @@ module.exports = (function() {
 				r.setUniformMatrix3(shader.nMatrixUniformName, nMatrix);
 			}
 
+			if (shader.bindInstance) {
+				shader.bindInstance.call(r, object);
+			}
+
 			r.draw(mesh.renderMode, mesh.indexed ? mesh.indexBuffer.numItems : mesh.vertexBuffer.numItems, mesh.indexed, 0);
 		};
 
@@ -11019,6 +11028,10 @@ module.exports = (function() {
 		}
 		shader.bindBuffers = config.bindBuffers;
 
+		if (config.bindInstance && typeof(config.bindInstance) === 'function') {
+			shader.bindInstance = config.bindInstance;
+		}
+
 		if (config.validateMaterial && typeof(config.validateMaterial) === 'function') {
 			shader.validateMaterial = config.validateMaterial;
 		}
@@ -11029,6 +11042,12 @@ module.exports = (function() {
 		shader.mMatrixUniformName = config.mMatrixUniformName;
 
 		return shader;
+	};
+
+	exports.copy = function(shader) {
+		let clone = Object.assign({}, shader);
+		clone.id = null;
+		return clone;
 	};
 
 	return exports;
@@ -11153,13 +11172,15 @@ module.exports = (function() {
 		"uniform sampler2D uSampler;",
 	
 		"uniform vec4 uColor;",
+		"uniform vec4 uMixColor;",
 	
 		"void main(void) {",
-			"gl_FragColor = texture2D(uSampler, vec2(uOffset.x + (uScale.x * vTextureCoord.s), uOffset.y + (uScale.y * vTextureCoord.t))) * uColor;",
+			"vec4 color = texture2D(uSampler, vec2(uOffset.x + (uScale.x * vTextureCoord.s), uOffset.y + (uScale.y * vTextureCoord.t))) * uColor;",
+			"gl_FragColor = mix(color, vec4(uMixColor.rgb, color.a), uMixColor.a);",
 		"}"].join('\n'),
 	
 		attributeNames: [ "aVertexPosition", "aTextureCoord" ],
-		uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler", "uOffset", "uScale", "uColor" ],
+		uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler", "uOffset", "uScale", "uColor", "uMixColor" ],
 		textureUniformNames: [ "uSampler" ],
 		pMatrixUniformName: "uPMatrix",
 		mvMatrixUniformName: "uMVMatrix",
@@ -11172,6 +11193,11 @@ module.exports = (function() {
 				this.setUniformVector4("uColor", material.color);
 			} else {
 				this.setUniformFloat4("uColor", 1, 1, 1, 1);
+			}
+			if (material.mixColor) {
+				this.setUniformVector4("uMixColor", material.mixColor);
+			} else {
+				this.setUniformFloat4("uMixColor", 1, 1, 1, 0);
 			}
 		},
 		bindBuffers: function(mesh) {
@@ -11252,9 +11278,7 @@ module.exports = (function(){
 		return tileWidth;
 	};
 
-	exports.create = (config) => {
-		let { text, scene, atlas, position, alignment, color, alignmentStyle } = config;
-
+	exports.create = ({ text, scene, atlas, position, alignment, color, alignmentStyle }) => {
 		if (alignmentStyle === undefined || alignmentStyle === null) {
 			alignmentStyle = exports.alignmentStyle;
 		}
@@ -11293,7 +11317,7 @@ module.exports = (function(){
 				} else {
 					offset = calculateWidth(text) / 2;
 				}
-			} else if (alignment == alignment.right) {
+			} else if (alignment == Alignment.right) {
 				offset = calculateWidth(text);
 			}
 			if (offset && alignmentStyle == AlignmentStyle.integer) {
@@ -11455,9 +11479,7 @@ const { vec3 } = require('./maths');
 module.exports = (function(){
 	let exports = {};
 
-	exports.create = (config) => {
-		let { scene, width: w, height: h, position: pos, atlas, defaultTile } = config;
-
+	exports.create = ({ scene, width: w, height: h, position: pos, atlas, defaultTile }) => {
 		let tileMap = {};
 		tileMap.width = w;
 		tileMap.height =  h;
