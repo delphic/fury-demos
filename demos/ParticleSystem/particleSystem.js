@@ -1,192 +1,302 @@
 let camera, scene;
 let texture;
-let particleSystem;
+let particleSystem, burstSystem;
 
 window.onload = (event) => {
-    Fury.Maths.globalize();
+	Fury.Maths.globalize();
 	Fury.init({ canvasId: "fury" });
 
 	camera = Fury.Camera.create({ near: 0.1, far: 1000000.0, fov: 1.0472, ratio: 1.0, position: [ 0.0, 0.0, 6.0 ] });
 	scene = Fury.Scene.create({ camera: camera });
 
-    loadAssets(() => {
-        particleSystem = ParticleSystem.create({ 
-            emission: 100,
-            burst: 250,
-            maxCount: 500,
-            scene: scene,
-            texture: texture,
-            scale: [ 0.1, 0.1, 0.1 ],
-            color: [ 1.0, 0.0, 0.5 ]
-        });
-        
-        Fury.GameLoop.init({ loop: loop });
-        Fury.GameLoop.start();
-    });
+	loadAssets(() => {
+		let color = [ 1.0, 0.0, 0.5 ];
+		let targetColor = [ 0.0, 0.0, 0.0 ];
+		
+		let shader = Fury.Shader.copy(Fury.Shaders.UnlitColor);
+		shader.bindInstance = function(object) {
+			if (object.color) {
+				this.setUniformFloat3("uColor", object.color[0], object.color[1], object.color[2]);
+			}
+		};
+
+		particleSystem = ParticleSystem.create({ 
+			emission: 100,
+			burst: 250,
+			maxCount: 500,
+			scene: scene,
+			position: [ -2.0, 0.0, 0.0 ],
+			scale: [ 0.1, 0.1, 0.1 ],
+			materialConfig: {
+				shader: shader,
+				texture: texture,
+				properties: { color: color }
+			},
+			onCreateParticle: (particle) => {
+				particle.color = vec3.clone(color);
+			},
+			initParticle: (particle) => {
+				vec3.set(particle.velocity, Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
+				particle.lifetime = 3.0 * Math.random();
+			},
+			updateParticle: (particle) => {
+				// TODO: Lerp in HSV space not RGB
+				vec3.lerp(particle.color, particle.material.color, targetColor, particle.elapsed / particle.lifetime);
+			}
+		});
+
+		let burstColor = [ 0.0, 1.0, 0.5 ];
+		burstSystem = ParticleSystem.create({
+			bursts: [ { time: 0, count: 50 }, { time: 0.5, count: 50 }, { time: 1.0, count: 50 }, { time: 1.5, count: 50 } ],
+			lifetime: 2.0,
+			repeat: true,
+			maxCount: 1000,
+			scene: scene,
+			position: [ 2.0, 0.0, 0.0 ],
+			scale: [ 0.05, 0.05, 0.05 ],
+			materialConfig: {
+				shader: shader,
+				texture: texture,
+				properties: { color: burstColor }
+			},
+			onCreateParticle: (particle) => {
+				particle.color = vec3.clone(burstColor);
+				particle.initialVelocity = vec3.create();
+			},
+			initParticle: (particle) => {
+				particle.transform.position[0] += 0.1 * Math.random();
+				vec3.set(particle.velocity, 0.1 * (Math.random() - 0.5), 3 * Math.random(), 0.0);
+				vec3.copy(particle.initialVelocity, particle.velocity);
+				particle.lifetime = 0.5 + 0.5 * Math.random();
+			},
+			updateParticle: (particle) => {
+				vec3.scale(particle.velocity, particle.initialVelocity, 1.0 - particle.elapsed / particle.lifetime);
+				vec3.lerp(particle.color, particle.material.color, targetColor, particle.elapsed / particle.lifetime);
+			}
+		});
+		
+		Fury.GameLoop.init({ loop: loop });
+		Fury.GameLoop.start();
+	});
 };
 
 let loadAssets = (callback) => {
-    let assetsLoading = 0;
-    let onAssetLoaded = () => {
-        assetsLoading--;
-        if (!assetsLoading) {
-            callback();
-        }
-    };
+	let assetsLoading = 0;
+	let onAssetLoaded = () => {
+		assetsLoading--;
+		if (!assetsLoading) {
+			callback();
+		}
+	};
 
-    assetsLoading++;
-    let image = new Image();
-    image.onload = function() {
-        texture = Fury.Texture.create({ source: image, quality: "low" });
-        onAssetLoaded();
-    };
-    image.src = "square-particle.png";
+	assetsLoading++;
+	let image = new Image();
+	image.onload = function() {
+		texture = Fury.Texture.create({ source: image, quality: "low" });
+		onAssetLoaded();
+	};
+	image.src = "square-particle.png";
 };
 
 let ParticleSystem = (function(){
-    /*
-    Will start with a naive approach of just instantiating lots of prefabs
-    We'll get improvements on the material bindings from them being prefabs
-    but we may want to investigate ways of further minimising overhead
+	/*
+	Will start with a naive approach of just instantiating lots of prefabs
+	We'll get improvements on the material bindings from them being prefabs
+	but we may want to investigate ways of further minimising overhead
 
-    Would be nice to be able to skip thinking about the render objects at all if the particle system were inactive
+	Would be nice to be able to skip thinking about the render objects at all if the particle system were inactive
 
-    Start by using Unlit Color shader - may need custom shdaer if we want to support colour over lifetime
-        Start no-alpha, try cutout and then alpha blended
+	Start by using Unlit Color shader - may need custom shdaer if we want to support colour over lifetime
+		Start no-alpha, try cutout and then alpha blended
 
-    Particle System concepts:
-    position
-    rotation
-    sprite
-    shape (point / sphere / cone)
-    emission rate
-    max particles
-    bursts []
+	Particle System concepts:
+	position
+	rotation
+	sprite
+	shape (point / sphere / cone)
+	emission rate
+	max particles
+	bursts []
 
-    particle:
-    scale 
-    speed (value or range)
-    lifetime (value or range)
-    */
+	particle:
+	scale 
+	speed (value or range)
+	lifetime (value or range)
+	*/
 
-    let exports = {};
-    let meshConfig = null;
+	let exports = {};
+	let meshConfig = null;
 
-    let nextId = 0;
-    let createMaterialConfig = function({ color, texture }) {
-        let shader = Fury.Shader.copy(Fury.Shaders.UnlitColor);
-        shader.bindInstance = function(object) {
-            if (object.color) {
-                this.setUniformFloat3("uColor", object.color[0], object.color[1], object.color[2]);
-            }
-        };
-        return {
-            shader: shader,
-            texture: texture,
-            properties: { color: color }
-        };
-    };
+	let nextId = 0;
 
-    let createMeshConfig = function() {
-        if (!meshConfig) {
-            meshConfig = Fury.Primitives.createCenteredQuadMeshConfig(1.0, 1.0);
-        }
-        return meshConfig;
-    }
+	let createMeshConfig = function() {
+		if (!meshConfig) {
+			meshConfig = Fury.Primitives.createCenteredQuadMeshConfig(1.0, 1.0);
+		}
+		return meshConfig;
+	}
 
-    exports.create = ({ scene, maxCount, position = [0,0,0], scale = [1, 1, 1], texture, color, burst = 0, emission = 0 }) => {
-        let prefabName = "particle-system-" + nextId++;
-        Fury.Prefab.create({ 
-            name: prefabName,
-            meshConfig: createMeshConfig(),
-            materialConfig: createMaterialConfig({ color: color, texture: texture })
-        });
+	exports.create = ({ 
+		scene,
+		maxCount,
+		position = [ 0, 0, 0 ],
+		scale = [ 1, 1, 1 ], // Initial Particle Scale not system scale
+		burst = 0,
+		emission = 0,
+		bursts = null,
+		lifetime = 0.0,
+		repeat = false,
+		materialConfig,
+		onCreateParticle,
+		initParticle,
+		updateParticle,
+	}) => {
+		let prefabName = "particle-system-" + nextId++;
+		Fury.Prefab.create({ 
+			name: prefabName,
+			meshConfig: createMeshConfig(),
+			materialConfig: materialConfig
+		});
 
-        let emit = function(particle) {
-            particle.active = true;
-            // TODO: Read these from config delegates
-            vec3.copy(particle.transform.position, position);
-            vec3.set(particle.velocity, Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
-            particle.lifetime = 3.0 * Math.random();
-            particle.elapsed = 0;
-        };
+		let particles = [];
+		let inactiveParticles = [];
 
-        let particles = [];
-        for (let i = 0; i < maxCount; i++) {
-            let particle = scene.instantiate({ name: prefabName, position: vec3.clone(position), scale: vec3.clone(scale) });
-            particle.active = false;
-            particle.velocity = [ 0, 0, 0 ];
-            particle.color = vec3.clone(color);
-            particles.push(particle);
+		let determineParticleToEmit = () => {
+			if (inactiveParticles.length) {
+				return inactiveParticles.pop();
+			} else {
+				// TODO: If list of inactive particles is zero build a heap, once per frame, then use that.
+				let minDelta = Number.MAX_VALUE;
+				let particle = null;
+				for (let i = 0, l = particles.length; i < l; i++) {
+					let particle = particles[i];
+					let delta = particle.lifetime - particle.elapsed;
+					if (minDelta > delta) {
+						minDelta = delta;
+						particle = particle;
+					}
+				}
+				return particle;
+			}
+		};
 
-            if (i < burst) {
-                emit(particle);
-            }
-        }
+		let emitBurst = function(count) {
+			for (let i = 0; i < count; i++) {
+				let particle = determineParticleToEmit();
+				if (particle) {
+					emit(particle);
+				} else {
+					break;
+				}
+			}
+		};
 
-        let timeSinceLastSpawn = 0.0;
+		let emit = function(particle) {
+			particle.active = true;
+			vec3.copy(particle.transform.position, position);
+			vec3.copy(particle.transform.scale, scale);
+			vec3.set(particle.velocity, 0, 0, 0);
+			particle.lifetime = 1.0;
+			particle.elapsed = 0;
+			if (initParticle) {
+				initParticle(particle);                
+			}
+		};
 
-        let targetColor = [ 0, 0, 0 ]; // TODO: move to configuration
-        let particleSystem = {};
-        particleSystem.simulate = (elapsed) => {
-            for (let i = 0, l = particles.length; i < l; i++) {
-                let particle = particles[i];
-                if (particle.active) {
-                    // TODO: Only lerp color if config says to
-                    // TODO: Lerp in HSV space not RGB
-                    vec3.lerp(particle.color, particle.material.color, targetColor, particle.elapsed / particle.lifetime);
-                    // TODO: Velocity over lifetime delegate
-                    vec3.scaleAndAdd(
-                        particle.transform.position,
-                        particle.transform.position,
-                        particle.velocity,
-                        elapsed
-                    );
-                    particle.elapsed += elapsed;
-                    if (particle.lifetime <= particle.elapsed) {
-                        particle.active = false;
-                    }
-                }
-            }
+		for (let i = 0; i < maxCount; i++) {
+			let particle = scene.instantiate({ name: prefabName, position: vec3.clone(position), scale: vec3.clone(scale) });
+			particle.active = false;
+			particle.velocity = [ 0, 0, 0 ];
+			if (onCreateParticle) {
+				onCreateParticle(particle);
+			}
+			particles.push(particle);
 
-            // Emission
-            if (emission > 0) {
-                timeSinceLastSpawn += elapsed;
-                let emissionTau = 1 / emission;
-                while (timeSinceLastSpawn > emissionTau) {
-                    timeSinceLastSpawn -= emissionTau;
-    
-                    // TODO: Build list of inactive particles on update loop
-                    // and if the length is zero build a heap, once, then use these.
-                    let minParticleLifeTime = Number.MAX_VALUE;
-                    let minParticle = null;
-                    for (let i = 0, l = particles.length; i < l; i++) {
-                        let particle = particles[i];
-                        if (!particle.active) {
-                            minParticle = particle;
-                            break;
-                        } else if (minParticleLifeTime > particle.lifetime) {
-                            minParticleLifeTime = particle.lifetime;
-                            minParticle = particle;
-                        }
-                    }
-    
-                    if (minParticle) {
-                        emit(minParticle);
-                    }
-                }
-            }
+			// Assumes start active which maybe we shouldn't have
+			if (i < burst) {
+				emit(particle);
+			} else {
+				inactiveParticles.push(particle);
+			}
+		}
 
-            // TODO: Bursts by time
-        };
+		let timeSinceLastEmission = 0.0;
+		let systemElapsed = 0.0;
 
-        return particleSystem;
-    };
+		let particleSystem = {};
+		particleSystem.active = true;
+		particleSystem.simulate = (elapsed) => {
+			if (!particleSystem.active) {
+				return;
+			}
 
-    return exports;
+			for (let i = 0, l = particles.length; i < l; i++) {
+				let particle = particles[i];
+				if (particle.active) {
+					if (updateParticle) {
+						updateParticle(particle);
+					}
+					vec3.scaleAndAdd(
+						particle.transform.position,
+						particle.transform.position,
+						particle.velocity,
+						elapsed
+					);
+					particle.elapsed += elapsed;
+					if (particle.lifetime <= particle.elapsed) {
+						particle.active = false;
+						inactiveParticles.push(particle);
+					}
+				}
+			}
+
+			// Emission
+			if (emission > 0) {
+				timeSinceLastEmission += elapsed;
+				let emissionTau = 1 / emission;
+				let particlesToEmit = 0;
+				while (timeSinceLastEmission > emissionTau) {
+					timeSinceLastEmission -= emissionTau;
+					particlesToEmit++;
+				}
+				emitBurst(particlesToEmit);
+			}
+
+			// Bursts by time
+			if (bursts && bursts.length) {
+				for (let i = 0, l = bursts.length; i < l; i++) {
+					if (bursts[i].time < systemElapsed + elapsed && bursts[i].time >= systemElapsed) {
+						emitBurst(bursts[i].count);
+					}
+				}
+			}
+			systemElapsed += elapsed;
+			// Check for repeat
+			if (lifetime && repeat && systemElapsed > lifetime) {
+				particleSystem.restart();
+			}
+			// TODO: Test auto deactivate
+			if (lifetime && !repeat && inactiveParticles.length == particles.length) {
+				particleSystem.active = false;
+			}
+		};
+
+		particleSystem.restart = () => {
+			particleSystem.active = true;
+			systemElapsed = 0.0;
+			if (burst) {
+				emitBurst(burst);
+			}
+		};
+
+		return particleSystem;
+	};
+
+	return exports;
 })();
 
 let loop = (elapsed) => {
-    particleSystem.simulate(elapsed);
-    scene.render();  
+	particleSystem.simulate(elapsed);
+	burstSystem.simulate(elapsed);
+	scene.render();  
 };
