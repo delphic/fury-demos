@@ -50,7 +50,7 @@ window.onload = (event) => {
 			bursts: [ { time: 0, count: 50 }, { time: 0.5, count: 50 }, { time: 1.0, count: 50 }, { time: 1.5, count: 50 } ],
 			lifetime: 2.0,
 			repeat: true,
-			maxCount: 1000,
+			maxCount: 200,
 			scene: scene,
 			position: [ 2.0, 0.0, 0.0 ],
 			scale: [ 0.05, 0.05, 0.05 ],
@@ -97,6 +97,118 @@ let loadAssets = (callback) => {
 	};
 	image.src = "square-particle.png";
 };
+
+// TODO: Extract to Fury Utils and unit test
+let Heap = (function(){
+	let exports = {};
+
+	let parentIndex = i =>  Math.floor(i / 2);
+	let leftChildIndex = i => 2 * i;
+	let rightChildIndex = i => 2 * i + 1;
+
+	exports.create = () => {
+		let heap = {};
+
+		let items = [];
+		let priorities = [];
+		let count = 0;
+
+		let swap = (i, j) => {
+			let item = items[i];
+			items[i] = items[j];
+			items[j] = item;
+			let priority = priorities[i];
+			priorities[i] = priorities[j];
+			priorities[j] = priority;
+		};
+
+		let minChildIndex = (i) => {
+			let result = 0;
+			if (rightChildIndex(i) >= count) {
+				result = leftChildIndex(i);
+			} else {
+				if (priorities[leftChildIndex(i)] < priorities[rightChildIndex(i)]) {
+					result = leftChildIndex(i);
+				} else {
+					resut = rightChildIndex(i);
+				}
+			}
+			return result;
+		};
+
+		let selectIndex = (item, priority) => {
+			for (let i = 0; i < count; i++) {
+				if (items[i] == item && priority[i] == priority) {
+					return i;
+				}
+			}
+			console.error("Unable to find node with priority " + priority + " and item " + item);
+			return -1;
+		};
+
+		let deleteAtIndex = (index) => {
+			if (index < 0 && index >= count) {
+				console.error("Can not delete index " + index + " for heap count " + count);
+				return;
+			}
+
+			if (count == 1) {
+				count--;
+				items[index] = null;
+				return;
+			}
+
+			count--;
+			let i = index;
+			items[index] = items[count];
+			priorities[index] = priorities[count];
+			let priority = priorities[index];
+			while (leftChildIndex(i) < count || rightChildIndex(i) < count) {
+				let minChildIdx = minChildIndex(i);
+				if (priority <= priorities[minChildIdx]) {
+					break;
+				}
+				swap(i, minChildIdx);
+				i = minChildIdx;
+			}
+		};
+
+		heap.insert = (item, priority) => {
+			let i = count;
+			items[i] = item;
+			priorities[i] = priority;
+			count++;
+			while (i > 0 && priorities[parentIndex(i)] > priorities[i]) {
+				swap(i, parentIndex(i));
+				i = parentIndex(i);
+			}
+		};
+		heap.extractMin = () => {
+			let min = null;
+			if (count > 0) {
+				min = items[0];
+				deleteAtIndex(0);
+			}
+			return min;
+		};
+		heap.delete = (item, priority) => {
+			let idx = selectIndex(item, priority);
+			if (idx >= 0) {
+				deleteAtIndex(idx);
+			}
+		};
+		heap.clear = () => {
+			count = 0;
+			items.length = 0;
+			priorities.length = 0;
+		};
+		heap.count = () => count;
+
+		return heap;
+	};
+
+	return exports;
+})();
 
 let ParticleSystem = (function(){
 	/*
@@ -151,23 +263,19 @@ let ParticleSystem = (function(){
 
 		let particles = [];
 		let inactiveParticles = [];
+		let particleHeap = Heap.create();
 
 		let determineParticleToEmit = () => {
 			if (inactiveParticles.length) {
 				return inactiveParticles.pop();
 			} else {
-				// TODO: If list of inactive particles is zero build a heap, once per frame, then use that.
-				let minDelta = Number.MAX_VALUE;
-				let particle = null;
-				for (let i = 0, l = particles.length; i < l; i++) {
-					let particle = particles[i];
-					let delta = particle.lifetime - particle.elapsed;
-					if (minDelta > delta) {
-						minDelta = delta;
-						particle = particle;
+				if (particleHeap.count() == 0) {
+					for (let i = 0, l = particles.length; i < l; i++) {
+						let particle = particles[i]
+						particleHeap.insert(particle, particle.lifetime - particle.elapsed);
 					}
 				}
-				return particle;
+				return particleHeap.extractMin();
 			}
 		};
 
@@ -240,6 +348,14 @@ let ParticleSystem = (function(){
 					}
 				}
 			}
+
+			particleHeap.clear(); 
+			// Could arguably maintain this when emitting and deactivating
+			// rather than clearing and rebuilding when needed
+			// would need to update the priorities each frame also
+			// probably would want to switch to this behaviour only once
+			// it's proven required as it will have a greater overhead
+			// that is unncessary if there are sufficient particles in the pool
 
 			// Emission
 			if (emission > 0) {
