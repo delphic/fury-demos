@@ -32,7 +32,7 @@ window.onload = (event) => {
 				texture: texture,
 				properties: { color: color }
 			},
-			onCreateParticle: (particle) => {
+			setupParticle: (particle) => {
 				particle.color = vec3.clone(color);
 			},
 			initParticle: (particle) => {
@@ -59,7 +59,7 @@ window.onload = (event) => {
 				texture: texture,
 				properties: { color: burstColor }
 			},
-			onCreateParticle: (particle) => {
+			setupParticle: (particle) => {
 				particle.color = vec3.clone(burstColor);
 				particle.initialVelocity = vec3.create();
 			},
@@ -100,28 +100,19 @@ let loadAssets = (callback) => {
 
 let ParticleSystem = (function(){
 	/*
-	Will start with a naive approach of just instantiating lots of prefabs
+	CPU Particles
+
+	Will start with a naive approach of just instantiating lots of instances of a prefab
 	We'll get improvements on the material bindings from them being prefabs
 	but we may want to investigate ways of further minimising overhead
+	e.g. would be nice to be able to skip thinking about the render objects at all if the particle system were inactive
+	without having to actually remove the particles from the scene.
 
-	Would be nice to be able to skip thinking about the render objects at all if the particle system were inactive
+	TODO: Test cutout, and alpha blended particles
 
-	Start by using Unlit Color shader - may need custom shdaer if we want to support colour over lifetime
-		Start no-alpha, try cutout and then alpha blended
+	TODO: consider adding transform concept to particle system, to use as a parent for the particles
 
-	Particle System concepts:
-	position
-	rotation
-	sprite
-	shape (point / sphere / cone)
-	emission rate
-	max particles
-	bursts []
-
-	particle:
-	scale 
-	speed (value or range)
-	lifetime (value or range)
+	TODO: create methods for some sensible default delegates - configurable with method parameters
 	*/
 
 	let exports = {};
@@ -147,7 +138,7 @@ let ParticleSystem = (function(){
 		lifetime = 0.0,
 		repeat = false,
 		materialConfig,
-		onCreateParticle,
+		setupParticle,
 		initParticle,
 		updateParticle,
 	}) => {
@@ -207,8 +198,8 @@ let ParticleSystem = (function(){
 			let particle = scene.instantiate({ name: prefabName, position: vec3.clone(position), scale: vec3.clone(scale) });
 			particle.active = false;
 			particle.velocity = [ 0, 0, 0 ];
-			if (onCreateParticle) {
-				onCreateParticle(particle);
+			if (setupParticle) {
+				setupParticle(particle);
 			}
 			particles.push(particle);
 
