@@ -1,8 +1,12 @@
 let camera, scene;
 let texture;
 let particleSystem, burstSystem;
+let gif;
+let furyCanvas;
+let encodeGif = false;
 
 window.onload = (event) => {
+	furyCanvas = document.getElementById("fury");
 	Fury.Maths.globalize();
 	Fury.init({ canvasId: "fury" });
 
@@ -74,6 +78,13 @@ window.onload = (event) => {
 				vec3.lerp(particle.color, particle.material.color, targetColor, particle.elapsed / particle.lifetime);
 			}
 		});
+
+		if (encodeGif) {
+			gif = new GIF({workers: 2, quality: 5 });
+			gif.on('finished', function(blob) {
+				window.open(URL.createObjectURL(blob));
+			});
+		}
 		
 		Fury.GameLoop.init({ loop: loop });
 		Fury.GameLoop.start();
@@ -402,8 +413,18 @@ let ParticleSystem = (function(){
 	return exports;
 })();
 
+let gifLengthRemaining = 3.0;
 let loop = (elapsed) => {
 	particleSystem.simulate(elapsed);
 	burstSystem.simulate(elapsed);
-	scene.render();  
+	scene.render();
+
+	if (encodeGif && gifLengthRemaining > 0.0) {
+		gif.addFrame(furyCanvas, { copy: true, delay: elapsed * 1000 })
+		gifLengthRemaining -= elapsed;
+
+		if (gifLengthRemaining <= 0.0) {
+			gif.render();
+		}
+	}
 };
