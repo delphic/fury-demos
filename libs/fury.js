@@ -7878,7 +7878,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{"./maths":12,"./prefab":16,"./primitives":17,"./renderer":19,"./shaders":22}],3:[function(require,module,exports){
+},{"./maths":13,"./prefab":17,"./primitives":18,"./renderer":20,"./shaders":23}],3:[function(require,module,exports){
 const vec3 = require('./maths').vec3;
 
 module.exports = (function() {
@@ -8026,7 +8026,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./maths":12}],4:[function(require,module,exports){
+},{"./maths":13}],4:[function(require,module,exports){
 const Maths = require('./maths');
 const vec3 = Maths.vec3, vec4 = Maths.vec4, mat4 = Maths.mat4, quat = Maths.quat;
 
@@ -8227,7 +8227,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./maths":12}],5:[function(require,module,exports){
+},{"./maths":13}],5:[function(require,module,exports){
 // Client.js - for using Fury old school style as a JS file which adds a
 // global which you can use. 
 
@@ -8386,7 +8386,7 @@ module.exports = (function() {
 	return Fury;
 })();
 
-},{"./atlas":2,"./bounds":3,"./camera":4,"./gameLoop":8,"./input":10,"./material":11,"./maths":12,"./mesh":13,"./model":14,"./physics":15,"./prefab":16,"./primitives":17,"./random":18,"./renderer":19,"./scene":20,"./shader":21,"./shaders":22,"./textmesh":23,"./texture":24,"./tilemap":25,"./transform":26,"./utils":27,"./workerPool":28}],8:[function(require,module,exports){
+},{"./atlas":2,"./bounds":3,"./camera":4,"./gameLoop":8,"./input":11,"./material":12,"./maths":13,"./mesh":14,"./model":15,"./physics":16,"./prefab":17,"./primitives":18,"./random":19,"./renderer":20,"./scene":21,"./shader":22,"./shaders":23,"./textmesh":24,"./texture":25,"./tilemap":26,"./transform":27,"./utils":28,"./workerPool":29}],8:[function(require,module,exports){
 const Input = require('./input');
 
 module.exports = (function() {
@@ -8502,7 +8502,117 @@ module.exports = (function() {
 
 	return exports;
 })();
-},{"./input":10}],9:[function(require,module,exports){
+},{"./input":11}],9:[function(require,module,exports){
+module.exports = (function(){
+	let exports = {};
+
+	let parentIndex = i =>  Math.floor(i / 2);
+	let leftChildIndex = i => 2 * i;
+	let rightChildIndex = i => 2 * i + 1;
+
+	exports.create = () => {
+		let heap = {};
+
+		let items = [];
+		let priorities = [];
+		let count = 0;
+
+		let swap = (i, j) => {
+			let item = items[i];
+			items[i] = items[j];
+			items[j] = item;
+			let priority = priorities[i];
+			priorities[i] = priorities[j];
+			priorities[j] = priority;
+		};
+
+		let minChildIndex = (i) => {
+			let result = 0;
+			if (rightChildIndex(i) >= count) {
+				result = leftChildIndex(i);
+			} else {
+				if (priorities[leftChildIndex(i)] < priorities[rightChildIndex(i)]) {
+					result = leftChildIndex(i);
+				} else {
+					result = rightChildIndex(i);
+				}
+			}
+			return result;
+		};
+
+		let selectIndex = (item, priority) => {
+			for (let i = 0; i < count; i++) {
+				if (items[i] == item && priorities[i] == priority) {
+					return i;
+				}
+			}
+			console.error("Unable to find node with priority " + priority + " and item " + item);
+			return -1;
+		};
+
+		let deleteAtIndex = (index) => {
+			if (index < 0 && index >= count) {
+				console.error("Can not delete index " + index + " for heap count " + count);
+				return;
+			}
+
+			if (count == 1) {
+				count--;
+				return;
+			}
+
+			count--;
+			let i = index;
+			items[index] = items[count];
+			priorities[index] = priorities[count];
+			let priority = priorities[index];
+			while (leftChildIndex(i) < count || rightChildIndex(i) < count) {
+				let minChildIdx = minChildIndex(i);
+				if (priority <= priorities[minChildIdx]) {
+					break;
+				}
+				swap(i, minChildIdx);
+				i = minChildIdx;
+			}
+		};
+
+		heap.insert = (item, priority) => {
+			let i = count;
+			items[i] = item;
+			priorities[i] = priority;
+			count++;
+			while (i > 0 && priorities[parentIndex(i)] > priorities[i]) {
+				swap(i, parentIndex(i));
+				i = parentIndex(i);
+			}
+		};
+		heap.extractMin = () => {
+			let min = null;
+			if (count > 0) {
+				min = items[0];
+				deleteAtIndex(0);
+			}
+			return min;
+		};
+		heap.delete = (item, priority) => {
+			let idx = selectIndex(item, priority);
+			if (idx >= 0) {
+				deleteAtIndex(idx);
+			}
+		};
+		heap.clear = () => {
+			count = 0;
+			items.length = 0;
+			priorities.length = 0;
+		};
+		heap.count = () => count;
+
+		return heap;
+	};
+
+	return exports;
+})();
+},{}],10:[function(require,module,exports){
 module.exports = (function(){
 	// This creates a dictionary that provides its own keys
 	// It also contains an array of keys for quick enumeration
@@ -8571,7 +8681,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{}],10:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 const Maths = require('./maths');
 
 module.exports = (function() {
@@ -8962,7 +9072,7 @@ module.exports = (function() {
 
 	return exports;
 })();
-},{"./maths":12}],11:[function(require,module,exports){
+},{"./maths":13}],12:[function(require,module,exports){
 module.exports = (function(){
 	let exports = {};
 	
@@ -9040,7 +9150,7 @@ module.exports = (function(){
 	
 	return exports;
 })();
-},{}],12:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 // This is a centralised point for importing glMatrix
 // Also provides a helper for globalizing for ease of use
 let { glMatrix, mat2, mat3, mat4, quat, quat2, vec2, vec3, vec4  } = require('../libs/gl-matrix');
@@ -9368,7 +9478,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"../libs/gl-matrix":1,"./ease":6}],13:[function(require,module,exports){
+},{"../libs/gl-matrix":1,"./ease":6}],14:[function(require,module,exports){
 const r = require('./renderer');
 const Bounds = require('./bounds');
 const vec3 = require('./maths').vec3;
@@ -9498,7 +9608,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{"./bounds":3,"./maths":12,"./renderer":19,"./utils":27}],14:[function(require,module,exports){
+},{"./bounds":3,"./maths":13,"./renderer":20,"./utils":28}],15:[function(require,module,exports){
 const { vec3, quat } = require('./maths');
 const Transform = require('./transform');
 const Mesh = require('./mesh');
@@ -9886,7 +9996,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./material":11,"./maths":12,"./mesh":13,"./texture":24,"./transform":26}],15:[function(require,module,exports){
+},{"./material":12,"./maths":13,"./mesh":14,"./texture":25,"./transform":27}],16:[function(require,module,exports){
 const vec3 = require('./maths').vec3;
 
 module.exports = (function(){
@@ -9930,7 +10040,7 @@ module.exports = (function(){
 	return exports;
 })();
 
-},{"./bounds":3,"./maths":12}],16:[function(require,module,exports){
+},{"./bounds":3,"./maths":13}],17:[function(require,module,exports){
 module.exports = (function(){
 	let exports = {};
 
@@ -9946,7 +10056,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{}],17:[function(require,module,exports){
+},{}],18:[function(require,module,exports){
 const { RenderMode } = require('./renderer');
 
 module.exports = (function(){
@@ -9997,7 +10107,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{"./renderer":19}],18:[function(require,module,exports){
+},{"./renderer":20}],19:[function(require,module,exports){
 module.exports = (function(){
 	// Seedable Random
 
@@ -10089,7 +10199,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{}],19:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 // This module is essentially a GL Context Facade
 // There are - of necessity - a few hidden logical dependencies in this class
 // mostly with the render functions, binding buffers before calling a function draw
@@ -10493,7 +10603,7 @@ exports.draw = function(renderMode, count, indexed, offset) {
 	}
 };
 
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 const r = require('./renderer');
 const IndexedMap = require('./indexedMap');
 const Material = require('./material');
@@ -10987,7 +11097,7 @@ module.exports = (function() {
 
 	return exports;
 })();
-},{"./bounds":3,"./indexedMap":9,"./material":11,"./maths":12,"./mesh":13,"./prefab":16,"./renderer":19,"./transform":26}],21:[function(require,module,exports){
+},{"./bounds":3,"./indexedMap":10,"./material":12,"./maths":13,"./mesh":14,"./prefab":17,"./renderer":20,"./transform":27}],22:[function(require,module,exports){
 // Shader Class for use with Fury Scene
 const r = require('./renderer');
 
@@ -11065,7 +11175,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./renderer":19}],22:[function(require,module,exports){
+},{"./renderer":20}],23:[function(require,module,exports){
 const Shader = require('./shader');
 
 module.exports = (function() {
@@ -11233,7 +11343,7 @@ module.exports = (function() {
 
 	return exports;
 })();
-},{"./shader":21}],23:[function(require,module,exports){
+},{"./shader":22}],24:[function(require,module,exports){
 // Simple single line text mesh using Atlas
 // Broadly similar to tilemap, however supports varying position based on custom tile widths
 // Prefabs generated by Atlas do not adjust for variable width so there is unnecessary blending / overdraw
@@ -11364,7 +11474,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{"./atlas":2,"./maths":12}],24:[function(require,module,exports){
+},{"./atlas":2,"./maths":13}],25:[function(require,module,exports){
 const Renderer = require('./renderer');
 
 module.exports = (function(){
@@ -11478,7 +11588,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{"./renderer":19}],25:[function(require,module,exports){
+},{"./renderer":20}],26:[function(require,module,exports){
 // Really basic tilemap using prefabs per tile
 
 // Could probably be vastly improved by using a custom shader
@@ -11555,7 +11665,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{"./atlas":2,"./maths":12}],26:[function(require,module,exports){
+},{"./atlas":2,"./maths":13}],27:[function(require,module,exports){
 const { quat, vec3, mat4 } = require('./maths');
 
 module.exports = (function() {
@@ -11584,10 +11694,12 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./maths":12}],27:[function(require,module,exports){
+},{"./maths":13}],28:[function(require,module,exports){
 // Utils
 module.exports = (function(){
 	let exports = {};
+
+	exports.Heap = require('./heap');
 
 	exports.arrayCombine = (out, array) => {
 		for (let i = 0, l = array.length; i < l; i++) {
@@ -11610,7 +11722,7 @@ module.exports = (function(){
 
 	return exports
 })();
-},{}],28:[function(require,module,exports){
+},{"./heap":9}],29:[function(require,module,exports){
 module.exports = (function() {
 	let exports = {};
 
