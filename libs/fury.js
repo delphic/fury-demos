@@ -10714,6 +10714,7 @@ module.exports = (function() {
 					throw new Error("Requested prefab must have a material and a mesh config present");
 				}
 				prefab = {
+					active: true,
 					name: name,
 					instances: IndexedMap.create(),
 					mesh: Mesh.create(defn.meshConfig),
@@ -10740,6 +10741,14 @@ module.exports = (function() {
 			createObjectBounds(instance, prefab.mesh, instance.transform.rotation);
 
 			return instance;
+		};
+
+		scene.setPrefabActive = function(name, active) {
+			if (prefabs[name]) {
+				prefabs[name].active = active;
+			} else {
+				console.warn("Unable to find prefab '" + name + "' to set active " + active);
+			}
 		};
 
 		// Add Camera
@@ -10806,21 +10815,24 @@ module.exports = (function() {
 				}
 			}
 			for (let i = 0, l = prefabs.keys.length; i < l; i++) {
-				let instances = prefabs[prefabs.keys[i]].instances;
-				for (let j = 0, n = instances.keys.length; j < n; j++) {
-					let instance = instances[instances.keys[j]];
-					if (scene.enableFrustumCulling) {
-						culled = isCulledByFrustrum(camera, instance);
-					}
-					if (!culled && instance.active) {
-						if (instance.material.alpha) {
-							let sortPosition = instance.transform.position;
-							if (instance.bounds) {
-								sortPosition = instance.bounds.center;
+				let prefab = prefabs[prefabs.keys[i]];
+				if (prefab.active) {
+					let instances = prefab.instances;
+					for (let j = 0, n = instances.keys.length; j < n; j++) {
+						let instance = instances[instances.keys[j]];
+						if (scene.enableFrustumCulling) {
+							culled = isCulledByFrustrum(camera, instance);
+						}
+						if (!culled && instance.active) {
+							if (instance.material.alpha) {
+								let sortPosition = instance.transform.position;
+								if (instance.bounds) {
+									sortPosition = instance.bounds.center;
+								}
+								addToAlphaList(instance, camera.getDepth(sortPosition));
+							} else {
+								bindAndDraw(instance);
 							}
-							addToAlphaList(instance, camera.getDepth(sortPosition));
-						} else {
-							bindAndDraw(instance);
 						}
 					}
 				}

@@ -53,7 +53,7 @@ window.onload = (event) => {
 		burstSystem = ParticleSystem.create({
 			bursts: [ { time: 0, count: 50 }, { time: 0.5, count: 50 }, { time: 1.0, count: 50 }, { time: 1.5, count: 50 } ],
 			lifetime: 2.0,
-			repeat: true,
+			repeat: false,
 			maxCount: 200,
 			scene: scene,
 			position: [ 2.0, 0.0, 0.0 ],
@@ -80,8 +80,11 @@ window.onload = (event) => {
 		});
 
 		if (encodeGif) {
+			// TODO: Make recording the gif be based on inputs
 			gif = new GIF({workers: 2, quality: 5 });
 			gif.on('finished', function(blob) {
+				// TODO: Try store created blob/ObjectURL and provided button to download instead
+				// https://blog.logrocket.com/programmatic-file-downloads-in-the-browser-9a5186298d5c/
 				window.open(URL.createObjectURL(blob));
 			});
 		}
@@ -395,11 +398,17 @@ let ParticleSystem = (function(){
 			}
 			// TODO: Test auto deactivate
 			if (lifetime && !repeat && inactiveParticles.length == particles.length) {
-				particleSystem.active = false;
+				particleSystem.stop();
 			}
 		};
 
+		particleSystem.stop = () => {
+			particleSystem.active = false;
+			scene.setPrefabActive(prefabName, false);
+		};
+
 		particleSystem.restart = () => {
+			scene.setPrefabActive(prefabName, true);
 			particleSystem.active = true;
 			systemElapsed = 0.0;
 			if (burst) {
