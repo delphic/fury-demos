@@ -88,7 +88,7 @@ window.onload = (event) => {
 				window.open(URL.createObjectURL(blob));
 			});
 		}
-		
+
 		Fury.GameLoop.init({ loop: loop });
 		Fury.GameLoop.start();
 	});
@@ -112,7 +112,7 @@ let loadAssets = (callback) => {
 	image.src = "square-particle.png";
 };
 
-// TODO: Extract to Fury Utils and unit test
+// TODO: Extract to Fury Utils
 let Heap = (function(){
 	let exports = {};
 
@@ -144,7 +144,7 @@ let Heap = (function(){
 				if (priorities[leftChildIndex(i)] < priorities[rightChildIndex(i)]) {
 					result = leftChildIndex(i);
 				} else {
-					resut = rightChildIndex(i);
+					result = rightChildIndex(i);
 				}
 			}
 			return result;
@@ -152,7 +152,7 @@ let Heap = (function(){
 
 		let selectIndex = (item, priority) => {
 			for (let i = 0; i < count; i++) {
-				if (items[i] == item && priority[i] == priority) {
+				if (items[i] == item && priorities[i] == priority) {
 					return i;
 				}
 			}
@@ -168,7 +168,6 @@ let Heap = (function(){
 
 			if (count == 1) {
 				count--;
-				items[index] = null;
 				return;
 			}
 
@@ -231,14 +230,14 @@ let ParticleSystem = (function(){
 	Will start with a naive approach of just instantiating lots of instances of a prefab
 	We'll get improvements on the material bindings from them being prefabs
 	but we may want to investigate ways of further minimising overhead
-	e.g. would be nice to be able to skip thinking about the render objects at all if the particle system were inactive
-	without having to actually remove the particles from the scene.
 
-	TODO: Test cutout, and alpha blended particles
+	TODO: test cutout, and alpha blended particles
 
 	TODO: consider adding transform concept to particle system, to use as a parent for the particles
 
 	TODO: create methods for some sensible default delegates - configurable with method parameters
+
+	TODO: Shasder for Billboard rendering - http://www.opengl-tutorial.org/intermediate-tutorials/billboards-particles/billboards/ 
 	*/
 
 	let exports = {};
