@@ -210,20 +210,17 @@ let selectConfig = (value) => {
 	vec3.transformQuat(cameraPosition, cameraPosition, cameraRotation);
 	if (!currentConfig.sceneObjects) {
 		// This is what we're here to test!
+		let modelResourceProperties = {
+			shader: textureShader,
+			texturelessShader: colorShader,
+			quality: "low"
+		};
 		Fury.Model.load(currentConfig.uri, (model) => {
-			model.resources = {};
-			Fury.Model.createResources(model.resources, model, {
-				shader: textureShader,
-				texturelessShader: colorShader,
-				quality: "low"
-			});
 			currentConfig.model = model;
-
 			let instance = Fury.Model.instantiate(model, scene);
 			currentConfig.instance = instance;
 			currentConfig.sceneObjects = instance.sceneObjects;
-
-		});
+		}, modelResourceProperties);
 	} else {
 		for (let i = 0, l = currentConfig.sceneObjects.length; i < l; i++) {
 			currentConfig.sceneObjects[i].active = true;
