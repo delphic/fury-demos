@@ -311,10 +311,17 @@ let ParticleSystem = (function(){
 })();
 
 let gifLengthRemaining = 3.0;
+let restartTimer = 4.0;
 let loop = (elapsed) => {
 	particleSystem.simulate(elapsed);
 	burstSystem.simulate(elapsed);
 	scene.render();
+
+	restartTimer -= elapsed;
+	if (restartTimer < 0.0) {
+		restartTimer += 4.0;
+		burstSystem.restart();
+	}
 
 	if (encodeGif && gifLengthRemaining > 0.0) {
 		gif.addFrame(furyCanvas, { copy: true, delay: elapsed * 1000 })
