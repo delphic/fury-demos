@@ -332,7 +332,6 @@ let MapLoader = (function(){
 				} else {
 					mat4.lookAt(rotation, Maths.vec3Zero, a, Maths.vec3Y);
 				}
-				// ^^ may need to invert direction of a
 		
 				let temp = vec3Pool.request();
 				for (let i = 0; i < l; i++) {
@@ -343,6 +342,7 @@ let MapLoader = (function(){
 					// approximately equal but it can be offset, should double check this
 					vec3.transformMat4(temp, temp, rotation);
 					// calculate uv from position on plane
+					// todo: take account of texture offset, angle and scale values
 					vec2.copy(vertices[i].uv, temp); 
 					// calculate winding angle using atan2
 					vertices[i].angle = Math.atan2(temp[1], temp[0]) + Math.PI;
@@ -361,17 +361,17 @@ let MapLoader = (function(){
 		
 				// walk sorted vertices to generate indices for poly
 				let data = {
-					positions: [],
+					vertices: [],
 					textureCoordinates: [],
 					normals: [],
 					indices: [],
 					texture: texture
 				};
 				let reverse = false;
-				let offset = data.positions.length;
+				let offset = data.vertices.length;
 				let c = 0, cw = 1, ccw = l -1;
 				while (ccw != cw) {
-					data.indices.push(offset + c, offset + cw, offset + ccw);
+					data.indices.push(offset + c, offset + ccw, offset + cw);
 					if (!reverse) {
 						c = cw;
 						cw += 1;
@@ -383,7 +383,8 @@ let MapLoader = (function(){
 				}
 				for (let i = 0; i < l; i++) {
 					let { position, uv, normal } = vertices[i];
-					data.positions.push(position[0], position[1], position[2]);
+					data.vertices.push(position[0], position[1], position[2]);
+					// ^^ vertices should really be called positions
 					data.textureCoordinates.push(uv[0], uv[1]);
 					data.normals.push(normal[0], normal[1], normal[2]);
 				}
@@ -403,7 +404,6 @@ let MapLoader = (function(){
 			// parseAABBFromBrush(aabb, brushes[i], scaleFactor);
 			let polys = parsePolysFromBrush(brushes[i], scaleFactor);
 			instantiationDelegate(polys);
-			
 		}
 	};
 
