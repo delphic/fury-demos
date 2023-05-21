@@ -327,7 +327,7 @@ let MapLoader = (function(){
 				vec3.scale(center, center, 1 / l);
 	
 				let rotation = mat4.create();
-				if (Maths.approximately(a[1], 1.0, 0.001)) {
+				if (Maths.approximately(Math.abs(a[1]), 1.0, 0.001)) {
 					mat4.lookAt(rotation, Maths.vec3Zero, a, Maths.vec3X);
 				} else {
 					mat4.lookAt(rotation, Maths.vec3Zero, a, Maths.vec3Y);
