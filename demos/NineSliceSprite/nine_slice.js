@@ -31,32 +31,32 @@ window.onload = (event) => {
 		let borderConfig = { width: 4, height: 4, top: 1, right: 1, bottom: 1, left: 1 };
 
 		// let mesh = Fury.Mesh.create(createIndexedQuadMeshConfig(64, 32));
-		let mesh = buildSliceMesh(48, 18, sliceConfig, SpriteAnchor.topCenter);
+		let mesh = buildSliceMeshConfig(48, 18, sliceConfig, Anchor.topCenter);
 		scene.add({ mesh: mesh, material: materials["slice_test.png"], position: [0, -16, 0], scale: [2.0, 2.0, 1.0] });
 
 		let rinkMaterial = Fury.Material.clone(materials["border.png"]);
 		rinkMaterial.color = [ 1.0, 0.0, 0.4, 1.0 ];
-		let borderMesh = buildSliceMesh(48,48, borderConfig, SpriteAnchor.middleCenter);
+		let borderMesh = Fury.Mesh.create(buildSliceMeshConfig(48,48, borderConfig, Anchor.middleCenter));
 		scene.add({ mesh: borderMesh, material: rinkMaterial, position: [0, 32, 0] });
 
 		let topLeftMaterial = Fury.Material.clone(materials["border.png"]);
 		topLeftMaterial.color = [ 0.0, 1.0, 0.4, 1.0 ];
-		let topLeftMesh = buildSliceMesh(32,32, borderConfig, SpriteAnchor.topLeft);
+		let topLeftMesh = Fury.Mesh.create(buildSliceMeshConfig(32,32, borderConfig, Anchor.topLeft));
 		scene.add({ mesh: topLeftMesh, material: topLeftMaterial, position: [0, 32, 0] });
 
 		let topRightMaterial = Fury.Material.clone(materials["border.png"]);
 		topRightMaterial.color = [ 1.0, 0.4, 0.0, 1.0 ];
-		let topRightMesh = buildSliceMesh(16, 16, borderConfig, SpriteAnchor.topRight);
+		let topRightMesh = Fury.Mesh.create(buildSliceMeshConfig(16, 16, borderConfig, Anchor.topRight));
 		scene.add({ mesh: topRightMesh, material: topRightMaterial, position: [0, 32, 0]});
 
 		let bottomLeftMaterial = Fury.Material.clone(materials["border.png"]);
 		bottomLeftMaterial.color = [ 0.4, 0.0, 1.0, 1.0 ];
-		let bottomLeftMesh = buildSliceMesh(16, 16, borderConfig, SpriteAnchor.bottomLeft);
+		let bottomLeftMesh = Fury.Mesh.create(buildSliceMeshConfig(16, 16, borderConfig, Anchor.bottomLeft));
 		scene.add({ mesh: bottomLeftMesh, material: bottomLeftMaterial, position: [0,32,0]});
 
 		let bottomRightMaterial = Fury.Material.clone(materials["border.png"]);
 		bottomRightMaterial.color = [0.4, 1.0, 0.0, 1.0 ];
-		let bottomRightMesh = buildSliceMesh(32, 32, borderConfig, SpriteAnchor.bottomRight);
+		let bottomRightMesh = Fury.Mesh.create(buildSliceMeshConfig(32, 32, borderConfig, Anchor.bottomRight));
 		scene.add({ mesh: bottomRightMesh, material: bottomRightMaterial, position: [0,32,0]});
 
 		Fury.GameLoop.init({ loop: loop });
@@ -66,18 +66,13 @@ window.onload = (event) => {
 
 const { RenderMode } = Fury.Renderer; 
 
-let createIndexedQuadMeshConfig = function(w, h) {
+let createUIQuadMeshConfig = function(w, h) {
 	return {
 		vertices: [ 
 			w, h, 0.0,
 			0, h, 0.0, 
 			w, 0, 0.0,
 			0, 0, 0.0 ],
-		normals: [
-			0.0, 0.0, 1.0,
-			0.0, 0.0, 1.0,
-			0.0, 0.0, 1.0,
-			0.0, 0.0, 1.0 ],
 		textureCoordinates: [
 			1.0, 1.0,
 			0.0, 1.0,
@@ -90,7 +85,7 @@ let createIndexedQuadMeshConfig = function(w, h) {
 	};
 };
 
-let SpriteAnchor = {
+let Anchor = {
 	"topLeft": 0,
 	"topCenter": 1,
 	"topRight": 2,
@@ -102,56 +97,58 @@ let SpriteAnchor = {
 	"bottomRight": 9 
 };
 
-let AnchorRounding = {
+let PositionRounding = {
 	"none": 0,
 	"integer": 1,
 };
 
-let buildSliceMesh = (
+let calculateAnchorOffsetX = function(anchor, targetWidth) {
+	switch (anchor || 0) {
+		case Anchor.topRight:
+		case Anchor.middleRight:
+		case Anchor.bottomRight:
+			return anchorOffsetX = -targetWidth;
+		case Anchor.topCenter:
+		case Anchor.middleCenter:
+		case Anchor.bottomCenter:
+			return anchorOffsetX = -targetWidth / 2;
+		case Anchor.topLeft:
+		case Anchor.middleLeft:
+		case Anchor.bottomLeft:
+		default:
+			return anchorOffsetX = 0;
+	}
+};
+
+let calculateAnchorOffsetY = function(anchor, targetHeight) {
+	switch (anchor || 0) {
+		case Anchor.topLeft:
+		case Anchor.topCenter:
+		case Anchor.topRight:
+			return -targetHeight;
+		case Anchor.middleLeft:
+		case Anchor.middleCenter:
+		case Anchor.middleRight:
+			return  -targetHeight / 2;
+		case Anchor.bottomLeft:
+		case Anchor.bottomCenter:
+		case Anchor.bottomRight:
+		default:
+			return 0;
+	}
+};
+
+let buildSliceMeshConfig = (
 	targetWidth,
 	targetHeight,
 	{ width, height, top, right, bottom, left },
 	anchor,
-	anchorRounding
+	positionRounding
 	) => {
-	let anchorOffsetX, anchorOffsetY;
-	switch (anchor || 0) {
-		case SpriteAnchor.topLeft:
-		case SpriteAnchor.middleLeft:
-		case SpriteAnchor.bottomLeft:
-			anchorOffsetX = 0;
-			break;
-		case SpriteAnchor.topCenter:
-		case SpriteAnchor.middleCenter:
-		case SpriteAnchor.bottomCenter:
-			anchorOffsetX = -targetWidth / 2;
-			break;
-		case SpriteAnchor.topRight:
-		case SpriteAnchor.middleRight:
-		case SpriteAnchor.bottomRight:
-			anchorOffsetX = -targetWidth;
-			break;
-	}
+	let anchorOffsetX = calculateAnchorOffsetX(anchor, targetWidth);
+	let anchorOffsetY = calculateAnchorOffsetY(anchor, targetHeight);
 
-	switch (anchor || 0) {
-		case SpriteAnchor.topLeft:
-		case SpriteAnchor.topCenter:
-		case SpriteAnchor.topRight:
-			anchorOffsetY = -targetHeight;
-			break;
-		case SpriteAnchor.middleLeft:
-		case SpriteAnchor.middleCenter:
-		case SpriteAnchor.middleRight:
-			anchorOffsetY = -targetWidth / 2;
-			break;
-		case SpriteAnchor.bottomLeft:
-		case SpriteAnchor.bottomCenter:
-		case SpriteAnchor.bottomRight:
-			anchorOffsetY = 0;
-			break;
-	}
-
-	if (anchorRounding) {
+	if (positionRounding) {
 		anchorOffsetX = Math.floor(anchorOffsetX);
 		anchorOffsetY = Math.floor(anchorOffsetY);
 	}
@@ -160,7 +157,7 @@ let buildSliceMesh = (
 	let uvs = [];
 	let indices = [];
 
-	let reference = createIndexedQuadMeshConfig(1,1);
+	let reference = createUIQuadMeshConfig(1,1);
 	let extendPositions = (offsetX, offsetY, scaleX, scaleY) => {
 		for (let i = 0, l = reference.vertices.length; i < l; i += 3) {
 			positions.push(scaleX * reference.vertices[i] + offsetX + anchorOffsetX);
@@ -227,12 +224,12 @@ let buildSliceMesh = (
 	extendIndices(positionCount);
 	positionCount += 4;
 
-	return Fury.Mesh.create({
+	return {
 		vertices: positions,
 		textureCoordinates: uvs,
 		indices: indices,
 		renderMode: RenderMode.Triangles
-	});
+	};
 };
 
 let loadAssets = (callback) => {
@@ -268,6 +265,5 @@ let loadAssets = (callback) => {
 };
 
 let loop = function(elapsed) {
-	// TODO: maybe some animation effects / color lerps?
 	scene.render();
 };
