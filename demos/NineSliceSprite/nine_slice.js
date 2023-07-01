@@ -31,7 +31,7 @@ window.onload = (event) => {
 		let borderConfig = { width: 4, height: 4, top: 1, right: 1, bottom: 1, left: 1 };
 
 		// let mesh = Fury.Mesh.create(createIndexedQuadMeshConfig(64, 32));
-		let mesh = buildSliceMeshConfig(48, 18, sliceConfig, Anchor.topCenter);
+		let mesh = Fury.Mesh.create(buildSliceMeshConfig(48, 18, sliceConfig, Anchor.topCenter));
 		scene.add({ mesh: mesh, material: materials["slice_test.png"], position: [0, -16, 0], scale: [2.0, 2.0, 1.0] });
 
 		let rinkMaterial = Fury.Material.clone(materials["border.png"]);
