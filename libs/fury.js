@@ -7878,7 +7878,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{"./maths":13,"./prefab":17,"./primitives":18,"./renderer":20,"./shaders":23}],3:[function(require,module,exports){
+},{"./maths":13,"./prefab":18,"./primitives":19,"./renderer":21,"./shaders":24}],3:[function(require,module,exports){
 const vec3 = require('./maths').vec3;
 
 module.exports = (function() {
@@ -8334,6 +8334,7 @@ module.exports = (function() {
 	Fury.Maths = require('./maths');
 	Fury.Mesh = require('./mesh');
 	Fury.Model = require('./model');
+	Fury.NineSlice = require('./nineSlice');
 	Fury.Physics = require('./physics');
 	Fury.Prefab = require('./prefab');
 	Fury.Primitives = require('./primitives');
@@ -8386,7 +8387,7 @@ module.exports = (function() {
 	return Fury;
 })();
 
-},{"./atlas":2,"./bounds":3,"./camera":4,"./gameLoop":8,"./input":11,"./material":12,"./maths":13,"./mesh":14,"./model":15,"./physics":16,"./prefab":17,"./primitives":18,"./random":19,"./renderer":20,"./scene":21,"./shader":22,"./shaders":23,"./textmesh":24,"./texture":25,"./tilemap":26,"./transform":27,"./utils":28,"./workerPool":29}],8:[function(require,module,exports){
+},{"./atlas":2,"./bounds":3,"./camera":4,"./gameLoop":8,"./input":11,"./material":12,"./maths":13,"./mesh":14,"./model":15,"./nineSlice":16,"./physics":17,"./prefab":18,"./primitives":19,"./random":20,"./renderer":21,"./scene":22,"./shader":23,"./shaders":24,"./textmesh":25,"./texture":26,"./tilemap":27,"./transform":28,"./utils":29,"./workerPool":30}],8:[function(require,module,exports){
 const Input = require('./input');
 
 module.exports = (function() {
@@ -9617,7 +9618,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{"./bounds":3,"./maths":13,"./renderer":20,"./utils":28}],15:[function(require,module,exports){
+},{"./bounds":3,"./maths":13,"./renderer":21,"./utils":29}],15:[function(require,module,exports){
 const { vec3, quat } = require('./maths');
 const Transform = require('./transform');
 const Mesh = require('./mesh');
@@ -10032,7 +10033,163 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./material":12,"./maths":13,"./mesh":14,"./texture":25,"./transform":27}],16:[function(require,module,exports){
+},{"./material":12,"./maths":13,"./mesh":14,"./texture":26,"./transform":28}],16:[function(require,module,exports){
+const Primitives = require('./primitives');
+
+module.exports = (function(){
+	let exports = {};
+
+	// todo: move to UI positioniong module once it exists 
+	const Anchor = exports.Anchor = {
+		"topLeft": 0,
+		"topCenter": 1,
+		"topRight": 2,
+		"middleLeft": 3,
+		"middleCenter": 4,
+		"middleRight": 5,
+		"bottomLeft": 6,
+		"bottomCenter": 7,
+		"bottomRight": 9 
+	};
+	
+	exports.PositionRounding = {
+		"none": 0,
+		"integer": 1,
+	};
+
+	let calculateAnchorOffsetX = function(anchor, targetWidth) {
+		switch (anchor || 0) {
+			case Anchor.topRight:
+			case Anchor.middleRight:
+			case Anchor.bottomRight:
+				return anchorOffsetX = -targetWidth;
+			case Anchor.topCenter:
+			case Anchor.middleCenter:
+			case Anchor.bottomCenter:
+				return anchorOffsetX = -targetWidth / 2;
+			case Anchor.topLeft:
+			case Anchor.middleLeft:
+			case Anchor.bottomLeft:
+			default:
+				return anchorOffsetX = 0;
+		}
+	};
+	
+	let calculateAnchorOffsetY = function(anchor, targetHeight) {
+		switch (anchor || 0) {
+			case Anchor.topLeft:
+			case Anchor.topCenter:
+			case Anchor.topRight:
+				return -targetHeight;
+			case Anchor.middleLeft:
+			case Anchor.middleCenter:
+			case Anchor.middleRight:
+				return  -targetHeight / 2;
+			case Anchor.bottomLeft:
+			case Anchor.bottomCenter:
+			case Anchor.bottomRight:
+			default:
+				return 0;
+		}
+	};
+
+	exports.buildMeshConfig = (
+		targetWidth,
+		targetHeight,
+		{ width, height, top, right, bottom, left },
+		anchor,
+		positionRounding
+		) => {
+		let anchorOffsetX = calculateAnchorOffsetX(anchor, targetWidth);
+		let anchorOffsetY = calculateAnchorOffsetY(anchor, targetHeight);
+	
+		if (positionRounding) {
+			anchorOffsetX = Math.floor(anchorOffsetX);
+			anchorOffsetY = Math.floor(anchorOffsetY);
+		}
+	
+		let positions = [];
+		let uvs = [];
+		let indices = [];
+	
+		let reference = Primitives.createUIQuadMeshConfig(1,1);
+		let extendPositions = (offsetX, offsetY, scaleX, scaleY) => {
+			for (let i = 0, l = reference.positions.length; i < l; i += 3) {
+				positions.push(scaleX * reference.positions[i] + offsetX + anchorOffsetX);
+				positions.push(scaleY * reference.positions[i + 1] + offsetY + anchorOffsetY);
+				positions.push(reference.positions[i + 2]);
+			}
+		}
+		let extendUvs = (offsetU, offsetV, scaleU, scaleV) => {
+			for (let i = 0, l = reference.uvs.length; i < l; i += 2) {
+				uvs.push(scaleU * reference.uvs[i] + offsetU);
+				uvs.push(scaleV * reference.uvs[i + 1] + offsetV);
+			}
+		}
+		let extendIndices = (offset) => {
+			for (let i = 0, l = reference.indices.length; i < l; i++) {
+				indices.push(reference.indices[i] + offset);
+			}
+		};
+	
+		// left - bottom
+		let positionCount = 0;
+		extendPositions(0, 0, left, bottom);
+		extendUvs(0, 0, left / width, bottom / height);
+		extendIndices(positionCount);
+		positionCount += 4;
+		// bottom
+		extendPositions(left, 0, targetWidth - left - right, bottom);
+		extendUvs(left / width, 0, (width - left - right) / width, bottom / height);
+		extendIndices(positionCount);
+		positionCount += 4;
+		// right - bottom
+		extendPositions(targetWidth - right, 0, right, bottom);
+		extendUvs((width - right) / width, 0, right / width, bottom / height);
+		extendIndices(positionCount);
+		positionCount += 4;
+		// left
+		extendPositions(0, bottom, left, targetHeight - top - bottom);
+		extendUvs(0, bottom / height, left/width, (height - bottom - top) / height);
+		extendIndices(positionCount);
+		positionCount += 4;
+		// middle
+		extendPositions(left, bottom, targetWidth - left - right, targetHeight - top - bottom);
+		extendUvs(left / width, bottom / height, (width - left - right) / width, (height - bottom - top) / height);
+		extendIndices(positionCount);
+		positionCount += 4;
+		// right
+		extendPositions(targetWidth - right, bottom, right, targetHeight - top - bottom);
+		extendUvs((width - right) / width, bottom / height, right / width, (height - bottom - top) / height);
+		extendIndices(positionCount);
+		positionCount += 4;
+		// left - top
+		extendPositions(0, targetHeight - top, left, top);
+		extendUvs(0, (height - top) / height, left / width, top / height);
+		extendIndices(positionCount);
+		positionCount += 4;
+		// top
+		extendPositions(left, targetHeight - top, targetWidth - left - right, top);
+		extendUvs(left / width, (height - top) / height, (width - left - right) / width, top / height);
+		extendIndices(positionCount);
+		positionCount += 4;
+		// right - top
+		extendPositions(targetWidth - right, targetHeight - top, right, top);
+		extendUvs((width - right) / width, (height - top) / height, right / width, top / height);
+		extendIndices(positionCount);
+		positionCount += 4;
+	
+		return {
+			positions: positions,
+			uvs: uvs,
+			indices: indices,
+			renderMode: reference.renderMode
+		};
+	};
+
+	return exports;
+})();
+},{"./primitives":19}],17:[function(require,module,exports){
 const vec3 = require('./maths').vec3;
 
 module.exports = (function(){
@@ -10076,7 +10233,7 @@ module.exports = (function(){
 	return exports;
 })();
 
-},{"./bounds":3,"./maths":13}],17:[function(require,module,exports){
+},{"./bounds":3,"./maths":13}],18:[function(require,module,exports){
 module.exports = (function(){
 	let exports = {};
 
@@ -10092,7 +10249,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{}],18:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 const { RenderMode } = require('./renderer');
 
 module.exports = (function(){
@@ -10141,9 +10298,28 @@ module.exports = (function(){
 		};
 	};
 
+	exports.createUIQuadMeshConfig = function(w, h) {
+		return {
+			positions: [ 
+				w, h, 0.0,
+				0, h, 0.0, 
+				w, 0, 0.0,
+				0, 0, 0.0 ],
+			uvs: [
+				1.0, 1.0,
+				0.0, 1.0,
+				1.0, 0.0,
+				0.0, 0.0 ],
+			indices: [
+				0, 1, 2, 2, 1, 3
+			],
+			renderMode: RenderMode.Triangles
+		};
+	};
+
 	return exports;
 })();
-},{"./renderer":20}],19:[function(require,module,exports){
+},{"./renderer":21}],20:[function(require,module,exports){
 module.exports = (function(){
 	// Seedable Random
 
@@ -10235,7 +10411,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 // This module is essentially a GL Context Facade
 // There are - of necessity - a few hidden logical dependencies in this class
 // mostly with the render functions, binding buffers before calling a function draw
@@ -10639,7 +10815,7 @@ exports.draw = function(renderMode, count, indexed, offset) {
 	}
 };
 
-},{}],21:[function(require,module,exports){
+},{}],22:[function(require,module,exports){
 const r = require('./renderer');
 const IndexedMap = require('./indexedMap');
 const Material = require('./material');
@@ -11133,7 +11309,7 @@ module.exports = (function() {
 
 	return exports;
 })();
-},{"./bounds":3,"./indexedMap":10,"./material":12,"./maths":13,"./mesh":14,"./prefab":17,"./renderer":20,"./transform":27}],22:[function(require,module,exports){
+},{"./bounds":3,"./indexedMap":10,"./material":12,"./maths":13,"./mesh":14,"./prefab":18,"./renderer":21,"./transform":28}],23:[function(require,module,exports){
 // Shader Class for use with Fury Scene
 const r = require('./renderer');
 
@@ -11211,7 +11387,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./renderer":20}],23:[function(require,module,exports){
+},{"./renderer":21}],24:[function(require,module,exports){
 const Shader = require('./shader');
 
 module.exports = (function() {
@@ -11379,7 +11555,7 @@ module.exports = (function() {
 
 	return exports;
 })();
-},{"./shader":22}],24:[function(require,module,exports){
+},{"./shader":23}],25:[function(require,module,exports){
 // Simple single line text mesh using Atlas
 // Broadly similar to tilemap, however supports varying position based on custom tile widths
 // Prefabs generated by Atlas do not adjust for variable width so there is unnecessary blending / overdraw
@@ -11510,7 +11686,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{"./atlas":2,"./maths":13}],25:[function(require,module,exports){
+},{"./atlas":2,"./maths":13}],26:[function(require,module,exports){
 const Renderer = require('./renderer');
 
 module.exports = (function(){
@@ -11624,7 +11800,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{"./renderer":20}],26:[function(require,module,exports){
+},{"./renderer":21}],27:[function(require,module,exports){
 // Really basic tilemap using prefabs per tile
 
 // Could probably be vastly improved by using a custom shader
@@ -11701,7 +11877,7 @@ module.exports = (function(){
 
 	return exports;
 })();
-},{"./atlas":2,"./maths":13}],27:[function(require,module,exports){
+},{"./atlas":2,"./maths":13}],28:[function(require,module,exports){
 const { quat, vec3, mat4 } = require('./maths');
 
 module.exports = (function() {
@@ -11730,7 +11906,7 @@ module.exports = (function() {
 	return exports;
 })();
 
-},{"./maths":13}],28:[function(require,module,exports){
+},{"./maths":13}],29:[function(require,module,exports){
 // Utils
 module.exports = (function(){
 	let exports = {};
@@ -11758,7 +11934,7 @@ module.exports = (function(){
 
 	return exports
 })();
-},{"./heap":9}],29:[function(require,module,exports){
+},{"./heap":9}],30:[function(require,module,exports){
 module.exports = (function() {
 	let exports = {};
 
