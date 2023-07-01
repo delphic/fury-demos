@@ -68,12 +68,12 @@ const { RenderMode } = Fury.Renderer;
 
 let createUIQuadMeshConfig = function(w, h) {
 	return {
-		vertices: [ 
+		positions: [ 
 			w, h, 0.0,
 			0, h, 0.0, 
 			w, 0, 0.0,
 			0, 0, 0.0 ],
-		textureCoordinates: [
+		uvs: [
 			1.0, 1.0,
 			0.0, 1.0,
 			1.0, 0.0,
@@ -159,16 +159,16 @@ let buildSliceMeshConfig = (
 
 	let reference = createUIQuadMeshConfig(1,1);
 	let extendPositions = (offsetX, offsetY, scaleX, scaleY) => {
-		for (let i = 0, l = reference.vertices.length; i < l; i += 3) {
-			positions.push(scaleX * reference.vertices[i] + offsetX + anchorOffsetX);
-			positions.push(scaleY * reference.vertices[i + 1] + offsetY + anchorOffsetY);
-			positions.push(reference.vertices[i + 2]);
+		for (let i = 0, l = reference.positions.length; i < l; i += 3) {
+			positions.push(scaleX * reference.positions[i] + offsetX + anchorOffsetX);
+			positions.push(scaleY * reference.positions[i + 1] + offsetY + anchorOffsetY);
+			positions.push(reference.positions[i + 2]);
 		}
 	}
 	let extendUvs = (offsetU, offsetV, scaleU, scaleV) => {
-		for (let i = 0, l = reference.textureCoordinates.length; i < l; i += 2) {
-			uvs.push(scaleU * reference.textureCoordinates[i] + offsetU);
-			uvs.push(scaleV * reference.textureCoordinates[i + 1] + offsetV);
+		for (let i = 0, l = reference.uvs.length; i < l; i += 2) {
+			uvs.push(scaleU * reference.uvs[i] + offsetU);
+			uvs.push(scaleV * reference.uvs[i + 1] + offsetV);
 		}
 	}
 	let extendIndices = (offset) => {
@@ -225,8 +225,8 @@ let buildSliceMeshConfig = (
 	positionCount += 4;
 
 	return {
-		vertices: positions,
-		textureCoordinates: uvs,
+		positions: positions,
+		uvs: uvs,
 		indices: indices,
 		renderMode: RenderMode.Triangles
 	};
