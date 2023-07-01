@@ -7,7 +7,7 @@ Fury.init("fury");
 
 // Build Colored Unit Equilateral Triangle Mesh
 let h = Math.sqrt(3) / 2;
-let vertices = [
+let positions = [
 	- h / 2, - h / 3, 0,
 	0, 2 * h / 3, 0,
 	h / 2, - h / 3, 0, 
@@ -20,7 +20,7 @@ let colors = new Uint32Array([
 	255 << 8 | 255 << 24
 ]);
 let meshConfig = {
-	vertices: vertices,
+	positions: positions,
 	indices: indices,
 	colors: colors,
 	customAttributes: [{ name: "colorBuffer", source: "colors", size: 1 }]

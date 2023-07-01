@@ -9487,35 +9487,35 @@ const Utils = require('./utils');
 module.exports = (function(){
 	let exports = {};
 
-	let calculateMinPoint = exports.calculateMinPoint = function(out, vertices) {
+	let calculateMinPoint = exports.calculateMinPoint = function(out, positions) {
 		let i, l, v1 = Number.MAX_VALUE, v2 = Number.MAX_VALUE, v3 = Number.MAX_VALUE;
-		for (i = 0, l = vertices.length; i < l; i += 3) {
-			v1 = Math.min(v1, vertices[i]);
-			v2 = Math.min(v2, vertices[i+1]);
-			v3 = Math.min(v3, vertices[i+2]);
+		for (i = 0, l = positions.length; i < l; i += 3) {
+			v1 = Math.min(v1, positions[i]);
+			v2 = Math.min(v2, positions[i+1]);
+			v3 = Math.min(v3, positions[i+2]);
 		}
 		out[0] = v1, out[1] = v2, out[2] = v3;
 	};
 
-	let calculateMaxPoint = exports.calculateMaxPoint = function(out, vertices) {
+	let calculateMaxPoint = exports.calculateMaxPoint = function(out, positions) {
 		let i, l, v1 = Number.MIN_VALUE, v2 = Number.MIN_VALUE, v3 = Number.MIN_VALUE;
-		for (i = 0, l = vertices.length; i < l; i += 3) {
-			v1 = Math.max(v1, vertices[i]);
-			v2 = Math.max(v2, vertices[i+1]);
-			v3 = Math.max(v3, vertices[i+2]);
+		for (i = 0, l = positions.length; i < l; i += 3) {
+			v1 = Math.max(v1, positions[i]);
+			v2 = Math.max(v2, positions[i+1]);
+			v3 = Math.max(v3, positions[i+2]);
 		}
 		out[0] = v1, out[1] = v2, out[2] = v3;
 	};
 
 	// Returns the furthest vertex from the local origin
-	// Note this is not the same as the furthest from the mid-point of the vertices
+	// Note this is not the same as the furthest from the mid-point of the vertices positions
 	// This is necessray for the boundingRadius to remain accurate under rotation
-	let calculateBoundingRadius = function(vertices) {
+	let calculateBoundingRadius = function(positions) {
 		var sqrResult = 0;
-		for (let i = 0, l = vertices.length; i< l; i += 3) {
-			let sqrDistance = vertices[i] * vertices[i]
-				+ vertices[i + 1] * vertices[i + 1]
-				+ vertices[i + 2] * vertices[i + 2];
+		for (let i = 0, l = positions.length; i< l; i += 3) {
+			let sqrDistance = positions[i] * positions[i]
+				+ positions[i + 1] * positions[i + 1]
+				+ positions[i + 2] * positions[i + 2];
 			if (sqrDistance > sqrResult) {
 				sqrResult = sqrDistance;
 			}
@@ -9535,10 +9535,10 @@ module.exports = (function(){
 		}
 	};
 
-	let calculateBounds = exports.calculateBounds = function(mesh, vertices) {
-		mesh.boundingRadius = calculateBoundingRadius(vertices);
-		calculateMinPoint(mesh.bounds.min, vertices);
-		calculateMaxPoint(mesh.bounds.max, vertices);
+	let calculateBounds = exports.calculateBounds = function(mesh, positions) {
+		mesh.boundingRadius = calculateBoundingRadius(positions);
+		calculateMinPoint(mesh.bounds.min, positions);
+		calculateMaxPoint(mesh.bounds.max, positions);
 		mesh.bounds.recalculateExtents();
 	};
 
@@ -9565,19 +9565,10 @@ module.exports = (function(){
 
 			let { positions, uvs, normals, indices, customAttributes } = config;
 
-			// Backwards compatibility with old config naming
-			if (!positions && config.vertices) {
-				positions = config.vertices;
-			}
-			if (!uvs && config.textureCoordinates) {
-				uvs = config.textureCoordinates;
-			}
-
 			if (positions) {
 				calculateBounds(mesh, positions);
 				mesh.vertexBuffer = createBuffer(positions, 3);
 			}
-
 			if (uvs) {
 				mesh.textureBuffer = createBuffer(uvs, 2);
 			}
@@ -9610,13 +9601,13 @@ module.exports = (function(){
 	};
 
 	exports.combineConfig = function(meshes) {
-		let result = { vertices: [], normals: [], textureCoordinates: [], indices: [] };
+		let result = { positions: [], normals: [], uvs: [], indices: [] };
 		for (let i = 0, l = meshes.length; i < l; i++) {
 			let mesh = meshes[i];
-			let indexOffset = result.vertices.length / 3;
-			Utils.arrayCombine(result.vertices, mesh.vertices);
+			let indexOffset = result.positions.length / 3;
+			Utils.arrayCombine(result.positions, mesh.positions);
 			Utils.arrayCombine(result.normals, mesh.normals);
-			Utils.arrayCombine(result.textureCoordinates, mesh.textureCoordinates);
+			Utils.arrayCombine(result.uvs, mesh.uvs);
 			for (let index = 0, n = mesh.indices.length; index < n; index++) {
 				result.indices.push(mesh.indices[index] + indexOffset);
 			}
@@ -9701,14 +9692,14 @@ module.exports = (function() {
 
 		// TODO: pick typedarray type from accessors[index].componentType (5126 => Float32, 5123 => Int16 - see renderer.DataType)
 		// TODO: Get size from data from accessors[index].type rather than hardcoding
-		meshData.vertices = new Float32Array(buffers[positionBufferView.buffer], positionBufferView.byteOffset, vertexCount * 3);
+		meshData.positions = new Float32Array(buffers[positionBufferView.buffer], positionBufferView.byteOffset, vertexCount * 3);
 
 		if (normalsIndex !== undefined) {
 			meshData.normals = new Float32Array(buffers[normalsBufferView.buffer], normalsBufferView.byteOffset, normalsCount * 3);
 		}
 
 		if (uvIndex !== undefined) {
-			meshData.textureCoordinates = new Float32Array(buffers[uvBufferView.buffer], uvBufferView.byteOffset, uvCount * 2);
+			meshData.uvs = new Float32Array(buffers[uvBufferView.buffer], uvBufferView.byteOffset, uvCount * 2);
 		}
 
 		meshData.indices = new Int16Array(buffers[indicesBufferView.buffer], indicesBufferView.byteOffset, indexCount);
@@ -10109,7 +10100,7 @@ module.exports = (function(){
 
 	exports.createQuadMeshConfig = (w, h) => {
 		return {
-			vertices: [ 
+			positions: [ 
 				w, h, 0.0,
 				0, h, 0.0, 
 				w, 0, 0.0,
@@ -10119,7 +10110,7 @@ module.exports = (function(){
 				0.0, 0.0, 1.0,
 				0.0, 0.0, 1.0,
 				0.0, 0.0, 1.0 ],
-			textureCoordinates: [
+			uvs: [
 				1.0, 1.0,
 				0.0, 1.0,
 				1.0, 0.0,
@@ -10131,7 +10122,7 @@ module.exports = (function(){
 	exports.createCenteredQuadMeshConfig = (w, h) => {
 		let sx = w/2, sy = h/2;
 		return {
-			vertices: [ 
+			positions: [ 
 				sx, sy, 0.0,
 				-sx, sy, 0.0, 
 				sx, -sy, 0.0,
@@ -10141,7 +10132,7 @@ module.exports = (function(){
 				0.0, 0.0, 1.0,
 				0.0, 0.0, 1.0,
 				0.0, 0.0, 1.0 ],
-			textureCoordinates: [
+			uvs: [
 				1.0, 1.0,
 				0.0, 1.0,
 				1.0, 0.0,
@@ -10281,7 +10272,7 @@ exports.getContextLossExtension = function() {
 	return gl.getExtension("WEBGL_lose_context");
 };
 
-// TODO: This cshould be called setClearColor
+// TODO: This should be called setClearColor
 exports.clearColor = function(r, g, b, a) {
 	gl.clearColor(r, g, b, a);
 };

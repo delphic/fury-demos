@@ -52,7 +52,7 @@ var material = Fury.Material.create({ shader : shader });
 
 // Create Mesh
 var cube = Fury.Mesh.create({
-	vertices: [
+	positions: [
 		// Front face
 		-1.0, -1.0,  1.0,
 		 1.0, -1.0,  1.0,
@@ -88,7 +88,7 @@ var cube = Fury.Mesh.create({
 		-1.0, -1.0,  1.0,
 		-1.0,  1.0,  1.0,
 		-1.0,  1.0, -1.0],
-	textureCoordinates: [
+	uvs: [
 		// Front face
 		0.0, 0.0,
 		1.0, 0.0,

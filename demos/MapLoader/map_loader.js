@@ -201,14 +201,14 @@ let MapLoader = (function(){
 		
 				// walk sorted vertices to generate indices for poly
 				let data = {
-					vertices: [],
-					textureCoordinates: [],
+					positions: [],
+					uvs: [],
 					normals: [],
 					indices: [],
 					texture: texture
 				};
 				let reverse = false;
-				let offset = data.vertices.length;
+				let offset = data.positions.length; // todo: delete this as it's always 0?
 				let c = 0, cw = 1, ccw = l -1;
 				while (ccw != cw) {
 					data.indices.push(offset + c, offset + ccw, offset + cw);
@@ -223,9 +223,8 @@ let MapLoader = (function(){
 				}
 				for (let i = 0; i < l; i++) {
 					let { position, uv, normal } = vertices[i];
-					data.vertices.push(position[0], position[1], position[2]);
-					// ^^ vertices should really be called positions
-					data.textureCoordinates.push(uv[0], uv[1]);
+					data.positions.push(position[0], position[1], position[2]);
+					data.uvs.push(uv[0], uv[1]);
 					data.normals.push(normal[0], normal[1], normal[2]);
 				}
 				result.push(data);

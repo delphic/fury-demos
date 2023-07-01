@@ -117,7 +117,7 @@ let namedMaterials = [];
 let createCuboidMesh = function(width, height, depth, x, y, z) {
 	let sx = width / 2, sy = height / 2, sz = depth / 2;
 	return {
-		vertices: [
+		positions: [
 			// Front face
 			-sx, -sy,  sz,
 			 sx, -sy,  sz,
@@ -153,7 +153,7 @@ let createCuboidMesh = function(width, height, depth, x, y, z) {
 			-sx, -sy,  sz,
 			-sx,  sy,  sz,
 			-sx,  sy, -sz],
-		textureCoordinates: [
+		uvs: [
 			// Updated uvs as noted from naive to match trenchbroom's texture mapping
 			// Front face - swapped x direction
 			x+sx, y-sy,

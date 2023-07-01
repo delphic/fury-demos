@@ -63,13 +63,13 @@ var blueMaterial = Fury.Material.create({ shader: shader, properties: { alpha: t
 
 // Create Mesh
 var quad = Fury.Mesh.create({
-	vertices: [
+	positions: [
 		 0.5,  0.5, 0.0,
 		-0.5,  0.5, 0.0,
 		 0.5, -0.5, 0.0,
 		-0.5, -0.5, 0.0
 	],
-	textureCoordinates: [
+	uvs: [
 		1.0, 1.0,
 		0.0, 1.0,
 		1.0, 0.0,
@@ -79,7 +79,7 @@ var quad = Fury.Mesh.create({
 });
 
 var cube = Fury.Mesh.create({
-	vertices: [
+	positions: [
 		// Front face
 		-1.0, -1.0,  1.0,
 		 1.0, -1.0,  1.0,
@@ -115,7 +115,7 @@ var cube = Fury.Mesh.create({
 		-1.0, -1.0,  1.0,
 		-1.0,  1.0,  1.0,
 		-1.0,  1.0, -1.0],
-	textureCoordinates: [
+	uvs: [
 		// Front face
 		0.0, 0.0,
 		1.0, 0.0,

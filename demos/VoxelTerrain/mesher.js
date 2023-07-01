@@ -11,9 +11,9 @@ importScripts('vorld.js');
 
 // Basic Cube Geometry JSON
 var cubeJson = {
-	vertices: [ 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0 ],
+	positions: [ 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0 ],
 	normals: [ 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0],
-	textureCoordinates: [ 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0 ],
+	uvs: [ 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0 ],
 	indices: [ 0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15, 16, 17, 18, 16, 18, 19, 20, 21, 22, 20, 22, 23 ]
 };
 
@@ -31,9 +31,9 @@ var atlas = VorldConfig.getAtlasInfo();
 
 var buildMesh = function(vorld, chunkI, chunkJ, chunkK) {
 	var mesh = {
-		vertices: [],
+		positions: [],
 		normals: [],
-		textureCoordinates: [],
+		uvs: [],
 		indices: []
 	};
 
@@ -74,8 +74,8 @@ var buildMesh = function(vorld, chunkI, chunkJ, chunkK) {
 };
 
 var addQuadToMesh = function(mesh, block, faceIndex, x, y, z) {
-	var tile, offset, n = mesh.vertices.length / 3;
-	var vertices, normals, textureCoordinates;
+	var tile, offset, n = mesh.positions.length / 3;
+	var positions, normals, uvs;
 
 	if(faceIndex == cubeFaces.top) {
 		tile = (atlas.arraySize - 1) - atlas.tileIndices[block].top;
@@ -86,26 +86,26 @@ var addQuadToMesh = function(mesh, block, faceIndex, x, y, z) {
 	}
 
 	offset = faceIndex * 12;
-	vertices = cubeJson.vertices.slice(offset, offset + 12);
+	positions = cubeJson.positions.slice(offset, offset + 12);
 	for(var i = 0; i < 4; i++) {
-		vertices[3*i] = vertices[3*i] + x;
-		vertices[3*i + 1] = vertices[3*i +1] + y;
-		vertices[3*i + 2] = vertices[3*i + 2] + z;
+		positions[3*i] = positions[3*i] + x;
+		positions[3*i + 1] = positions[3*i +1] + y;
+		positions[3*i + 2] = positions[3*i + 2] + z;
 	}
 
 	normals = cubeJson.normals.slice(offset, offset + 12);
 
 	offset = faceIndex * 8;
-	textureCoordinates = cubeJson.textureCoordinates.slice(offset, offset + 8);
+	uvs = cubeJson.uvs.slice(offset, offset + 8);
 
 	if (!mesh.tileIndices) {
 		mesh.tileIndices = [];
 	}
 	tileIndices = [ tile, tile, tile, tile ];
 
-	concat(mesh.vertices, vertices);
+	concat(mesh.positions, positions);
 	concat(mesh.normals, normals);
-	concat(mesh.textureCoordinates, textureCoordinates);
+	concat(mesh.uvs, uvs);
 	concat(mesh.tileIndices, tileIndices);
 	mesh.indices.push(n,n+1,n+2, n,n+2,n+3);
 };
