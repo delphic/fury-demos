@@ -14,11 +14,7 @@ let camera = Fury.Camera.create({
 });
 let scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
 
-// Physics world
-let world = { boxes: [] };
-
 let Maths = Fury.Maths;
-let Physics = Fury.Physics;
 let vec3Pool = Maths.vec3Pool;
 
 // Fullscreen logic
@@ -98,110 +94,8 @@ let shader = Fury.Shader.create({
 
 let namedMaterials = [];
 
-// Creates a cuboid origin in centre of specifed width / height / depth
-// x, y, z used to offset the UVs
-// Texture coordinates 1:1 with world size
-let createCuboidMesh = function(width, height, depth, x, y, z) {
-	let sx = width / 2, sy = height / 2, sz = depth / 2;
-	return {
-		vertices: [
-			// Front face
-			-sx, -sy,  sz,
-			 sx, -sy,  sz,
-			 sx,  sy,  sz,
-			-sx,  sy,  sz,
-
-			// Back face
-			-sx, -sy, -sz,
-			-sx,  sy, -sz,
-			 sx,  sy, -sz,
-			 sx, -sy, -sz,
-
-			// Top face
-			-sx,  sy, -sz,
-			-sx,  sy,  sz,
-			 sx,  sy,  sz,
-			 sx,  sy, -sz,
-
-			// Bottom face
-			-sx, -sy, -sz,
-			 sx, -sy, -sz,
-			 sx, -sy,  sz,
-			-sx, -sy,  sz,
-
-			// Right face
-			 sx, -sy, -sz,
-			 sx,  sy, -sz,
-			 sx,  sy,  sz,
-			 sx, -sy,  sz,
-
-			// Left face
-			-sx, -sy, -sz,
-			-sx, -sy,  sz,
-			-sx,  sy,  sz,
-			-sx,  sy, -sz],
-		textureCoordinates: [
-			// Updated uvs as noted from naive to match trenchbroom's texture mapping
-			// Front face - swapped x direction
-			x+sx, y-sy,
-			x-sx, y-sy,
-			x-sx, y+sy,
-			x+sx, y+sy,
-
-			// Back face - swapped x direction
-			x+sx, y-sy,
-			x+sx, y+sy,
-			x-sx, y+sy,
-			x-sx, y-sy,
-
-			// Top face - swapped x and z
-			z+sz, x-sx,
-			z-sz, x-sx,
-			z-sz, x+sx,
-			z+sz, x+sx,
-
-			// Bottom face - swapped x and z
-			z+sz, x+sx,
-			z+sz, x-sx,
-			z-sz, x-sx,
-			z-sz, x+sx,
-
-			// Right face
-			z+sz, y-sy,
-			z+sz, y+sy,
-			z-sz, y+sy,
-			z-sz, y-sy,
-
-			// Left face - swaped z direction
-			z+sz, y-sy,
-			z-sz, y-sy,
-			z-sz, y+sy,
-			z+sz, y+sy ],
-		indices: [
-			0, 1, 2,      0, 2, 3,    // Front face
-			4, 5, 6,      4, 6, 7,    // Back face
-			8, 9, 10,     8, 10, 11,  // Top face
-			12, 13, 14,   12, 14, 15, // Bottom face
-			16, 17, 18,   16, 18, 19, // Right face
-			20, 21, 22,   20, 22, 23  // Left face
-		] };
-};
-
-let createCuboid = function(w, h, d, x, y, z, material) {
-	let position = vec3.fromValues(x, y, z);
-	let size = vec3.fromValues(w, h, d);
-	let mesh = Fury.Mesh.create(createCuboidMesh(w, h, d, x, y, z));
-	let box = Physics.Box.create({ center: position, size: size });
-	// Note if you move the cuboid you have to recalculate min max
-
-	// Add to scene and physics world
-	world.boxes.push(box);
-	return scene.add({ material: material, mesh: mesh, position: position, static: true });
-};
-
 // Quick and Dirty .map file loader
-// Supports only AABB
-// c.f. http://www.gamers.org/dEngine/quake/QDP/qmapspec.html
+// Converts from Quake coordinates to Fury coordinates when parsing 
 let MapLoader = (function(){
 	let exports = {};
 
@@ -219,59 +113,6 @@ let MapLoader = (function(){
 		out[2] = scaleFactor * -parseFloat(split[0]);
 	};
 
-	let parseAABBFromBrush = (out, brush, scaleFactor) => {
-		let x1, x2, y1, y2, z1, z2;
-		let xFound = false, yFound = false, zFound = false;
-		for (let i = 0; i < 6; i++) {
-			let plane = brush.planes[i]; 
-
-			// Convert Points to AABB
-			// These points define a plane, the correct way to solve is determine normal and point and then intersect the defined planes to determine
-			// vertices, however because we're limiting ourselves to AABB we can take a shortcut, which is one axis will have the same value across
-			// all three points, and this is one of that components min or max for the AABB
-			if (plane.p1[0] == plane.p2[0] && plane.p2[0] == plane.p3[0]) {
-				if (!xFound) {
-					x1 = plane.p1[0];
-					xFound = true;
-				} else {
-					x2 = plane.p1[0];
-				}
-			} else if (plane.p1[1] == plane.p2[1] && plane.p2[1] == plane.p3[1]) {
-				if (!yFound) {
-					y1 = plane.p1[1];
-					yFound = true;
-				} else {
-					y2 = plane.p1[1];
-				}
-			} else if (plane.p1[2] == plane.p2[2] && plane.p2[2] == plane.p3[2]) {
-				if (!zFound) {
-					z1 = plane.p2[2];
-					zFound = true;
-				} else {
-					z2 = plane.p2[2];
-				}
-			}
-		}
-
-		let xMin = Math.min(x1, x2), xMax = Math.max(x1, x2);
-		let yMin = Math.min(y1, y2), yMax = Math.max(y1, y2);
-		let zMin = Math.min(z1, z2), zMax = Math.max(z1, z2);
-
-		xMin *= scaleFactor;
-		xMax *= scaleFactor;
-		yMin *= scaleFactor;
-		yMax *= scaleFactor;
-		zMin *= scaleFactor;
-		zMax *= scaleFactor;
-
-		out.xMin = xMin;
-		out.xMax = xMax;
-		out.yMin = yMin;
-		out.yMax = yMax;
-		out.zMin = zMin;
-		out.zMax = zMax;
-	}; 
-
 	// take a brush and return an array of polygons,
 	// each polygon in Fury mesh config format i.e. array of positions, textureCoordinates, normals, indices
 	// with the additional property of "texture" for texture details of the plane
@@ -280,7 +121,7 @@ let MapLoader = (function(){
 		let n = brush.planes.length;
 		let planes = [];
 		for (let i = 0; i < n; i++) {
-			let { p1, p2, p3 } = brush.planes[i]; // need to swap y/z or maybe we should do this in the parse stage?
+			let { p1, p2, p3 } = brush.planes[i];
 			planes.push(Plane.fromPoints(p1, p2, p3));
 		}
 
@@ -303,7 +144,6 @@ let MapLoader = (function(){
 									if (i4 != i3 && i4 != i2 && i4 != i1) {
 										pass &= !Plane.isPointInFront(planes[i4], position);
 										if (!pass) {
-											console.log("Point " + JSON.stringify(position) + " rejected by plane " + i4 + ": "  + JSON.stringify(planes[i4]));
 											pass = true;
 										}
 									}
@@ -327,7 +167,7 @@ let MapLoader = (function(){
 				vec3.scale(center, center, 1 / l);
 	
 				let rotation = mat4.create();
-				if (Maths.approximately(a[1], 1.0, 0.001)) {
+				if (Maths.approximately(Math.abs(a[1]), 1.0, 0.001)) {
 					mat4.lookAt(rotation, Maths.vec3Zero, a, Maths.vec3X);
 				} else {
 					mat4.lookAt(rotation, Maths.vec3Zero, a, Maths.vec3Y);
@@ -389,8 +229,6 @@ let MapLoader = (function(){
 					data.normals.push(normal[0], normal[1], normal[2]);
 				}
 				result.push(data);
-	
-				console.log(JSON.stringify(data));
 			} else {
 				console.warn("Generated less than 3 vertices for plane " + i1);
 			}
@@ -401,7 +239,6 @@ let MapLoader = (function(){
 	let instanitateWorldBrushes = (brushes, scaleFactor, instantiationDelegate) => {
 		let aabb = {};
 		for (let i = 0, l = brushes.length; i < l; i++) {
-			// parseAABBFromBrush(aabb, brushes[i], scaleFactor);
 			let polys = parsePolysFromBrush(brushes[i], scaleFactor);
 			instantiationDelegate(polys);
 		}
@@ -516,7 +353,6 @@ let MapLoader = (function(){
 	return exports;
 })();
 
-
 let localX = vec3.create(), localZ = vec3.create();
 
 let lookSpeed = 3.0;
@@ -550,23 +386,15 @@ let loop = function(elapsed) {
 	quat.rotateX(camera.rotation, camera.rotation, verticalLookAngle - lastVerticalLookAngle);
 
 	let inputX = 0, inputY = 0, inputZ = 0;
-	inputZ = Fury.Input.getAxis("s", "w"); // 0.05, Fury.Maths.Ease.inQuad
-	inputY = Fury.Input.getAxis("e", "q"); // should be q up e down
-	inputX = Fury.Input.getAxis("d", "a"); // 0.05, Fury.Maths.Ease.inQuad
-	// Note: Input smoothing removed from Fury 
-	// TODO: Input smoother which listens for key presses and then smoothes on press and release
-	// accounting for if full press or full release was reached on subsequent releases or presses.
-	// or could just use SmoothDamp, c.f. https://github.com/delphic/asteria-combat/commit/f3c3376ab9e54eeba510f7badf1110eb53346c71
+	inputZ = Fury.Input.getAxis("s", "w");
+	inputY = Fury.Input.getAxis("e", "q"); 
+	inputX = Fury.Input.getAxis("d", "a");
 
-	// Calculate local axes for camera - ignoring roll
-	// This would be easier with a character transform
-	// Wouldn't need to zero the y component
 	vec3.transformQuat(localX, Maths.vec3X, camera.rotation);
 	vec3.transformQuat(localZ, Maths.vec3Z, camera.rotation);
 
 	if (inputX !== 0 && inputZ !== 0) {
 		// Normalize input vector if moving in more than one direction
-		// TODO: Adjust for smoothing - i.e. actually normalise
 		inputX /= Math.SQRT2;
 		inputZ /= Math.SQRT2;
 	}
@@ -616,24 +444,7 @@ fetch(mapSrc).then(function(response) {
 	return response.text();
 }).then(function(text) {
 	let map = MapLoader.parse(text);
-
-	console.log("Map " + JSON.stringify(map));
  
-	let instantiateAABB = (aabb, textureName) => {
-		if (!namedMaterials.hasOwnProperty(textureName)) {
-			namedMaterials[textureName] = Fury.Material.create({ shader: shader, properties: { tScale: 1, sScale: 1 } });
-		}
-
-		createCuboid(
-			aabb.xMax - aabb.xMin,
-			aabb.yMax - aabb.yMin,
-			aabb.zMax - aabb.zMin,
-			aabb.xMin + 0.5 * (aabb.xMax - aabb.xMin),
-			aabb.yMin + 0.5 * (aabb.yMax - aabb.yMin),
-			aabb.zMin + 0.5 * (aabb.zMax - aabb.zMin),
-			namedMaterials[textureName]);
-	};
-
 	let instantiatePolys = (data) => {
 		for (let i = 0, l = data.length; i < l; i++) {
 			let textureName = data[i].texture.name;
@@ -643,7 +454,7 @@ fetch(mapSrc).then(function(response) {
 			let material = namedMaterials[textureName];
 
 			// TODO: We should offset the vertices by the poly center for santiy
-			// should also generate poly collision shape
+			// TODO: should generate poly collision shape
 			scene.add({ material: material, mesh: Fury.Mesh.create(data[i]), position: vec3.create(), static: true });
 		}
 	};
@@ -652,9 +463,9 @@ fetch(mapSrc).then(function(response) {
 
 	loadMapTextures(namedMaterials, 32);
 	lockCount--;
-}); /*.catch(function(error) {
+}).catch(function(error) {
 	console.log("Failed to load " + mapSrc + ": " + error.message);
-}); */
+});
 
 let Plane = (function() {
 	let exports = {};
@@ -721,6 +532,9 @@ let Plane = (function() {
 		plane[3] = vec3.dot(plane, point);
 		return plane;
 	};
+
+	// TODO: Match ergonomics of glMatrix, i.e. create() function returns blank
+	// and have methods with an out paramter for setting from normal/point or from 3 points
 
 	return exports;
 })();
