@@ -10317,6 +10317,122 @@ module.exports = (function(){
 		};
 	};
 
+	exports.createCubeMeshConfig = (w, h, d) => {
+		let x = w / 2, y = h / 2, z = d / 2;
+		return {
+			positions: [
+				// Front face
+				-x, -y,  z,
+				 x, -y,  z,
+				 x,  y,  z,
+				-x,  y,  z,
+		
+				// Back face
+				-x, -y, -z,
+				-x,  y, -z,
+				 x,  y, -z,
+				 x, -y, -z,
+		
+				// Top face
+				-x,  y, -z,
+				-x,  y,  z,
+				 x,  y,  z,
+				 x,  y, -z,
+		
+				// Bottom face
+				-x, -y, -z,
+				 x, -y, -z,
+				 x, -y,  z,
+				-x, -y,  z,
+		
+				// Right face
+				 x, -y, -z,
+				 x,  y, -z,
+				 x,  y,  z,
+				 x, -y,  z,
+		
+				// Left face
+				-x, -y, -z,
+				-x, -y,  z,
+				-x,  y,  z,
+				-x,  y, -z],
+			uvs: [
+				// Front face
+				0.0, 0.0,
+				1.0, 0.0,
+				1.0, 1.0,
+				0.0, 1.0,
+		
+				// Back face
+				1.0, 0.0,
+				1.0, 1.0,
+				0.0, 1.0,
+				0.0, 0.0,
+		
+				// Top face
+				0.0, 1.0,
+				0.0, 0.0,
+				1.0, 0.0,
+				1.0, 1.0,
+		
+				// Bottom face
+				1.0, 1.0,
+				0.0, 1.0,
+				0.0, 0.0,
+				1.0, 0.0,
+		
+				// Right face
+				1.0, 0.0,
+				1.0, 1.0,
+				0.0, 1.0,
+				0.0, 0.0,
+		
+				// Left face
+				0.0, 0.0,
+				1.0, 0.0,
+				1.0, 1.0,
+				0.0, 1.0 ],
+			normals: [
+				0.0, 0.0, 1.0,
+				0.0, 0.0, 1.0,
+				0.0, 0.0, 1.0,
+				0.0, 0.0, 1.0,
+
+				0.0, 0.0, -1.0,
+				0.0, 0.0, -1.0,
+				0.0, 0.0, -1.0,
+				0.0, 0.0, -1.0,
+
+				0.0, 1.0, 0.0,
+				0.0, 1.0, 0.0,
+				0.0, 1.0, 0.0,
+				0.0, 1.0, 0.0,
+
+				0.0, -1.0, 0.0,
+				0.0, -1.0, 0.0,
+				0.0, -1.0, 0.0,
+				0.0, -1.0, 0.0,
+
+				1.0, 0.0, 0.0,
+				1.0, 0.0, 0.0,
+				1.0, 0.0, 0.0,
+				1.0, 0.0, 0.0,
+
+				-1.0, 0.0, 0.0,
+				-1.0, 0.0, 0.0,
+				-1.0, 0.0, 0.0,
+				-1.0, 0.0, 0.0,
+			],
+			indices: [
+				0, 1, 2,      0, 2, 3,    // Front face
+				4, 5, 6,      4, 6, 7,    // Back face
+				8, 9, 10,     8, 10, 11,  // Top face
+				12, 13, 14,   12, 14, 15, // Bottom face
+				16, 17, 18,   16, 18, 19, // Right face
+				20, 21, 22,   20, 22, 23  // Left face
+				] };
+	};
+
 	return exports;
 })();
 },{"./renderer":21}],20:[function(require,module,exports){
@@ -10584,6 +10700,7 @@ exports.createTexture = function(source, clamp, flipY, mag, min, generateMipmap,
 
 /// width and height are of an individual texture
 exports.createTextureArray = function(source, width, height, imageCount, clamp, flipY, mag, min, generateMipmap, enableAniso) {
+	// would be nice if VSCode knew gl was rendering context.
 	let texture = gl.createTexture();
 	gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
 	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flipY);
@@ -10598,6 +10715,23 @@ exports.createTextureArray = function(source, width, height, imageCount, clamp, 
 
 	gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
 	texture.glTextureType = gl.TEXTURE_2D_ARRAY;
+	return texture;
+};
+
+exports.createTextureCube = function(sources) {
+	let texture = gl.createTexture();
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
+	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+	gl.texImage2D(gl.TEXTURE_CUBE_MAP_NEGATIVE_X, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sources[0]);
+	gl.texImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sources[1]);
+	gl.texImage2D(gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sources[2]);
+	gl.texImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_Y, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sources[3]);
+	gl.texImage2D(gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sources[4]);
+	gl.texImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_Z, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sources[5]);
+	// would be nice to reuse texture quality but I don't know if that's really viable here as the use case for cube maps is significantly different
+	gl.generateMipmap(gl.TEXTURE_CUBE_MAP);
+	gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+	texture.glTextureType = gl.TEXTURE_CUBE_MAP;
 	return texture;
 };
 
@@ -10619,6 +10753,17 @@ exports.setTexture = function(location, texture) {
 	gl.bindTexture(texture.glTextureType, texture);
 	activeTexture = texture;
 };
+
+exports.DepthEquation = {
+	LessThanOrEqual: "LEQUAL",
+	LessThan: "LESS",
+	GreaterThanOrEqual: "GEQUAL",
+	GreaterThan: "GREATER",
+}
+
+exports.setDepthFunction = function(depthEquation) {
+	gl.depthFunc(gl[depthEquation]);
+}
 
 // Blending
 exports.BlendEquation = {
@@ -11282,13 +11427,19 @@ module.exports = (function() {
 
 			object.transform.updateMatrix();
 			if (shader.mMatrixUniformName) {
-				// TODO: Arguably should send either MV Matrix or M and V Matrices
+				// TODO: Should send either MV Matrix or M and V Matrices
+				// m could also be considered "world" matrix
 				r.setUniformMatrix4(shader.mMatrixUniformName, object.transform.matrix);
 			}
+
+			// TODO: always doing a mvMatrix when the camera matrix is not changing is 
+			// unnecessary CPU work, should update shaders to implement the above suggsetion
 			mat4.multiply(mvMatrix, cameraMatrix, object.transform.matrix);
 			r.setUniformMatrix4(shader.mvMatrixUniformName, mvMatrix);
 
 			if (shader.nMatrixUniformName) {
+				// BUG?: Pretty sure this is not correct, should be the other way around
+				// TODO: Test (presumably via lighting)
 				mat3.normalFromMat4(mvMatrix, nMatrix);
 				r.setUniformMatrix3(shader.nMatrixUniformName, nMatrix);
 			}

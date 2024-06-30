@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Skybox</title>
+		<script src="../../libs/fury.js"></script>
+		<link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAZdEVYdFNvZnR3YXJlAHBhaW50Lm5ldCA0LjAuMjHxIGmVAAAAPklEQVRYR+3OoREAMAgEQapN/x0QXAwaIlYcM7zayMzV2nGy98SpO1hdAAAAAAAAAAAAAAAAgM8AS7XjXBkXGhUgB9ZYmYkAAAAASUVORK5CYII=">
+		<style>
+			canvas {
+				image-rendering: crisp-edges; /* Firefox */
+				image-rendering: -moz-crisp-edges;
+				image-rendering: optimizespeed;
+				image-rendering: pixelated; /* Chrome */
+				/* Ideally would just use pixelated, but not implemented across browsers */
+				/* https://developer.mozilla.org/en-US/docs/Web/CSS/image-rendering */
+			}
+		</style>
+	</head>
+	<body>
+		<canvas id="fury" width="640" height="480"></canvas>
+		<script src="skybox.js"></script>
+	</body>
+</html>
