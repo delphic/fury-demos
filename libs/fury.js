@@ -10531,23 +10531,25 @@ module.exports = (function(){
 // This module is essentially a GL Context Facade
 // There are - of necessity - a few hidden logical dependencies in this class
 // mostly with the render functions, binding buffers before calling a function draw
-let gl, currentShaderProgram, anisotropyExt, maxAnisotropy;
+
+/** @type {WebGL2RenderingContext} */
+let gl;
+
+let currentShaderProgram, anisotropyExt, maxAnisotropy;
 let activeTexture = null;
 
 exports.init = function(canvas, contextAttributes) {
 	gl = canvas.getContext('webgl2', contextAttributes);
 	gl.clearColor(0.0, 0.0, 0.0, 1.0);	// TODO: Make configurable
 	gl.enable(gl.DEPTH_TEST);	// TODO: expose as method
-	gl.enable(gl.CULL_FACE);  // TODO: expose as method
+	gl.enable(gl.CULL_FACE);	// TODO: expose as method
 
 	anisotropyExt = gl.getExtension("EXT_texture_filter_anisotropic");
 	if (anisotropyExt) {
 		maxAnisotropy = gl.getParameter(anisotropyExt.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
 	}
 
-	// WebGL is supposed to have 32 texture locations but this seems to vary
-	// Now TextureLocations.length will tell you how many there are and provide
-	// a link from the integer to the actual value
+	// Expect 32 texture locations, map a 0 based index to actual integer values
 	TextureLocations.length = 0;
 	let i = 0;
 	while(gl["TEXTURE" + i.toString()]) {
@@ -10693,14 +10695,21 @@ exports.createTexture = function(source, clamp, flipY, mag, min, generateMipmap,
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 	}
 
-	gl.bindTexture(gl.TEXTURE_2D, activeTexture); // rebind the active texture
+	if (activeTexture && activeTexture.glTextureType == gl.TEXTURE_2D) {
+		 // rebind the active texture
+		gl.bindTexture(activeTexture.glTextureType, activeTexture);
+
+	} else {
+		gl.bindTexture(gl.TEXTURE_2D, null);
+	}
+	// todo: adding properties to gl objects is arguably bad practice should really have a wrapper object
+	// todo: test to see if on context loss if textures objects are cleared.
 	texture.glTextureType = gl.TEXTURE_2D;
 	return texture;
 };
 
 /// width and height are of an individual texture
 exports.createTextureArray = function(source, width, height, imageCount, clamp, flipY, mag, min, generateMipmap, enableAniso) {
-	// would be nice if VSCode knew gl was rendering context.
 	let texture = gl.createTexture();
 	gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
 	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flipY);
@@ -10728,7 +10737,7 @@ exports.createTextureCube = function(sources) {
 	gl.texImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_Y, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sources[3]);
 	gl.texImage2D(gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sources[4]);
 	gl.texImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_Z, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sources[5]);
-	// would be nice to reuse texture quality but I don't know if that's really viable here as the use case for cube maps is significantly different
+	// todo: maybe reuse "setTextureQuality"
 	gl.generateMipmap(gl.TEXTURE_CUBE_MAP);
 	gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
 	texture.glTextureType = gl.TEXTURE_CUBE_MAP;
