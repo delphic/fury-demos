@@ -72,7 +72,7 @@ window.onload = (event) => {
 
 	cubeCanvas = createSkyboxFace("red", "red", "", false);
 	let cubeTexture = Fury.Renderer.createTexture(cubeCanvas, true, true);
-	let cubeMesh = Fury.Mesh.create(Fury.Primitives.createCubeMeshConfig(1.0, 1.0, 1.0));
+	let cubeMesh = Fury.Mesh.create(Fury.Primitives.createCubiodMeshConfig(1.0, 1.0, 1.0));
 	cubeMaterial = Fury.Material.create({ shader: Fury.Shaders.UnlitTextured, texture: cubeTexture });
 	scene.add({ mesh: cubeMesh, material: cubeMaterial });
 
