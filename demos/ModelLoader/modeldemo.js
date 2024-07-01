@@ -1,6 +1,6 @@
 // Render a Model
 // Testing a model loader class
-let { Maths, Camera, Scene, Shader, Renderer } = Fury;
+let { Maths, Camera, Scene, Shader } = Fury;
 
 // globalize glMatrix
 Maths.globalize();
@@ -20,8 +20,7 @@ let cameraPosition = vec3.create();
 let cameraRotation = Maths.quatEuler(-30, 135, 0);
 
 // TODO: clear color as scene property
-Renderer.clearColor(0.1, 0.1, 0.2, 1.0);
-let camera = Camera.create({ near: 0.01, far: 10000.0, fov: 1.0472, ratio: 1.0, position: cameraPosition, rotation: cameraRotation });
+let camera = Camera.create({ near: 0.01, far: 10000.0, fov: 1.0472, ratio: 1.0, position: cameraPosition, rotation: cameraRotation, clearColor: [0.1, 0.1, 0.2, 1.0] });
 let scene = Scene.create({ camera: camera });
 
 let textureShader = Shader.create({

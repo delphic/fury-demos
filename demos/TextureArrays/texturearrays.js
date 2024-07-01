@@ -61,10 +61,8 @@ let cubeConfig = Fury.Primitives.createCubiodMeshConfig(2, 2, 2);
 let cube = Fury.Mesh.create(cubeConfig);
 
 // Create Camera & Scene
-let camera = Fury.Camera.create({ near: 0.1, far: 1000000.0, fov: 1.0472, ratio: 1.0, position: [ 0.0, 0.0, 6.0 ] });
+let camera = Fury.Camera.create({ near: 0.1, far: 1000000.0, fov: 1.0472, ratio: 1.0, position: [ 0.0, 0.0, 6.0 ], clearColor: [ 0.1, 0.1, 0.2, 1.0 ] });
 let scene = Fury.Scene.create({ camera: camera });
-
-Fury.Renderer.clearColor(0.1, 0.1, 0.2, 1.0);
 
 // Add Block to Scene
 let block = scene.add({ material: material, mesh: cube });

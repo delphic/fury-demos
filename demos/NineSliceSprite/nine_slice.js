@@ -24,10 +24,10 @@ window.onload = (event) => {
 		far: 1000000.0,
 		height: canvas.height,
 		ratio: canvas.width / canvas.height,
-		position: vec3.fromValues(0.0, 0.0, 1.0)
+		position: [ 0.0, 0.0, 1.0 ],
+		clearColor: [0.1, 0.1, 0.3, 1.0]
 	});
 	scene = Fury.Scene.create({ camera: camera });
-	Fury.Renderer.clearColor(0.1, 0.1, 0.3, 1.0);
 
 	loadAssets(()=> {	
 		let sliceConfig = { width: 8, height: 8, top: 2, right: 2, bottom: 2, left: 2 };
