@@ -1,3 +1,7 @@
+// Skybox demo
+// Uses cubemap texture created from 6 canvas elements
+// projected onto a quad at the far clip plane. 
+
 let camera, scene;
 let skybox;
 let canvases = [];
@@ -6,28 +10,27 @@ let cubeCanvas;
 let cubeMaterial;
 
 let vsShader = `#version 300 es
-in vec4 a_position;
-out vec4 v_position;
+in vec4 aPosition;
+out vec4 vPosition;
 
 void main() {
-	v_position = a_position;
-	gl_Position = a_position;
+	vPosition = aPosition;
+	gl_Position = aPosition;
 	gl_Position.z = 1.0;
 }`;
 let fsShader = `#version 300 es
-
 precision highp float;
 
-in vec4 v_position;
+uniform samplerCube uSkybox;
+uniform mat4 uViewInverse;
 
-uniform samplerCube u_skybox;
-uniform mat4 u_viewInverse;
+in vec4 vPosition;
 
 out vec4 outColor;
 
 void main() {
-	vec4 t = u_viewInverse * v_position;
-	outColor = texture(u_skybox, normalize(t.xyz / t.w));
+	vec4 t = uViewInverse * vPosition;
+	outColor = texture(uSkybox, normalize(t.xyz / t.w));
 }`;
 
 window.onload = (event) => { 
@@ -42,18 +45,18 @@ window.onload = (event) => {
 	let shader = Fury.Shader.create({
 		vsSource: vsShader,
 		fsSource: fsShader,
-		attributeNames: [ "a_position" ],
-		uniformNames: [ "u_skybox", "u_viewInverse" ],
-		textureUniformNames: [ "u_skybox" ],
+		attributeNames: [ "aPosition" ],
+		uniformNames: [ "uSkybox", "uViewInverse" ],
+		textureUniformNames: [ "uSkybox" ],
 		bindMaterial: function(material) {
-			this.enableAttribute("a_position");
+			this.enableAttribute("aPosition");
 		},
 		bindBuffers: function(mesh) {
-			this.setAttribute("a_position", mesh.vertexBuffer);
+			this.setAttribute("aPosition", mesh.vertexBuffer);
 			this.setIndexedAttribute(mesh.indexBuffer);
 		},
 		bindInstance: function(object) {
-			this.setUniformMatrix4("u_viewInverse", object.viewInverseMatrix)
+			this.setUniformMatrix4("uViewInverse", object.viewInverseMatrix)
 		}
 	});
 
@@ -158,18 +161,10 @@ let loop = function(elapsed) {
 			// we should profile, and see if you update the existing texture rather than creating a new one it
 			// performs better.
 		}
-		material.textures["u_skybox"] = Fury.Renderer.createTextureCube(canvases);
-		// ^^ Wierdly just setting "material.texture" works, but only the first if you're updating the other texture
-		// but it works just fine if you're not setting the other texture at all, not really sure why, you _should_
-		// have to update the textures array.
-		// Q: does this mean that the original texture hangs about without being cleaned up because it's being referenced
-		// in material.texture ?
+		material.textures["uSkybox"] = Fury.Renderer.createTextureCube(canvases);
 
-		drawSkyboxFace(cubeCanvas, cubeColors[colorIndex], cubeColors[colorIndex], "");
+		drawSkyboxFace(cubeCanvas, cubeColors[colorIndex], cubeColors[(colorIndex + 1)%cubeColors.length], "");
 		cubeMaterial.textures["uSampler"] = Fury.Renderer.createTexture(cubeCanvas, true, true);
-		// ^^ this shows up an issue where the rebinding of active texture in createTexture() assumes it's a TEXTURE2D
-		// which is not necessarily true, will sort itself out in the render loop after a single frame, but ideally 
-		// would make it not emit that warning
 	}
 
 	moveCamera(elapsed);
