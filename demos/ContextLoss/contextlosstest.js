@@ -1,152 +1,149 @@
 // This is to test context loss and restoration
-// This is a dupilicate of Arbitrary Shader with additional logic for triggering
+// This is broadly a dupilicate of Arbitrary Shader with additional logic for triggering
 // context loss and then restoration followed by reinitialisation of state
 
 // Shader Source
-var vsSource = [ "attribute vec3 aVertexPosition;",
-	"attribute vec2 aTextureCoordinates;",
-	"uniform mat4 modelViewMatrix;",
-	"uniform mat4 projectionMatrix;",
-	"varying vec2 vTextureCoordinates;",
-	"varying vec2 pos;",
-	"void main() { ",
-		"vTextureCoordinates = aTextureCoordinates;",
-		"gl_Position = projectionMatrix * modelViewMatrix * vec4(aVertexPosition, 1.0);",
-		"pos = vec2(aVertexPosition.x, aVertexPosition.y);",
-	"}"].join("\n");
-var fsSource = [ "#ifdef GL_ES",
-	"precision highp float;",
-	"#endif",
-	"varying vec2 vTextureCoordinates;",
-	"varying vec2 pos;",
-	"uniform float time;",
-	"uniform vec2 mouse;",
-	"uniform int mouseLeft;",
-	"uniform sampler2D tex0;",
-	"void main() {",
-		"float v1 = (sin(vTextureCoordinates.s+time) + 1.0) / 2.0;",
-		"float v2 = (cos(vTextureCoordinates.t+time) + 1.0) / 2.0;",
-		"float d = distance(mouse, pos);",
-		"vec2 tt = vec2(vTextureCoordinates.s+sin(time/10.0), vTextureCoordinates.t+cos(time/10.0));",
-		"vec4 c1 = texture2D(tex0, tt) * 1.1;",
-		"float avg = (c1.r+c1.g+c1.b)/3.0;",
-		"float r = c1.r+v1*pow(avg,4.0) - pow(d,pow(avg,2.0) +float(mouseLeft)*avg);",
-		"float g = c1.g+v2*pow(avg,4.0) - pow(d,pow(avg,2.0) +float(mouseLeft)*avg);",
-		"float b = c1.g - pow(d,pow(avg,2.0) +float(mouseLeft)*avg);",
-		"gl_FragColor = vec4(r, g, b, 1.0);",
-	"}" ].join("\n");
+let vsSource = `#version 300 es
+uniform mat4 uModelViewMatrix;
+uniform mat4 uProjectionMatrix;
+
+in vec3 aVertexPosition;
+in vec2 aTextureCoordinates;
+
+out vec2 vTextureCoordinates;
+out vec2 vPos;
+
+void main() { 
+	vTextureCoordinates = aTextureCoordinates;
+	vPos = vec2(aVertexPosition.x, aVertexPosition.y);
+	gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aVertexPosition, 1.0);
+}`;
+
+let fsSource = `#version 300 es
+precision highp float;
+
+in vec2 vTextureCoordinates;
+in vec2 vPos;
+
+uniform float uTime;
+uniform vec2 uMousePos;
+uniform int uMouseDown;
+uniform sampler2D uTexture;
+
+out vec4 fragColor;
+
+void main() {
+	float v1 = (sin(vTextureCoordinates.s + uTime) + 1.0) / 2.0;
+	float v2 = (cos(vTextureCoordinates.t + uTime) + 1.0) / 2.0;
+	float d = distance(uMousePos, vPos);
+	vec2 tt = vec2(vTextureCoordinates.s + sin(uTime / 10.0), vTextureCoordinates.t + cos(uTime / 10.0));
+	vec4 c1 = texture(uTexture, tt) * 1.1;
+	float avg = (c1.r + c1.g + c1.b) / 3.0;
+	float r = c1.r + v1 * pow(avg, 4.0) - pow(d, pow(avg, 2.0) + float(uMouseDown) * avg);
+	float g = c1.g + v2 * pow(avg, 4.0) - pow(d, pow(avg, 2.0) + float(uMouseDown) * avg);
+	float b = c1.g - pow(d,pow(avg, 2.0) + float(uMouseDown) * avg);
+	fragColor = vec4(r, g, b, 1.0);
+}`;
+
+const r = Fury.Renderer;
+const mat4 = Fury.Maths.mat4;
+const Camera = Fury.Camera;
 
 // Init
 Fury.init('fury');
-var r = Fury.Renderer;
-var mat4 = Fury.Maths.mat4;
+let canvas = document.getElementById('fury');
 
 // Create Buffers
-var quadBuffer = r.createBuffer([
-		1.0,	1.0,	0.0,
-		-1.0,	1.0,	0.0,
-		1.0,	-1.0,	0.0,
-		-1.0,	-1.0,	0.0
-	], 3);
-var textureBuffer = r.createBuffer([
-		1.0,	1.0,
-		0.0,	1.0,
-		1.0,	0.0,
-		0.0,	0.0
-	], 2);
+let quadBuffer = r.createBuffer([
+	1.0,	1.0,	0.0,
+	-1.0,	1.0,	0.0,
+	1.0,	-1.0,	0.0,
+	-1.0,	-1.0,	0.0
+], 3);
+let textureBuffer = r.createBuffer([
+	1.0,	1.0,
+	0.0,	1.0,
+	1.0,	0.0,
+	0.0,	0.0
+], 2);
 
 // Setup Shader
-var vs = r.createShader("vertex", vsSource);
-var fs = r.createShader("fragment", fsSource);
-var shaderProgram = r.createShaderProgram(vs, fs);
+let vs = r.createShader("vertex", vsSource);
+let fs = r.createShader("fragment", fsSource);
+let shaderProgram = r.createShaderProgram(vs, fs);
 
 r.initAttribute(shaderProgram, "aVertexPosition");
 r.initAttribute(shaderProgram, "aTextureCoordinates");
-r.initUniform(shaderProgram, "modelViewMatrix"); // mat4
-r.initUniform(shaderProgram, "projectionMatrix"); //mat4
-r.initUniform(shaderProgram, "time"); // float
-r.initUniform(shaderProgram, "mouse"); // vec2
-r.initUniform(shaderProgram, "mouseLeft"); // bool
+r.initUniform(shaderProgram, "uModelViewMatrix"); // mat4
+r.initUniform(shaderProgram, "uProjectionMatrix"); //mat4
+r.initUniform(shaderProgram, "uTime"); // float
+r.initUniform(shaderProgram, "uMousePos"); // vec2
+r.initUniform(shaderProgram, "uMouseDown"); // bool
 
 r.useShaderProgram(shaderProgram);
 
 // Camera
-var camera = Fury.Camera.create({
+let camera = Camera.create({
 	type: "Orthonormal",
 	near: 0.1,
 	far: 100.0,
 	height: 2.0
 });
 
-var projectionMatrix = mat4.create(), modelViewMatrix = mat4.create();
+let projectionMatrix = mat4.create(), modelViewMatrix = mat4.create();
 camera.getProjectionMatrix(projectionMatrix);
 mat4.identity(modelViewMatrix);
 mat4.translate(modelViewMatrix, modelViewMatrix, [0.0, 0.0, -2.0]);
 
-// Events!
-$(document).keydown(function(event) {
-	event.preventDefault();
-	var key = event.which;
-});
-
-$(document).mousemove(function(event) {
+// Shader Events!
+canvas.addEventListener("mousemove", function(event) {
 	event.preventDefault();
 	// transforming cursor coordinates to [-1.0, 1.0] range
 	// [0,0] being in the left bottom corner to match the vertex coordinates
-	var x = (event.pageX / 512)*2.0 - 1.0;
-	var y = 0.0 - ((event.pageY / 512)*2.0 - 1.0);
-	r.setUniformFloat2("mouse", x, y);
+	let x = (event.pageX / 512) * 2.0 - 1.0;
+	let y = 0.0 - ((event.pageY / 512) * 2.0 - 1.0);
+	r.setUniformFloat2("uMousePos", x, y);
 });
 
-$(document).mousedown(function(event) {
+canvas.addEventListener("mousedown", function(event) {
 	event.preventDefault();
-	var key = event.which;
-	if (key == 1) {
-		r.setUniformBoolean("mouseLeft", true);
+	if (event.button == 0) {
+		r.setUniformBoolean("uMouseDown", true);
 	}
 });
-
-$(document).mouseup(function(event) {
+canvas.addEventListener("mouseup", function(event) {
 	event.preventDefault();
-	var key = event.which;
-	if (key == 1) {
-		r.setUniformBoolean("mouseLeft", false);
+	if (event.button == 0) {
+		r.setUniformBoolean("uMouseDown", false);
 	}
-});
-
-$(document).mouseleave(function(event) {
-	event.preventDefault();
-	r.setUniformFloat2("mouse", 0, 0);
 });
 
 // Loop
-var time = Date.now(), runningTime = 0, delta = 0;
+let time = Date.now(), runningTime = 0, delta = 0;
 
 // Bind Shader properties that do no change
 r.enableAttribute("aVertexPosition");
 r.enableAttribute("aTextureCoordinates");
 r.setAttribute("aVertexPosition", quadBuffer);
 r.setAttribute("aTextureCoordinates", textureBuffer);
-r.setUniformMatrix4("modelViewMatrix", modelViewMatrix);
-r.setUniformMatrix4("projectionMatrix", projectionMatrix);
+r.setUniformMatrix4("uModelViewMatrix", modelViewMatrix);
+r.setUniformMatrix4("uProjectionMatrix", projectionMatrix);
 
-
-var loop = function(){
+let loop = function(){
 	delta = Date.now() - time;
 	time += delta;
 	runningTime += delta;
-	r.setUniformFloat("time", runningTime/1000);
+	r.setUniformFloat("uTime", runningTime/1000);
 	r.clear();
 	r.drawTriangleStrip(quadBuffer.numItems);
 	window.requestAnimationFrame(loop);
 };
 
 // Create Texture
-// This is a bit syntaxically messy
-var texture, image = new Image();
+let texture, image = new Image();
 image.onload = function() {
 	texture = r.createTexture(image);
-	r.setTexture(0, texture); 	// Note don't actually need to set tex0 uniform to 0, unlike in WebGL playground demo code
+	r.setTexture(0, texture);
 	loop();
 	// window.setTimeout(testContextLoss, 1000); 
 };
@@ -169,7 +166,7 @@ image.src = "concrete1.jpg";
 // and could as it suggests try fail is major performance cavet and then lower the settings levels
 
 let ext = Fury.Renderer.getContextLossExtension(); // Note calling this again after loseContext returns null so you have to cache it
-var testContextLoss = function() {
+let testContextLoss = function() {
 	ext.loseContext(); 
 	// should trigger 'webglcontextlost' event on canvas element https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/webglcontextlost_event
 
@@ -180,7 +177,6 @@ var testContextLoss = function() {
 
 document.getElementById("test_button").addEventListener('click', testContextLoss)
 
-let canvas = document.getElementById("fury");
 let displayToggle = false;
 canvas.addEventListener('webglcontextlost', function(e) {
 	/* intercept the loss event and prevent default - https://www.khronos.org/registry/webgl/extensions/WEBGL_lose_context/ */ 
@@ -209,11 +205,11 @@ canvas.addEventListener('webglcontextrestored', function(e) {
 	// Re-determine attribute and uniform locations
 	r.initAttribute(shaderProgram, "aVertexPosition");
 	r.initAttribute(shaderProgram, "aTextureCoordinates");
-	r.initUniform(shaderProgram, "modelViewMatrix"); // mat4
-	r.initUniform(shaderProgram, "projectionMatrix"); //mat4
-	r.initUniform(shaderProgram, "time"); // float
-	r.initUniform(shaderProgram, "mouse"); // vec2
-	r.initUniform(shaderProgram, "mouseLeft"); // bool
+	r.initUniform(shaderProgram, "uModelViewMatrix"); // mat4
+	r.initUniform(shaderProgram, "uProjectionMatrix"); //mat4
+	r.initUniform(shaderProgram, "uTime"); // float
+	r.initUniform(shaderProgram, "uMousePos"); // vec2
+	r.initUniform(shaderProgram, "uMouseDown"); // bool
 
 	// inform renderer to use shader program
 	r.useShaderProgram(shaderProgram);
@@ -231,36 +227,18 @@ canvas.addEventListener('webglcontextrestored', function(e) {
 		1.0,	0.0,
 		0.0,	0.0
 	], 2);
+
 	r.setAttribute("aVertexPosition", quadBuffer);
 	r.setAttribute("aTextureCoordinates", textureBuffer);
-	r.setUniformMatrix4("modelViewMatrix", modelViewMatrix);
-	r.setUniformMatrix4("projectionMatrix", projectionMatrix);
-
-	// re-eanble the attributes
+	r.setUniformMatrix4("uModelViewMatrix", modelViewMatrix);
+	r.setUniformMatrix4("uProjectionMatrix", projectionMatrix);
+	
+	// re-enable the attributes
 	r.enableAttribute("aVertexPosition");
 	r.enableAttribute("aTextureCoordinates");
 
 	// Recreate the texture and set
 	texture = r.createTexture(image);
 	r.setTexture(0, texture);
-	
-	// In chrome - the canvas remains blank until you mouseover / mouse off the trigger button
-	// (seems like another element has to changes state, the button state changing on click release
-	// sometimes seems to trigger the reset if the delay to  restore is low but if it is longer
-	// you have to move the mouse out of the button) 
-
-	// However it seems you can also cause it to display again without this by changing the display style
-	let canvas = document.getElementById("fury");
-	if (!displayToggle) {
-		canvas.style = "display: inline-block;";
-		// Note setting it to inline initially does not work (i.e. what it already was) 
-		// if you wanted to set it back to inline would have to use setTimeout and wait (a ms seems sufficient though)
-		// for this test we just alternate
-	} else {
-		canvas.style = "display: inline;"; // Toggle with swap that it changes back and forth with repeated tests
-	}
-	displayToggle = !displayToggle;
-	// this implies you need to dirty the screen state somehow - which happens pretty easily if there are other elements
-	// but if the canvas is the only element on the screen it doesn't happen other than changing tab and back again
 });
 

@@ -1,55 +1,63 @@
 // This is to test the basic rendering functions of Fury
 // without any extra stuff (e.g. loading shaders and images from URIs, using an explicit scene, etc)
 
-// This is an attempt to recreate http://webglplayground.net/?template=webgl1 but with Fury instead
-
 // Shader Source
-var vsSource = [ "attribute vec3 aVertexPosition;",
-	"attribute vec2 aTextureCoordinates;",
-	"uniform mat4 modelViewMatrix;",
-	"uniform mat4 projectionMatrix;",
-	"varying vec2 vTextureCoordinates;",
-	"varying vec2 pos;",
-	"void main() { ",
-		"vTextureCoordinates = aTextureCoordinates;",
-		"gl_Position = projectionMatrix * modelViewMatrix * vec4(aVertexPosition, 1.0);",
-		"pos = vec2(aVertexPosition.x, aVertexPosition.y);",
-	"}"].join("\n");
-var fsSource = [ "#ifdef GL_ES",
-	"precision highp float;",
-	"#endif",
-	"varying vec2 vTextureCoordinates;",
-	"varying vec2 pos;",
-	"uniform float time;",
-	"uniform vec2 mouse;",
-	"uniform int mouseLeft;",
-	"uniform sampler2D tex0;",
-	"void main() {",
-		"float v1 = (sin(vTextureCoordinates.s+time) + 1.0) / 2.0;",
-		"float v2 = (cos(vTextureCoordinates.t+time) + 1.0) / 2.0;",
-		"float d = distance(mouse, pos);",
-		"vec2 tt = vec2(vTextureCoordinates.s+sin(time/10.0), vTextureCoordinates.t+cos(time/10.0));",
-		"vec4 c1 = texture2D(tex0, tt) * 1.1;",
-		"float avg = (c1.r+c1.g+c1.b)/3.0;",
-		"float r = c1.r+v1*pow(avg,4.0) - pow(d,pow(avg,2.0) +float(mouseLeft)*avg);",
-		"float g = c1.g+v2*pow(avg,4.0) - pow(d,pow(avg,2.0) +float(mouseLeft)*avg);",
-		"float b = c1.g - pow(d,pow(avg,2.0) +float(mouseLeft)*avg);",
-		"gl_FragColor = vec4(r, g, b, 1.0);",
-	"}" ].join("\n");
+let vsSource = `#version 300 es
+uniform mat4 uModelViewMatrix;
+uniform mat4 uProjectionMatrix;
+
+in vec3 aVertexPosition;
+in vec2 aTextureCoordinates;
+
+out vec2 vTextureCoordinates;
+out vec2 vPos;
+
+void main() { 
+	vTextureCoordinates = aTextureCoordinates;
+	vPos = vec2(aVertexPosition.x, aVertexPosition.y);
+	gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aVertexPosition, 1.0);
+}`;
+
+let fsSource = `#version 300 es
+precision highp float;
+
+in vec2 vTextureCoordinates;
+in vec2 vPos;
+
+uniform float uTime;
+uniform vec2 uMousePos;
+uniform int uMouseDown;
+uniform sampler2D uTexture;
+
+out vec4 fragColor;
+
+void main() {
+	float v1 = (sin(vTextureCoordinates.s + uTime) + 1.0) / 2.0;
+	float v2 = (cos(vTextureCoordinates.t + uTime) + 1.0) / 2.0;
+	float d = distance(uMousePos, vPos);
+	vec2 tt = vec2(vTextureCoordinates.s + sin(uTime / 10.0), vTextureCoordinates.t + cos(uTime / 10.0));
+	vec4 c1 = texture(uTexture, tt) * 1.1;
+	float avg = (c1.r + c1.g + c1.b) / 3.0;
+	float r = c1.r + v1 * pow(avg, 4.0) - pow(d, pow(avg, 2.0) + float(uMouseDown) * avg);
+	float g = c1.g + v2 * pow(avg, 4.0) - pow(d, pow(avg, 2.0) + float(uMouseDown) * avg);
+	float b = c1.g - pow(d,pow(avg, 2.0) + float(uMouseDown) * avg);
+	fragColor = vec4(r, g, b, 1.0);
+}`;
 
 // Init
 Fury.init('fury');
-var r = Fury.Renderer;
-var mat4 = Fury.Maths.mat4;
+const r = Fury.Renderer;
+const mat4 = Fury.Maths.mat4;
+const Camera = Fury.Camera;
 
 // Create Buffers
-var quadBuffer = r.createBuffer([
+let quadBuffer = r.createBuffer([
 		1.0,	1.0,	0.0,
 		-1.0,	1.0,	0.0,
 		1.0,	-1.0,	0.0,
 		-1.0,	-1.0,	0.0
 	], 3);
-var textureBuffer = r.createBuffer([
+let textureBuffer = r.createBuffer([
 		1.0,	1.0,
 		0.0,	1.0,
 		1.0,	0.0,
@@ -57,99 +65,83 @@ var textureBuffer = r.createBuffer([
 	], 2);
 
 // Setup Shader
-var vs = r.createShader("vertex", vsSource);
-var fs = r.createShader("fragment", fsSource);
-var shaderProgram = r.createShaderProgram(vs, fs);
+let vs = r.createShader("vertex", vsSource);
+let fs = r.createShader("fragment", fsSource);
+let shaderProgram = r.createShaderProgram(vs, fs);
 
 r.initAttribute(shaderProgram, "aVertexPosition");
 r.initAttribute(shaderProgram, "aTextureCoordinates");
-r.initUniform(shaderProgram, "modelViewMatrix"); // mat4
-r.initUniform(shaderProgram, "projectionMatrix"); //mat4
-r.initUniform(shaderProgram, "time"); // float
-r.initUniform(shaderProgram, "mouse"); // vec2
-r.initUniform(shaderProgram, "mouseLeft"); // bool
+r.initUniform(shaderProgram, "uModelViewMatrix"); // mat4
+r.initUniform(shaderProgram, "uProjectionMatrix"); //mat4
+r.initUniform(shaderProgram, "uTime"); // float
+r.initUniform(shaderProgram, "uMousePos"); // vec2
+r.initUniform(shaderProgram, "uMouseDown"); // bool
 
 r.useShaderProgram(shaderProgram);
 
 // Camera
-var camera = Fury.Camera.create({
+let camera = Camera.create({
 	type: "Orthonormal",
 	near: 0.1,
 	far: 100.0,
 	height: 2.0
 });
 
-var projectionMatrix = mat4.create(), modelViewMatrix = mat4.create();
+let projectionMatrix = mat4.create(), modelViewMatrix = mat4.create();
 camera.getProjectionMatrix(projectionMatrix);
 mat4.identity(modelViewMatrix);
 mat4.translate(modelViewMatrix, modelViewMatrix, [0.0, 0.0, -2.0]);
 
 // Events!
-$(document).keydown(function(event) {
-	event.preventDefault();
-	var key = event.which;
-});
-
-$(document).mousemove(function(event) {
+document.getElementById('fury').addEventListener("mousemove", function(event) {
 	event.preventDefault();
 	// transforming cursor coordinates to [-1.0, 1.0] range
 	// [0,0] being in the left bottom corner to match the vertex coordinates
-	var x = (event.pageX / 512)*2.0 - 1.0;
-	var y = 0.0 - ((event.pageY / 512)*2.0 - 1.0);
-	r.setUniformFloat2("mouse", x, y);
+	let x = (event.pageX / 512) * 2.0 - 1.0;
+	let y = 0.0 - ((event.pageY / 512) * 2.0 - 1.0);
+	r.setUniformFloat2("uMousePos", x, y);
 });
 
-$(document).mousedown(function(event) {
+document.addEventListener("mousedown", function(event) {
 	event.preventDefault();
-	var key = event.which;
-	var x = event.pageX;
-	var y = event.pageY;
-	if (key==1) {
-		r.setUniformBoolean("mouseLeft", true);
+	if (event.button == 0) {
+		r.setUniformBoolean("uMouseDown", true);
 	}
 });
-
-$(document).mouseup(function(event) {
+document.addEventListener("mouseup", function(event) {
 	event.preventDefault();
-	var key = event.which;
-	if (key==1) {
-		r.setUniformBoolean("mouseLeft", false);
+	if (event.button == 0) {
+		r.setUniformBoolean("uMouseDown", false);
 	}
-});
-
-$(document).mouseleave(function(event) {
-	event.preventDefault();
-	r.setUniformFloat2("mouse", 0, 0);
 });
 
 // Loop
-var time = Date.now(), runningTime = 0, delta = 0;
+let time = Date.now(), runningTime = 0, delta = 0;
 
 // Bind Shader properties that do no change
 r.enableAttribute("aVertexPosition");
 r.enableAttribute("aTextureCoordinates");
 r.setAttribute("aVertexPosition", quadBuffer);
 r.setAttribute("aTextureCoordinates", textureBuffer);
-r.setUniformMatrix4("modelViewMatrix", modelViewMatrix);
-r.setUniformMatrix4("projectionMatrix", projectionMatrix);
+r.setUniformMatrix4("uModelViewMatrix", modelViewMatrix);
+r.setUniformMatrix4("uProjectionMatrix", projectionMatrix);
 
 
-var loop = function(){
+let loop = function(){
 	delta = Date.now() - time;
 	time += delta;
 	runningTime += delta;
-	r.setUniformFloat("time", runningTime/1000);
+	r.setUniformFloat("uTime", runningTime / 1000);
 	r.clear();
 	r.drawTriangleStrip(quadBuffer.numItems);
 	window.requestAnimationFrame(loop);
 };
 
 // Create Texture
-// This is a bit syntaxically messy
-var texture, image = new Image();
+let texture, image = new Image();
 image.onload = function() {
 	texture = r.createTexture(image);
-	r.setTexture(0, texture); 	// Note don't actually need to set tex0 uniform to 0, unlike in WebGL playground demo code
+	r.setTexture(0, texture);
 	loop();
 };
 image.src = "concrete1.jpg";
