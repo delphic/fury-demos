@@ -11436,20 +11436,20 @@ module.exports = (function() {
 
 			object.transform.updateMatrix();
 			if (shader.mMatrixUniformName) {
-				// TODO: Should send either MV Matrix or M and V Matrices
-				// m could also be considered "world" matrix
 				r.setUniformMatrix4(shader.mMatrixUniformName, object.transform.matrix);
 			}
 
-			// TODO: always doing a mvMatrix when the camera matrix is not changing is 
-			// unnecessary CPU work, should update shaders to implement the above suggsetion
-			mat4.multiply(mvMatrix, cameraMatrix, object.transform.matrix);
-			r.setUniformMatrix4(shader.mvMatrixUniformName, mvMatrix);
+			if (shader.vMatrixUniformName) {
+				r.setUniformMatrix4(shader.vMatrixUniformName, cameraMatrix);
+			}
+
+			if (shader.mvMatrixUniformName) {
+				mat4.multiply(mvMatrix, cameraMatrix, object.transform.matrix);
+				r.setUniformMatrix4(shader.mvMatrixUniformName, mvMatrix);
+			}
 
 			if (shader.nMatrixUniformName) {
-				// BUG?: Pretty sure this is not correct, should be the other way around
-				// TODO: Test (presumably via lighting)
-				mat3.normalFromMat4(mvMatrix, nMatrix);
+				mat3.normalFromMat4(nMatrix, mvMatrix);
 				r.setUniformMatrix3(shader.nMatrixUniformName, nMatrix);
 			}
 
@@ -11530,10 +11530,27 @@ module.exports = (function() {
 			shader.validateMaterial = config.validateMaterial;
 		}
 
-		shader.pMatrixUniformName = config.pMatrixUniformName || "pMatrix";
-		shader.mvMatrixUniformName = config.mvMatrixUniformName || "mvMatrix";
+		shader.pMatrixUniformName = config.pMatrixUniformName;
+		shader.mvMatrixUniformName = config.mvMatrixUniformName;
 		shader.nMatrixUniformName = config.nMatrixUniformName;
 		shader.mMatrixUniformName = config.mMatrixUniformName;
+		shader.vMatrixUniformName = config.vMatrixUniformName;
+
+		if (!shader.pMatrixUniformName && config.uniformNames.includes("pMatrix")) {
+			shader.pMatrixUniformName = "pMatrix";
+		}
+
+		if (!shader.mvMatrixUniformName && config.uniformNames.includes("mvMatrix")) {
+			shader.mvMatrixUniformName = "mvMatrix";
+		}
+
+		if (!shader.mMatrixUniformName && config.uniformNames.includes("mMatrix")) {
+			shader.mMatrixUniformName = "mMatrix";
+		}
+
+		if (!shader.vMatrixUniformName && config.uniformNames.includes("vMatrix")) {
+			shader.vMatrixUniformName = "vMatrix";
+		}
 
 		return shader;
 	};

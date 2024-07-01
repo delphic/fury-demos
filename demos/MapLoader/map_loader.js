@@ -1,20 +1,20 @@
+const { Maths, Scene, Camera, Input, Shader, GameLoop } = Fury;
+
 // globalize glMatrix
-Fury.Maths.globalize();
+Maths.globalize();
 
 // Init Fury
 Fury.init({ canvasId: "fury" });
 
 // Create Camera & Scene
-let camera = Fury.Camera.create({ 
+let camera = Camera.create({ 
 	near: 0.1,
 	far: 1000.0,
 	fov: Fury.Maths.toRadian(60),
 	ratio: 1.0,
 	position: [ 0.0, 1.0, 0.0 ] 
 });
-let scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
-
-let Maths = Fury.Maths;
+let scene = Scene.create({ camera: camera, enableFrustumCulling: true });
 let vec3Pool = Maths.vec3Pool;
 
 // Fullscreen logic
@@ -32,37 +32,41 @@ window.addEventListener('resize', updateCanvasSize);
 updateCanvasSize();
 
 // Create shader
-let shader = Fury.Shader.create({
-	vsSource: [
-		"attribute vec3 aVertexPosition;",
-		"attribute vec2 aTextureCoord;",
+let shader = Shader.create({
+	vsSource: `#version 300 es
+uniform mat4 uMMatrix;
+uniform mat4 uVMatrix;
+uniform mat4 uPMatrix;
+uniform float uSScale;
+uniform float uTScale;
 
-		"uniform mat4 uMVMatrix;",
-		"uniform mat4 uPMatrix;",
+in vec3 aVertexPosition;
+in vec2 aTextureCoord;
 
-		"uniform float uSScale;",
-		"uniform float uTScale;",
+out vec2 vTextureCoord;
 
-		"varying vec2 vTextureCoord;",
-		"void main(void) {",
-			"gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
-			"vTextureCoord = vec2(uSScale * aTextureCoord.s, uTScale * aTextureCoord.t);",
-		"}"].join('\n'),
-	fsSource: [
-		"precision mediump float;",
+void main(void) {
+	gl_Position = uPMatrix * uVMatrix * uMMatrix * vec4(aVertexPosition, 1.0);
+	vTextureCoord = vec2(uSScale * aTextureCoord.s, uTScale * aTextureCoord.t);
+}`,
+	fsSource: `#version 300 es
+precision highp float;
 
-		"varying vec2 vTextureCoord;",
+uniform sampler2D uSampler;
 
-		"uniform sampler2D uSampler;",
+in vec2 vTextureCoord;
 
-		"void main(void) {",
-			"gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));",
-		"}"].join('\n'),
+out vec4 fragColor;
+
+void main(void) {
+	fragColor = texture(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+}`,
 	attributeNames: [ "aVertexPosition", "aTextureCoord" ],
-	uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler", "uSScale", "uTScale" ],
+	uniformNames: [ "uMMatrix", "uVMatrix", "uPMatrix", "uSampler", "uSScale", "uTScale" ],
 	textureUniformNames: [ "uSampler" ],
 	pMatrixUniformName: "uPMatrix",
-	mvMatrixUniformName: "uMVMatrix",
+	mMatrixUniformName: "uMMatrix",
+	vMatrixUniformName: "uVMatrix",
 	bindMaterial: function(material) {
 		this.enableAttribute("aVertexPosition");
 		this.enableAttribute("aTextureCoord");
@@ -363,16 +367,16 @@ let loop = function(elapsed) {
 	// Rotation around axis
 	let ry = 0, rx = 0;
 
-	if (Fury.Input.keyDown("Left")) {
+	if (Input.keyDown("Left")) {
 		ry += lookSpeed * elapsed;
 	}
-	if (Fury.Input.keyDown("Right")) {
+	if (Input.keyDown("Right")) {
 		ry -= lookSpeed * elapsed;
 	}
-	if (Fury.Input.keyDown("Up")) {
+	if (Input.keyDown("Up")) {
 		rx += lookSpeed * elapsed;
 	}
-	if (Fury.Input.keyDown("Down")) {
+	if (Input.keyDown("Down")) {
 		rx -= lookSpeed * elapsed;
 	}
 
@@ -385,9 +389,9 @@ let loop = function(elapsed) {
 	quat.rotateX(camera.rotation, camera.rotation, verticalLookAngle - lastVerticalLookAngle);
 
 	let inputX = 0, inputY = 0, inputZ = 0;
-	inputZ = Fury.Input.getAxis("s", "w");
-	inputY = Fury.Input.getAxis("e", "q"); 
-	inputX = Fury.Input.getAxis("d", "a");
+	inputZ = Input.getAxis("s", "w");
+	inputY = Input.getAxis("e", "q"); 
+	inputX = Input.getAxis("d", "a");
 
 	vec3.transformQuat(localX, Maths.vec3X, camera.rotation);
 	vec3.transformQuat(localZ, Maths.vec3Z, camera.rotation);
@@ -411,8 +415,8 @@ let lockCount = 0;
 let loadCallback = () => {
 	lockCount--;
 	if (lockCount <= 0) {
-		Fury.GameLoop.init({ loop: loop,  maxFrameTimeMs: 66 });
-		Fury.GameLoop.start();
+		GameLoop.init({ loop: loop,  maxFrameTimeMs: 66 });
+		GameLoop.start();
 	}
 };
 
@@ -478,6 +482,7 @@ let Plane = (function() {
 
 	// takes three planes, returns vec3? representing the point of intersection
 	exports.triangulate = function(a, b, c) {
+		let point = null;
 		let edge = vec3Pool.request();
 
 		// calculate edge direction of intersection of planes a and b
@@ -488,7 +493,7 @@ let Plane = (function() {
 		if (vec3.sqrLen(edge) > 0.000001 && Math.abs(vec3.dot(edge, c)) > 0.001 ) {
 			// there is an intersection
 			// calculate vector from origin to edge direction
-			let point = vec3.create();
+			point = vec3.create();
 			vec3.scaleAndAdd(point, point, a, a[3]);
 			vec3.scaleAndAdd(point, point, b, b[3]);
 			
@@ -501,10 +506,11 @@ let Plane = (function() {
 			vec3Pool.return(edge);
 
 			// write point of intersection into point and return
-			return vec3.scaleAndAdd(point, point, edge, distance);
+			vec3.scaleAndAdd(point, point, edge, distance);
 		}
+
 		vec3Pool.return(edge);
-		return null;
+		return point;
 	};
 
 	// Create a plane from three points

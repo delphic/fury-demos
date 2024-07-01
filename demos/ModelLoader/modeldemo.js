@@ -1,7 +1,9 @@
 // Render a Model
 // Testing a model loader class
+let { Maths, Camera, Scene, Shader, Renderer } = Fury;
+
 // globalize glMatrix
-Fury.Maths.globalize();
+Maths.globalize();
 
 let configurations = {
 	"frog": { uri: "frog.gltf", position: [ 0, 0, 1 ], sceneObjects: null },
@@ -15,40 +17,43 @@ Fury.init("fury");
 
 // TODO: Orbit camera view - zoom / rotate etc
 let cameraPosition = vec3.create();
-let cameraRotation = Fury.Maths.quatEuler(-30, 135, 0);
+let cameraRotation = Maths.quatEuler(-30, 135, 0);
 
-Fury.Renderer.clearColor(0.1, 0.1, 0.2, 1.0);
-let camera = Fury.Camera.create({ near: 0.01, far: 10000.0, fov: 1.0472, ratio: 1.0, position: cameraPosition, rotation: cameraRotation });
-let scene = Fury.Scene.create({ camera: camera });
+// TODO: clear color as scene property
+Renderer.clearColor(0.1, 0.1, 0.2, 1.0);
+let camera = Camera.create({ near: 0.01, far: 10000.0, fov: 1.0472, ratio: 1.0, position: cameraPosition, rotation: cameraRotation });
+let scene = Scene.create({ camera: camera });
 
-let textureShader = Fury.Shader.create({
-	vsSource: [
-		"attribute vec3 aVertexPosition;",
-		"attribute vec3 aVertexNormal;",
-		"attribute vec2 aTextureCoord;",
+let textureShader = Shader.create({
+	vsSource: `#version 300 es
+uniform mat4 uMVMatrix;
+uniform mat4 uPMatrix;
 
-		"uniform mat4 uMVMatrix;",
-		"uniform mat4 uPMatrix;",
+in vec3 aVertexPosition;
+in vec3 aVertexNormal;
+in vec2 aTextureCoord;
 
-		"varying vec2 vTextureCoord;",
-		"varying float vLightWeight;",
+out vec2 vTextureCoord;
+out float vLightWeight;
 
-		"void main(void) {",
-			"gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
-			"vTextureCoord = aTextureCoord;",
-			"vLightWeight = 0.5 + 0.5 * max(dot(aVertexNormal, normalize(vec3(-1.0, 2.0, 1.0))), 0.0);",
-		"}"].join('\n'),
-	fsSource: [
-		"precision mediump float;",
+void main(void) {
+	gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+	vTextureCoord = aTextureCoord;
+	vLightWeight = 0.5 + 0.5 * max(dot(aVertexNormal, normalize(vec3(-1.0, 2.0, 1.0))), 0.0);
+}`,
+	fsSource: `#version 300 es
+precision highp float;
 
-		"varying vec2 vTextureCoord;",
-		"varying float vLightWeight;",
+uniform sampler2D uSampler;
 
-		"uniform sampler2D uSampler;",
+in vec2 vTextureCoord;
+in float vLightWeight;
 
-		"void main(void) {",
-			"gl_FragColor = vec4(vLightWeight * vec3(1.0, 1.0, 1.0), 1.0) * texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));",
-		"}"].join('\n'),
+out vec4 fragColor;
+
+void main(void) {
+	fragColor = vec4(vLightWeight * vec3(1.0, 1.0, 1.0), 1.0) * texture(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+}`,
 	attributeNames: [ "aVertexPosition", "aVertexNormal", "aTextureCoord", ],
 	uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler" ],
 	textureUniformNames: [ "uSampler" ],
@@ -66,45 +71,44 @@ let textureShader = Fury.Shader.create({
 		this.setIndexedAttribute(mesh.indexBuffer);
 	}
 });
-let colorShader =  Fury.Shader.create({
-	vsSource: [
-		"attribute vec3 aVertexPosition;",
-		"attribute vec3 aVertexNormal;",
-		"attribute vec2 aTextureCoord;",
+let colorShader =  Shader.create({
+	vsSource: `#version 300 es
+in vec3 aVertexPosition;
+in vec3 aVertexNormal;
+in vec2 aTextureCoord;
+in vec4 aColor0;
+in vec4 aColor1;
 
-		"attribute vec4 aColor0;",
-		"attribute vec4 aColor1;",
+uniform mat4 uMVMatrix;
+uniform mat4 uPMatrix;
 
-		"uniform mat4 uMVMatrix;",
-		"uniform mat4 uPMatrix;",
+out vec2 vTextureCoord;
+out float vLightWeight;
+out vec4 vColor0;
+out vec4 vColor1;
 
-		"varying vec2 vTextureCoord;",
-		"varying float vLightWeight;",
+void main(void) {
+	gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+	vTextureCoord = aTextureCoord;
+	vLightWeight = 0.5 + 0.5 * max(dot(aVertexNormal, normalize(vec3(-1.0, 2.0, 1.0))), 0.0);
+	vColor0 = aColor0;
+	vColor1 = aColor1;
+}`,
+	fsSource: `#version 300 es
+precision highp float;
 
-		"varying vec4 vColor0;",
-		"varying vec4 vColor1;",
+in vec4 vColor0;
+in vec4 vColor1;
+in vec2 vTextureCoord;
+in float vLightWeight;
 
-		"void main(void) {",
-			"gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
-			"vTextureCoord = aTextureCoord;",
-			"vLightWeight = 0.5 + 0.5 * max(dot(aVertexNormal, normalize(vec3(-1.0, 2.0, 1.0))), 0.0);",
-			"vColor0 = aColor0;",
-			"vColor1 = aColor1;",
-		"}"].join('\n'),
-	fsSource: [
-		"precision mediump float;",
+uniform sampler2D uSampler;
 
-		"varying vec4 vColor0;",
-		"varying vec4 vColor1;",
+out vec4 fragColor;
 
-		"varying vec2 vTextureCoord;",
-		"varying float vLightWeight;",
-
-		"uniform sampler2D uSampler;",
-
-		"void main(void) {",
-			"gl_FragColor = vec4(vLightWeight * vec3(1.0, 1.0, 1.0), 1.0) * vColor0;",
-		"}"].join('\n'),
+void main(void) {
+	fragColor = vec4(vLightWeight * vec3(1.0, 1.0, 1.0), 1.0) * vColor0;
+}`,
 	attributeNames: [ "aVertexPosition", "aVertexNormal", "aTextureCoord", "aColor0", "aColor1" ],
 	uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler" ],
 	textureUniformNames: [ "uSampler" ],
@@ -115,7 +119,10 @@ let colorShader =  Fury.Shader.create({
 		this.enableAttribute("aVertexNormal");
 		this.enableAttribute("aTextureCoord");
 		this.enableAttribute("aColor0");
-		this.enableAttribute("aColor1");
+		this.enableAttribute("aColor1"); 
+		// todo: in example "VertexColouredCube"
+		// aTextureCoord and aColor1 are coming back with attribute location of -1
+		// but the render still works
 	},
 	bindBuffers: function(mesh) {
 		this.setAttribute("aVertexPosition", mesh.vertexBuffer);
@@ -171,19 +178,19 @@ let loop = () => {
 			let transform = instance.transforms[channel.node];
 			switch (channel.type) {
 				case "translation":
-					Fury.Maths.vec3.set(vec3From, values[prev * 3], values[prev * 3 + 1], values[prev * 3 + 2]);
-					Fury.Maths.vec3.set(vec3To, values[next * 3], values[next * 3 + 1], values[next * 3 + 2]);
-					Fury.Maths.vec3.lerp(transform.position, vec3From, vec3To, ratio);
+					vec3.set(vec3From, values[prev * 3], values[prev * 3 + 1], values[prev * 3 + 2]);
+					vec3.set(vec3To, values[next * 3], values[next * 3 + 1], values[next * 3 + 2]);
+					vec3.lerp(transform.position, vec3From, vec3To, ratio);
 					break;
 				case "rotation":
-					Fury.Maths.vec4.set(vec4From, values[prev * 4], values[prev * 4 + 1], values[prev * 4 + 2], values[prev * 4 + 3]);
-					Fury.Maths.vec4.set(vec4To, values[next * 4], values[next * 4 + 1], values[next * 4 + 2], values[next * 4 + 3]);
-					Fury.Maths.quat.slerp(transform.rotation, vec4From, vec4To, ratio);
+					vec4.set(vec4From, values[prev * 4], values[prev * 4 + 1], values[prev * 4 + 2], values[prev * 4 + 3]);
+					vec4.set(vec4To, values[next * 4], values[next * 4 + 1], values[next * 4 + 2], values[next * 4 + 3]);
+					quat.slerp(transform.rotation, vec4From, vec4To, ratio);
 					break;
 				case "scale":
-					Fury.Maths.vec3.set(vec3From, values[prev * 3], values[prev * 3 + 1], values[prev * 3 + 2]);
-					Fury.Maths.vec3.set(vec3To, values[next * 3], values[next * 3 + 1], values[next * 3 + 2]);
-					Fury.Maths.vec3.lerp(transform.scale, vec3From, vec3To, ratio);
+					vec3.set(vec3From, values[prev * 3], values[prev * 3 + 1], values[prev * 3 + 2]);
+					vec3.set(vec3To, values[next * 3], values[next * 3 + 1], values[next * 3 + 2]);
+					vec3.lerp(transform.scale, vec3From, vec3To, ratio);
 					break;
 			}
 		}
