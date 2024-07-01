@@ -10297,6 +10297,23 @@ module.exports = (function(){
 			renderMode: RenderMode.TriangleStrip
 		};
 	};
+	
+	exports.createSpriteQuadMeshConfig = (w, h) => {
+		let sx = w/2, sy = h/2;
+		return {
+			positions: [ 
+				sx, sy, 0.0,
+				-sx, sy, 0.0, 
+				sx, -sy, 0.0,
+				-sx, -sy, 0.0 ],
+			uvs: [
+				1.0, 1.0,
+				0.0, 1.0,
+				1.0, 0.0,
+				0.0, 0.0 ],
+			renderMode: RenderMode.TriangleStrip
+		};
+	};
 
 	exports.createUIQuadMeshConfig = function(w, h) {
 		return {
@@ -10316,6 +10333,8 @@ module.exports = (function(){
 			renderMode: RenderMode.Triangles
 		};
 	};
+	// todo: It feels like a better config or builder pattern could bring all these quads methods together
+	// i.e. "includeNormals", "indexed" and "origin" : bottomLeft, centered, custom etc
 
 	exports.createCubiodMeshConfig = (w, h, d) => {
 		let x = w / 2, y = h / 2, z = d / 2;
@@ -10843,10 +10862,20 @@ exports.initUniform = function(shaderProgram, name) {
 };
 
 exports.enableAttribute = function(name) {
-	gl.enableVertexAttribArray(currentShaderProgram.attributeLocations[name]);
+	let index = currentShaderProgram.attributeLocations[name];
+	if (index >= 0) {
+		gl.enableVertexAttribArray(index);
+	} else {
+		console.warn("Attribute '" + name + "' does not have a valid attribute location to enable");
+	}
 };
 exports.disableAttribute = function(name) {
-	gl.disableVertexAttribArray(currentShaderProgram.attributeLocations[name]);
+	let index = currentShaderProgram.attributeLocations[name];
+	if (index >= 0) {
+		gl.disableVertexAttribArray(currentShaderProgram.attributeLocations[name]);
+	} else {
+		console.warn("Attribute '" + name + "' does not have a valid attribute location to disable");
+	}
 };
 exports.setAttribute = function(name, buffer) {
 	gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -11003,7 +11032,7 @@ module.exports = (function() {
 	// to check objects are used or reference count them - will need to track created scenes
 
 	// glState Tracking - shared across scenes
-	let currentShaderId, currentMaterialId, currentMeshId, pMatrixRebound = false;
+	let currentShaderId, currentMaterialId, currentMeshId, pMatrixRebound = false, vMatrixRebound = false;
 	let nextTextureLocation = 0, currentTextureBindings = {}, currentTextureLocations = [];	// keyed on texture.id to binding location, keyed on binding location to texture.id
 
 	exports.create = function({ camera, enableFrustumCulling, forceSphereCulling }) {
@@ -11248,11 +11277,12 @@ module.exports = (function() {
 			}
 			camera.getProjectionMatrix(pMatrix);
 			// Camera Matrix should transform world space -> camera space
-			quat.invert(inverseCameraRotation, camera.rotation);						// TODO: Not quite sure about this, camera's looking in -z but THREE.js does it so it's probably okay
+			quat.invert(inverseCameraRotation, camera.rotation); // camera looks in negative Z direction
 			mat4.fromQuat(cameraMatrix, inverseCameraRotation);
-			mat4.translate(cameraMatrix, cameraMatrix, vec3.set(cameraOffset, -camera.position[0], -camera.position[1], -camera.position[2]));
+			mat4.translate(cameraMatrix, cameraMatrix, vec3.negate(cameraOffset, camera.position));
 
 			pMatrixRebound = false;
+			vMatrixRebound = false;
 			alphaRenderObjects.length = 0; 
 
 			// TODO: Scene Graph
@@ -11358,12 +11388,20 @@ module.exports = (function() {
 				currentShaderId = shader.id;
 				r.useShaderProgram(shader.shaderProgram);
 				pMatrixRebound = false;
+				vMatrixRebound = false;
 			}
 
 			if (!pMatrixRebound) {
 				// New Shader or New Frame, rebind projection Matrix
 				r.setUniformMatrix4(shader.pMatrixUniformName, pMatrix);
 				pMatrixRebound = true;
+			}
+
+			if (!vMatrixRebound) {
+				if (shader.vMatrixUniformName) {
+					r.setUniformMatrix4(shader.vMatrixUniformName, cameraMatrix);
+				}
+				vMatrixRebound = true;
 			}
 
 			if (!material.id || material.id != currentMaterialId || material.dirty) {
@@ -11437,10 +11475,6 @@ module.exports = (function() {
 			object.transform.updateMatrix();
 			if (shader.mMatrixUniformName) {
 				r.setUniformMatrix4(shader.mMatrixUniformName, object.transform.matrix);
-			}
-
-			if (shader.vMatrixUniformName) {
-				r.setUniformMatrix4(shader.vMatrixUniformName, cameraMatrix);
 			}
 
 			if (shader.mvMatrixUniformName) {

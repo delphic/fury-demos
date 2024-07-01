@@ -8,36 +8,34 @@ Fury.Maths.globalize();
 Fury.init("fury");
 
 // Create shader
-var shader = Fury.Shader.create({
-	vsSource: [
-    "#version 300 es",
-    "in vec3 aVertexPosition;",
-    "in vec3 aVertexNormal;",
-    "in vec2 aTextureCoord;",
+let shader = Fury.Shader.create({
+	vsSource: `#version 300 es
+in vec3 aVertexPosition;
+in vec3 aVertexNormal;
+in vec2 aTextureCoord;
 
-    "uniform mat4 uMVMatrix;",
-    "uniform mat4 uPMatrix;",
+uniform mat4 uMVMatrix;
+uniform mat4 uPMatrix;
 
-    "out vec3 vTextureCoord;",
+out vec3 vTextureCoord;
 
-    "void main(void) {",
-        "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
-        "vTextureCoord = vec3(aTextureCoord, 1.0 + aVertexNormal.y);",
-    "}"].join('\n'),
-	fsSource: [
-    "#version 300 es",
-    "precision highp float;",
-    "precision highp sampler2DArray;",
+void main(void) {
+	gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+	vTextureCoord = vec3(aTextureCoord, 1.0 + aVertexNormal.y);
+}`,
+	fsSource: `#version 300 es
+precision highp float;
+precision highp sampler2DArray;
 
-    "in vec3 vTextureCoord;",
+in vec3 vTextureCoord;
 
-    "uniform sampler2DArray uSampler;",
+uniform sampler2DArray uSampler;
 
-		"out vec4 fragColor;",
+out vec4 fragColor;
 
-    "void main(void) {",
-        "fragColor = texture(uSampler, vTextureCoord);",
-    "}"].join('\n'),
+void main(void) {
+	fragColor = texture(uSampler, vTextureCoord);
+}`,
 	attributeNames: [ "aVertexPosition", "aVertexNormal", "aTextureCoord" ],
 	uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler" ],
 	textureUniformNames: [ "uSampler" ],
@@ -56,28 +54,23 @@ var shader = Fury.Shader.create({
 	}
 });
 
-var material = Fury.Material.create({ shader : shader });
+let material = Fury.Material.create({ shader : shader });
 
 // Create Mesh
-var cubeJson = {
-	positions: [ -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0 ],
-	normals: [ 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0],
-	uvs: [ 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0 ],
-	indices: [ 0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15, 16, 17, 18, 16, 18, 19, 20, 21, 22, 20, 22, 23 ]
-};
-var cube = Fury.Mesh.create(cubeJson);
+let cubeConfig = Fury.Primitives.createCubiodMeshConfig(2, 2, 2);
+let cube = Fury.Mesh.create(cubeConfig);
 
 // Create Camera & Scene
-var camera = Fury.Camera.create({ near: 0.1, far: 1000000.0, fov: 1.0472, ratio: 1.0, position: vec3.fromValues(0.0, 0.0, 6.0) });
-var scene = Fury.Scene.create({ camera: camera });
+let camera = Fury.Camera.create({ near: 0.1, far: 1000000.0, fov: 1.0472, ratio: 1.0, position: [ 0.0, 0.0, 6.0 ] });
+let scene = Fury.Scene.create({ camera: camera });
 
 Fury.Renderer.clearColor(0.1, 0.1, 0.2, 1.0);
 
 // Add Block to Scene
-var block = scene.add({ material: material, mesh: cube });
+let block = scene.add({ material: material, mesh: cube });
 
-var loop = function(){
-	var rotation = block.transform.rotation;
+let loop = function(){
+	let rotation = block.transform.rotation;
 
 	quat.rotateX(rotation, rotation, 0.01);
 	quat.rotateY(rotation, rotation, 0.005);
@@ -88,7 +81,7 @@ var loop = function(){
 };
 
 // Create Texture
-var image = new Image();
+let image = new Image();
 image.onload = function() {
 	material.textures["uSampler"] = Fury.Texture.createTextureArray({ 
 		source: image,

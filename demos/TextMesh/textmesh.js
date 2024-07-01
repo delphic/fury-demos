@@ -39,7 +39,7 @@ window.onload = (event) => {
 	let canvas = document.getElementById("fury");
 	canvas.setAttribute(
 		"style",
-		"height: " + (canvas.height * scaleFactor / window.devicePixelRatio) + "px;" +
+		"height: " + (canvas.height * scaleFactor / window.devicePixelRatio) + "px; " +
 		"width: " + (canvas.width * scaleFactor / window.devicePixelRatio) + "px;");
 	
 	// Create camera and scene
@@ -49,7 +49,7 @@ window.onload = (event) => {
 		far: 1000000.0,
 		height: canvas.height,
 		ratio: canvas.width / canvas.height,
-		position: vec3.fromValues(0.0, 0.0, 1.0)
+		position: [ 0.0, 0.0, 1.0 ]
 	});
 	scene = Fury.Scene.create({ camera: camera });
 

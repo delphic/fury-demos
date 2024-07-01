@@ -9,29 +9,32 @@ Fury.Maths.globalize();
 Fury.init("fury");
 
 // Create shader
-var shader = Fury.Shader.create({
-	vsSource: [
-		"attribute vec3 aVertexPosition;",
-    "attribute vec2 aTextureCoord;",
+let shader = Fury.Shader.create({
+	vsSource: `#version 300 es
+in vec3 aVertexPosition;
+in vec2 aTextureCoord;
 
-    "uniform mat4 uMVMatrix;",
-    "uniform mat4 uPMatrix;",
+uniform mat4 uMVMatrix;
+uniform mat4 uPMatrix;
 
-    "varying vec2 vTextureCoord;",
-    "void main(void) {",
-        "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
-        "vTextureCoord = aTextureCoord;",
-    "}"].join('\n'),
-	fsSource: [
-	"precision mediump float;",
+out vec2 vTextureCoord;
 
-    "varying vec2 vTextureCoord;",
+void main(void) {
+	gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+	vTextureCoord = aTextureCoord;
+}`,
+	fsSource: `#version 300 es
+precision highp float;
 
-    "uniform sampler2D uSampler;",
+in vec2 vTextureCoord;
 
-    "void main(void) {",
-        "gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));",
-    "}"].join('\n'),
+uniform sampler2D uSampler;
+
+out vec4 fragColor;
+
+void main(void) {
+	fragColor = texture(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+}`,
 	attributeNames: [ "aVertexPosition", "aTextureCoord" ],
 	uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler" ],
 	textureUniformNames: [ "uSampler" ],
@@ -48,101 +51,21 @@ var shader = Fury.Shader.create({
 	}
 });
 
-var material = Fury.Material.create({ shader : shader });
+let material = Fury.Material.create({ shader : shader });
 
 // Create Mesh
-var cube = Fury.Mesh.create({
-	positions: [
-		// Front face
-		-1.0, -1.0,  1.0,
-		 1.0, -1.0,  1.0,
-		 1.0,  1.0,  1.0,
-		-1.0,  1.0,  1.0,
-
-		// Back face
-		-1.0, -1.0, -1.0,
-		-1.0,  1.0, -1.0,
-		 1.0,  1.0, -1.0,
-		 1.0, -1.0, -1.0,
-
-		// Top face
-		-1.0,  1.0, -1.0,
-		-1.0,  1.0,  1.0,
-		 1.0,  1.0,  1.0,
-		 1.0,  1.0, -1.0,
-
-		// Bottom face
-		-1.0, -1.0, -1.0,
-		 1.0, -1.0, -1.0,
-		 1.0, -1.0,  1.0,
-		-1.0, -1.0,  1.0,
-
-		// Right face
-		 1.0, -1.0, -1.0,
-		 1.0,  1.0, -1.0,
-		 1.0,  1.0,  1.0,
-		 1.0, -1.0,  1.0,
-
-		// Left face
-		-1.0, -1.0, -1.0,
-		-1.0, -1.0,  1.0,
-		-1.0,  1.0,  1.0,
-		-1.0,  1.0, -1.0],
-	uvs: [
-		// Front face
-		0.0, 0.0,
-		1.0, 0.0,
-		1.0, 1.0,
-		0.0, 1.0,
-
-		// Back face
-		1.0, 0.0,
-		1.0, 1.0,
-		0.0, 1.0,
-		0.0, 0.0,
-
-		// Top face
-		0.0, 1.0,
-		0.0, 0.0,
-		1.0, 0.0,
-		1.0, 1.0,
-
-		// Bottom face
-		1.0, 1.0,
-		0.0, 1.0,
-		0.0, 0.0,
-		1.0, 0.0,
-
-		// Right face
-		1.0, 0.0,
-		1.0, 1.0,
-		0.0, 1.0,
-		0.0, 0.0,
-
-		// Left face
-		0.0, 0.0,
-		1.0, 0.0,
-		1.0, 1.0,
-		0.0, 1.0 ],
-	indices: [
-		0, 1, 2,      0, 2, 3,    // Front face
-		4, 5, 6,      4, 6, 7,    // Back face
-		8, 9, 10,     8, 10, 11,  // Top face
-		12, 13, 14,   12, 14, 15, // Bottom face
-		16, 17, 18,   16, 18, 19, // Right face
-		20, 21, 22,   20, 22, 23  // Left face
-		] });
-
+let cubeConfig = Fury.Primitives.createCubiodMeshConfig(2, 2, 2);
+let cube = Fury.Mesh.create(cubeConfig);
 
 // Create Camera & Scene
-var camera = Fury.Camera.create({ near: 0.1, far: 1000000.0, fov: 1.0472, ratio: 1.0, position: vec3.fromValues(0.0, 0.0, 6.0) });
-var scene = Fury.Scene.create({ camera: camera });
+let camera = Fury.Camera.create({ near: 0.1, far: 1000000, fov: 1.0472, ratio: 1, position: [ 0.0, 0.0, 6.0 ] });
+let scene = Fury.Scene.create({ camera: camera });
 
 // Add Crate to Scene
-var crate = scene.add({ material: material, mesh: cube });
+let crate = scene.add({ material: material, mesh: cube });
 
-var loop = function(){
-	var rotation = crate.transform.rotation;
+let loop = function(){
+	let rotation = crate.transform.rotation;
 	quat.rotateX(rotation, rotation, 0.01);
 	quat.rotateY(rotation, rotation, 0.005);
 	quat.rotateZ(rotation, rotation, 0.0025);
@@ -151,7 +74,7 @@ var loop = function(){
 };
 
 // Create Texture
-var image = new Image();
+let image = new Image();
 image.onload = function() {
 	material.textures["uSampler"] = Fury.Texture.create({ source: image, quality: "high" });
 	loop();

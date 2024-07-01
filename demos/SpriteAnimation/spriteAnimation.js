@@ -1,11 +1,6 @@
 let createQuad = function(size) {
-	return Fury.Mesh.create({
-		positions: [ size * 0.5, size * 0.5, 0.0, size * -0.5,  size * 0.5, 0.0, size * 0.5, size * -0.5, 0.0, size * -0.5, size * -0.5, 0.0 ],
-		uvs: [ 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0 ],
-		renderMode: Fury.Renderer.RenderMode.TriangleStrip
-	});
+	return Fury.Mesh.create(Fury.Primitives.createSpriteQuadMeshConfig(size, size));
 };
-
 let spriteData = null;
 
 let setFrame = function(index) {
@@ -50,7 +45,7 @@ let loop = function() {
 	let elapsed = now - lastTime;
 	time += elapsed;
 
-	if(time - lastSwitchTime > spriteData.frames[currentSpriteIndex].duration) {
+	if (time - lastSwitchTime > spriteData.frames[currentSpriteIndex].duration) {
 		lastSwitchTime = time;
 		currentSpriteIndex = (currentSpriteIndex + 1) % spriteData.frames.length;
 		setFrame(currentSpriteIndex);

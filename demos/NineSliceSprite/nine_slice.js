@@ -92,7 +92,7 @@ let loadAssets = (callback) => {
 				});
 			onAssetLoadComplete();
 		};
-		image.src = src;		
+		image.src = src;
 	};
 
 	loadImage("slice_test.png");

@@ -1,16 +1,6 @@
 // Helpers
-let createQuad = function(w, h) {
-	return Fury.Mesh.create({
-		positions: [ 
-			w * 0.5, h * 0.5, 
-			0.0, h * -0.5,  
-			w * 0.5, 0.0, 
-			w * 0.5, h * -0.5, 
-			0.0, h * -0.5, 
-			w * -0.5, 0.0 ],
-		uvs: [ 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0 ],
-		renderMode: Fury.Renderer.RenderMode.TriangleStrip
-	});
+let createQuad = function(w,h) {
+	return Fury.Mesh.create(Fury.Primitives.createSpriteQuadMeshConfig(w, h));
 };
 
 let scaleFactor = 3;
