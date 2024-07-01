@@ -1,20 +1,15 @@
-"use strict";
-
 // Voxel Terrain Generator
 // Multiple Octaves of Perlin Noise -> Cubes
 
-var $ = window.$;
-var Fury = window.Fury;
-var VorldConfig = window.VorldConfig;
-var VoxelShader = window.VoxelShader;
 // globalize glMatrix
 Fury.Maths.globalize();
 
-var resolutionFactor = 1; // Lower this for low-spec devices
-var cameraRatio = 16 / 9;
-var updateCanvasSize = function() {
+let resolutionFactor = 1; // Lower this for low-spec devices
+let cameraRatio = 16 / 9;
+let camera = null;
+let updateCanvasSize = function() {
 	// Remove any scaling of width / height as a result of using CSS to size the canvas
-	var glCanvas = document.getElementById("fury");
+	let glCanvas = document.getElementById("fury");
 	glCanvas.width = resolutionFactor * glCanvas.clientWidth;
 	glCanvas.height = resolutionFactor * glCanvas.clientHeight;
 	cameraRatio = glCanvas.clientWidth / glCanvas.clientHeight;
@@ -22,114 +17,137 @@ var updateCanvasSize = function() {
 		camera.ratio = cameraRatio;
 	}
 };
-$(window).resize(function(){
-	updateCanvasSize();
-});
+window.addEventListener("resize", updateCanvasSize);
 updateCanvasSize();
 
 Fury.init("fury");
-var Input = Fury.Input;
+let Input = Fury.Input;
 
-var shader = Fury.Shader.create(VoxelShader.create());
+let shader = Fury.Shader.create(VoxelShader.create());
 
-var atlasMaterial = Fury.Material.create({ shader: shader });
+let atlasMaterial = Fury.Material.create({ shader: shader });
 // Use upscaled texture to allow for reasonable resolution closeup
 // when using mipmaps to prevent artifacts at distance.
 
 // Regeneration Variables and form details
-var neutralNoise = true; // Is noise between -0.5 and +0.5 or between 0 and 1
-var areaHeight = 4, areaExtents = 6;
-var octaves = [], numOctaves = 4;
-var octaveWeightings = [ 0.5, 0.5, 1, 0.1 ];
-var perlin = true;
-var seedString = "XUVNREAZOZJFPQMSAKEMSDJURTQPWEORHZMD";
+let neutralNoise = true; // Is noise between -0.5 and +0.5 or between 0 and 1
+let areaHeight = 4, areaExtents = 6;
+let octaves = [], numOctaves = 4;
+let octaveWeightings = [ 0.5, 0.5, 1, 0.1 ];
+let perlin = true;
+let seedString = "XUVNREAZOZJFPQMSAKEMSDJURTQPWEORHZMD";
 
-var shapingFunction = "inverse_y";
-var adjustmentFactor = 0.01, yOffset = 0; // Shaping Function
-var amplitude = 64, sdx = 64, sdz = 64, yDenominator = 16.0;
+let shapingFunction = "inverse_y";
+let adjustmentFactor = 0.01, yOffset = 0; // Shaping Function
+let amplitude = 64, sdx = 64, sdz = 64, yDenominator = 16.0;
 
-var baseWavelength = 128;
-var getGenerationVariables = function() {
+let baseWavelength = 128;
+
+let val = (id, value) => {
+	if (value !== undefined) {
+		document.getElementById(id).value = value;
+		return value;
+	} else {
+		return document.getElementById(id).value;
+	}
+};
+
+let show = (id) => {
+	document.getElementById(id).style.display = '';
+};
+
+let hide = (id) => {
+	document.getElementById(id).style.display = 'none';
+};
+
+let getGenerationVariables = function() {
+	
 	octaves.length = 0;
 	octaveWeightings.length = 0;
-	numOctaves = parseInt($("#octaves").val(),10);
-	for(var i = 0; i < numOctaves; i++) {
-		octaveWeightings.push(parseFloat($("#ow"+i).val()));
+	numOctaves = parseInt(val("octaves"),10);
+	for(let i = 0; i < numOctaves; i++) {
+		octaveWeightings.push(parseFloat(val("ow"+i)));
 	}
-	perlin = $("input[name='noiseType']:checked").val() == "Perlin";
-	seedString = $("#seed").val();
-	neutralNoise = $("#neutralNoise").val() == "neutral";
+	perlin = document.querySelector("input[name='noiseType']:checked").value == "Perlin";
+	seedString = val("seed");
+	neutralNoise = val("neutralNoise") == "neutral";
 
-	baseWavelength = parseInt($("#baseWavelength").val(), 10);
-	areaExtents = parseInt($("#extents").val(), 10);	
-	areaHeight = parseInt($("#height").val(), 10);
+	baseWavelength = parseInt(val("baseWavelength"), 10);
+	areaExtents = parseInt(val("extents"), 10);	
+	areaHeight = parseInt(val("height"), 10);
 
-	shapingFunction = $("#shapingFunction").val();
+	shapingFunction = val("shapingFunction");
 	if (shapingFunction == "inverse_y") {
-		yOffset = parseFloat($("#yOffset").val());
-		adjustmentFactor = 1 / parseFloat($("#adjust").val());  // TODO: Change the internal function to m / (y + offset)
+		yOffset = parseFloat(val("yOffset"));
+		adjustmentFactor = 1 / parseFloat(val("adjust"));  // TODO: Change the internal function to m / (y + offset)
 	} else if (shapingFunction == "negative_y") {
-		yOffset = parseFloat($("#yOffset_n").val());
-		yDenominator = parseFloat($("#yDenominator_n").val());
+		yOffset = parseFloat(val("yOffset_n"));
+		yDenominator = parseFloat(val("yDenominator_n"));
 	} else if (shapingFunction == "gaussian") {
-		yDenominator = parseFloat($("#yDenominator_g").val());
-		amplitude = parseFloat($("#amplitude").val());
-		sdx = parseFloat($("#sdx").val());
-		sdz = parseFloat($("#sdz").val());
+		yDenominator = parseFloat(val("yDenominator_g"));
+		amplitude = parseFloat(val("amplitude"));
+		sdx = parseFloat(val("sdx"));
+		sdz = parseFloat(val("sdz"));
 	}
 };
 
-var setParameterVisibility = function(shapingFunction) {
+let setParameterVisibility = function(shapingFunction) {
 	switch(shapingFunction){
 		case "inverse_y":
-			$("#inverse_y").show();
-			$("#negative_y").hide();
-			$("#gaussian").hide();
+			show("inverse_y");
+			hide("negative_y");
+			hide("gaussian");
 			break;
 		case "negative_y":
-			$("#inverse_y").hide();
-			$("#negative_y").show();
-			$("#gaussian").hide();
+			hide("inverse_y");
+			show("negative_y");
+			hide("gaussian");
 			break;
 		case "gaussian":
-			$("#inverse_y").hide();
-			$("#negative_y").hide();
-			$("#gaussian").show();
+			hide("inverse_y");
+			hide("negative_y");
+			show("gaussian");
 			break;
 		default:
-			$("#inverse_y").hide();
-			$("#negative_y").hide();
-			$("#gaussian").hide();
+			hide("inverse_y");
+			hide("negative_y");
+			hide("gaussian");
 			break;
 	}
 };
 
-$(document).ready(function(){
-	$("#showGenerationForm").click(function() {
-		$("#generationForm").show();
-		$("#showGenerationForm").hide();
+document.addEventListener("DOMContentLoaded", function(){
+	document.getElementById("showGenerationForm").addEventListener("click", function() {
+		show("generationForm");
+		hide("showGenerationForm");
 	});
-	$("#hideGenerationForm").click(function() {
-		$("#generationForm").hide();
-		$("#showGenerationForm").show();
+	document.getElementById("hideGenerationForm").addEventListener("click", function() {
+		hide("generationForm");
+		show("showGenerationForm");
 	});
-	$("#hideControls").click(function() {
-		$("#controls").hide();
+	document.getElementById("hideControls").addEventListener("click", function() {
+		hide("controls");
 	});
-	$("#octaves").change(function(event){
-		$("#octavesDisplay").html(this.value);
-		var html = "";
-		for(var i = 0; i < this.value; i++) {
-			var value = i < octaveWeightings.length ? octaveWeightings[i] : 1 / (1 + i);
+
+	hide("generationParameters");
+	hide("generationForm");
+
+	let octavesElement = document.getElementById("octaves");
+	octavesElement.addEventListener("change", function(event){
+		document.getElementById("octavesDisplay").innerHTML = octavesElement.value;
+		let html = "";
+		for(let i = 0; i < this.value; i++) {
+			let value = i < octaveWeightings.length ? octaveWeightings[i] : 1 / (1 + i);
 			html += "<input id=\"ow"+i+"\" type=\"number\" value=\"" + value + "\" />";
 		}
-		$("#weightingsContainer").html(html);
+		document.getElementById("weightingsContainer").innerHTML = html;
 	});
-	$("#wavelengthPower").change(function(event){
-		var power = parseInt(this.value, 10);
-		$("#baseWavelength").val(Math.pow(2, power));
+	let wavelengthPowerElement = document.getElementById("wavelengthPower");
+	wavelengthPowerElement.addEventListener("change", function(event){
+		let power = parseInt(wavelengthPowerElement.value, 10);
+		document.getElementById("baseWavelength").value = Math.pow(2, power);
 	});
-	$("#regen").click(function(event){
+	document.getElementById("regen").addEventListener("click", function(event){
 		getGenerationVariables();
 		
 		let chunkLimit = 4225; 
@@ -151,53 +169,54 @@ $(document).ready(function(){
 			}
 		}
 		if (!showWarning || confirm(warningText)) {
-			$("#generationForm").hide();
-			$("#showGenerationForm").show();
-			$("#progressDisplay").show();
-			$("#generationParameters").hide();
+			hide("generationForm");
+			show("showGenerationForm");
+			show("progressDisplay");
+			hide("generationParameters");
 
 			clear();
 			generateVorld();
 		}
 	});
-	$("#shapingFunction").change(function(event){
-		setParameterVisibility(this.value);
+	let shapingFunctionElement = document.getElementById("shapingFunction");
+	shapingFunctionElement.addEventListener("change", function(event){
+		setParameterVisibility(shapingFunctionElement.value);
 	});
 
 	// Set initial values
-	$("#octaves").val(numOctaves);
-	var html = "";
-	for(var i = 0; i < octaveWeightings.length; i++) {
+	val("octaves", numOctaves);
+	let html = "";
+	for(let i = 0; i < octaveWeightings.length; i++) {
 		html += "<input id=\"ow"+i+"\" type=\"number\" value=\"" + octaveWeightings[i] + "\" />";
 	}
-	$("#weightingsContainer").html(html);
-	$("#seed").val(seedString);
+	document.getElementById("weightingsContainer").innerHTML = html;
+	val("seed", seedString);
 
-	$("#neutralNoise").val(neutralNoise ? "neutral": "normalised");
+	val("neutralNoise", neutralNoise ? "neutral": "normalised");
 
-	$("#wavelengthPower").val(7);
-	$("#baseWavelength").val(baseWavelength);
-	$("#extents").val(areaExtents);
-	$("#height").val(areaHeight);
+	val("wavelengthPower", 7);
+	val("baseWavelength", baseWavelength);
+	val("extents", areaExtents);
+	val("height", areaHeight);
 
-	$("#shapingFunction").val(shapingFunction);
+	val("shapingFunction", shapingFunction);
 	setParameterVisibility(shapingFunction);
-	$("#yOffset").val(yOffset);
-	$("#adjust").val(100);
+	val("yOffset", yOffset);
+	val("adjust", 100);
 
-	$("#yOffset_n").val(32);
-	$("#yDenominator_n").val(16);
+	val("yOffset_n", 32);
+	val("yDenominator_n", 16);
 
-	$("#yDenominator_g").val(yDenominator);
-	$("#amplitude").val(amplitude);
-	$("#sdx").val(sdx);
-	$("#sdz").val(sdz);
+	val("yDenominator_g", yDenominator);
+	val("amplitude", amplitude);
+	val("sdx", sdx);
+	val("sdz", sdz);
 });
 
 // Create Camera & Scene
-var rotateRate = 0.1 * Math.PI, maxRotatePerFrame = 0.2 * rotateRate;
-var zoomRate = 16;
-var camera = Fury.Camera.create({
+let rotateRate = 0.1 * Math.PI, maxRotatePerFrame = 0.2 * rotateRate;
+let zoomRate = 16;
+camera = Fury.Camera.create({
 	near: 0.1,
 	far: 1000000.0,
 	fov: 1.0472,
@@ -205,17 +224,17 @@ var camera = Fury.Camera.create({
 	position: vec3.fromValues(53.0, 55.0, 123.0),
 	rotation: quat.fromValues(-0.232, 0.24, 0.06, 0.94)
 });
-var scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
+let scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
 
-var lastTime = Date.now();
+let lastTime = Date.now();
 
-var clear = function() {
+let clear = function() {
 	Vorld.clear(vorld);
 	scene.clear();
 	Fury.Scene.clearResources();
 };
 
-var awake = function() {
+let awake = function() {
 	// Note this needs to happen after materials loaded so that when they are copied the textures have loaded.
 	// Perhaps textures should be stored at the Fury (Fury.Engine) level and thus loading callbacks will provide the texture to all materials
 	// who have that texture id and this will work even if they've been copied prior to texture load
@@ -273,10 +292,10 @@ let mesherPool =  WorkerPool.create({ src: 'mesher.js', maxWorkers: 4 });
 
 let vorld = Vorld.create({ chunkSize: 16 }); // Amalgamated Vorld Data
 
-var generateVorld = function() {
+let generateVorld = function() {
 	let startTime = Date.now();
-	$("#progressStage").html("Generating Voxel Data");
-	$("#progressBarInner").width("0%");
+	document.getElementById("progressStage").innerHTML = "Generating Voxel Data";
+	document.getElementById("progressBarInner").style.width = "0%";
 
 	let subsectionSize = 1;
 	let generatedSubsections = 0;
@@ -285,17 +304,17 @@ var generateVorld = function() {
 	let totalChunksToGenerate = (2 * areaExtents + 1) * (2 * areaExtents + 1) * areaHeight;
 
 	let createGeneratorWorker = function(iMin, iMax, kMin, kMax, callback) {
-		var generator = generatorPool.requestWorker();
+		let generator = generatorPool.requestWorker();
 		generator.onmessage = function(e) {
 			if (e.data.stage) {
-				$("#progressStage").html(e.data.stage);
+				document.getElementById("progressStage").innerHTML = e.data.stage;
 			}
 	
 			if (e.data.progress !== undefined) {
 				if (e.data.progress) {
 					generatedChunks++;
 				}
-				$("#progressBarInner").width((generatedChunks / totalChunksToGenerate) * 100 + "%");
+				document.getElementById("progressBarInner").style.width = (generatedChunks / totalChunksToGenerate) * 100 + "%";
 			}
 	
 			if (e.data.complete) {
@@ -363,12 +382,13 @@ var generateVorld = function() {
 	while (generatorPool.isWorkerAvailable() && tryCreateNextWorker()) { }
 };
 
-var generateMeshes = function(vorld) {
+let generateMeshes = function(vorld) {
 	let startTime = Date.now();
 	let generatedMeshPositions = {}; // Sanity check on mesh generation
 
-	$("#progressStage").html("Generating Meshes");
-	$("#progressBarInner").width("0%");
+
+	document.getElementById("progressStage").innerHTML = "Generating Meshes";
+	document.getElementById("progressBarInner").style.width = "0%";
 
 	// Duplicated from chunk generation
 	let subsectionSize = 4;
@@ -403,7 +423,7 @@ var generateMeshes = function(vorld) {
 				if (e.data.progress) {
 					generatedChunks++;
 				}
-				$("#progressBarInner").width(((generatedChunks / totalChunksToGenerate)  * 100) + "%");
+				document.getElementById("progressBarInner").style.width = (generatedChunks / totalChunksToGenerate) * 100 + "%";
 			}
 			if (e.data.complete) {
 				mesherPool.returnWorker(mesher);
@@ -438,8 +458,8 @@ var generateMeshes = function(vorld) {
 			console.log("Generated Meshes: " + generatedMeshCount);
 			console.log("Mesh Generation Time: " + (Date.now() - startTime));
 
-			$("#progressDisplay").hide();
-			$("#generationParameters").show();
+			hide("progressDisplay");
+			show("generationParameters");
 		}
 	}; 
 
@@ -465,11 +485,11 @@ var generateMeshes = function(vorld) {
 	// Also investigate if we're cleaning up after ourselves properly or we have hanging references
 };
 
-var framesInLastSecond = 0;
-var timeSinceLastFrame = 0;
+let framesInLastSecond = 0;
+let timeSinceLastFrame = 0;
 
-var loop = function(){
-	var elapsed = Date.now() - lastTime;
+let loop = function(){
+	let elapsed = Date.now() - lastTime;
 	lastTime += elapsed;
 	elapsed /= 1000;
 
@@ -486,12 +506,12 @@ var loop = function(){
 	window.requestAnimationFrame(loop);
 };
 
-var localx = vec3.create();
-var localy = vec3.create();
-var localz = vec3.create();
+let localx = vec3.create();
+let localy = vec3.create();
+let localz = vec3.create();
 
 // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
-var getRoll = function(q) {
+let getRoll = function(q) {
 	// Note: glMatrix is x,y,z,w where as wiki assumes w,x,y,z!
 	let sinr_cosp = 2 * (q[3] * q[0] + q[1] * q[2]);
 	let cosr_cosp = 1 - 2 * (q[0] * q[0] + q[1] * q[1]);
@@ -500,9 +520,9 @@ var getRoll = function(q) {
 	// but we don't in this case.
 };
 
-var handleInput = function(elapsed) {
-	var q = camera.rotation;
-	var p = camera.position;
+let handleInput = function(elapsed) {
+	let q = camera.rotation;
+	let p = camera.position;
 	Fury.Maths.quatLocalAxes(q, localx, localy, localz);
 	
 	if (Input.mouseDown(2)) {
