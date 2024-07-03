@@ -37,8 +37,6 @@ let shader = Shader.create({
 uniform mat4 uMMatrix;
 uniform mat4 uVMatrix;
 uniform mat4 uPMatrix;
-uniform float uSScale;
-uniform float uTScale;
 
 in vec3 aVertexPosition;
 in vec2 aTextureCoord;
@@ -47,7 +45,7 @@ out vec2 vTextureCoord;
 
 void main(void) {
 	gl_Position = uPMatrix * uVMatrix * uMMatrix * vec4(aVertexPosition, 1.0);
-	vTextureCoord = vec2(uSScale * aTextureCoord.s, uTScale * aTextureCoord.t);
+	vTextureCoord = vec2(aTextureCoord.s, aTextureCoord.t);
 }`,
 	fsSource: `#version 300 es
 precision highp float;
@@ -62,7 +60,7 @@ void main(void) {
 	fragColor = texture(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
 }`,
 	attributeNames: [ "aVertexPosition", "aTextureCoord" ],
-	uniformNames: [ "uMMatrix", "uVMatrix", "uPMatrix", "uSampler", "uSScale", "uTScale" ],
+	uniformNames: [ "uMMatrix", "uVMatrix", "uPMatrix", "uSampler" ],
 	textureUniformNames: [ "uSampler" ],
 	pMatrixUniformName: "uPMatrix",
 	mMatrixUniformName: "uMMatrix",
@@ -70,30 +68,12 @@ void main(void) {
 	bindMaterial: function(material) {
 		this.enableAttribute("aVertexPosition");
 		this.enableAttribute("aTextureCoord");
-		if (material.sScale) {
-			this.setUniformFloat("uSScale", material.sScale);
-		} else {
-			this.setUniformFloat("uSScale", 1);
-		}
-		if (material.tScale) {
-			this.setUniformFloat("uTScale", material.tScale);
-		} else {
-			this.setUniformFloat("uTScale", 1);
-		}
 	},
 	bindBuffers: function(mesh) {
 		this.setAttribute("aVertexPosition", mesh.vertexBuffer);
 		this.setAttribute("aTextureCoord", mesh.textureBuffer);
 		this.setIndexedAttribute(mesh.indexBuffer);
 	},
-	validateMaterial: function(material) {
-		if (!material.sScale) {
-			console.log("Warning: material does not have sScale property set");
-		}
-		if (!material.tScale) {
-			console.log("Warning: material does not have tScale property set");
-		}
-	}
 });
 
 let namedMaterials = [];
@@ -455,10 +435,12 @@ fetch(mapSrc).then(function(response) {
 		for (let i = 0, l = data.length; i < l; i++) {
 			let textureName = data[i].texture.name;
 			if (!namedMaterials.hasOwnProperty(textureName)) {
-				namedMaterials[textureName] = Fury.Material.create({ shader: shader, properties: { tScale: 1, sScale: 1 } });
+				namedMaterials[textureName] = Fury.Material.create({ shader: shader });
 			}
 			let material = namedMaterials[textureName];
+			// TODO: Update data generation to factor scale, offset and angle into UVs 
 
+			// TODO: Group polys by brush
 			// TODO: We should offset the vertices by the poly center for santiy
 			// TODO: should generate poly collision shape
 			scene.add({ material: material, mesh: Fury.Mesh.create(data[i]), position: vec3.create(), static: true });
