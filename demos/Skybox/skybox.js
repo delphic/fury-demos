@@ -178,9 +178,9 @@ let loop = function(elapsed) {
 	vec3.transformQuat(fwd, fwd, camera.rotation);
 	mat4.targetTo(
 		out,
-		Fury.Maths.vec3Zero,
+		Fury.Maths.vec3.ZERO,
 		fwd,
-		Fury.Maths.vec3Y);
+		Fury.Maths.vec3.Y);
 
 	// Why do textures seem backwards horizontally, is this a property of cubemaps?
 	// Are you just seeing the texture 'from the inside'? The axes seem correct.
@@ -203,8 +203,8 @@ let moveCamera = function(elapsed) {
 	inputX = Fury.Input.getAxis("d", "a"); // 0.05, Fury.Maths.Ease.inQuad
 
 	let localX = [0,0,0], localZ = [0,0,0];
-	vec3.transformQuat(localX, Fury.Maths.vec3X, camera.rotation);
-	vec3.transformQuat(localZ, Fury.Maths.vec3Z, camera.rotation);
+	vec3.transformQuat(localX, Fury.Maths.vec3.X, camera.rotation);
+	vec3.transformQuat(localZ, Fury.Maths.vec3.Z, camera.rotation);
 	localX[1] = 0;
 	vec3.normalize(localX, localX);	// This should be unnecessary
 	localZ[1] = 0;
@@ -250,7 +250,7 @@ let rotateCamera = function(elapsed) {
 	}
 
 	// Directly rotate camera
-	Fury.Maths.quatRotate(camera.rotation, camera.rotation, ry, Fury.Maths.vec3Y);
+	Fury.Maths.quat.rotate(camera.rotation, camera.rotation, ry, Fury.Maths.vec3.Y);
 
 	let clampAngle = 0.5 * Math.PI - 10 * Math.PI/180;
 	let lastVerticalLookAngle = verticalLookAngle;

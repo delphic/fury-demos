@@ -523,7 +523,7 @@ let getRoll = function(q) {
 let handleInput = function(elapsed) {
 	let q = camera.rotation;
 	let p = camera.position;
-	Fury.Maths.quatLocalAxes(q, localx, localy, localz);
+	Fury.Maths.quat.localAxes(q, localx, localy, localz);
 	
 	if (Input.mouseDown(2)) {
 		let xRotation = Input.MouseDelta[0] * rotateRate*elapsed;
@@ -534,7 +534,7 @@ let handleInput = function(elapsed) {
 		if (Math.abs(yRotation) > maxRotatePerFrame) {
 			yRotation = Math.sign(yRotation) * maxRotatePerFrame;
 		}
-		Fury.Maths.quatRotate(q, q, -xRotation, Fury.Maths.vec3Y);
+		Fury.Maths.quat.rotate(q, q, -xRotation, Fury.Maths.vec3.Y);
 
 		let roll = getRoll(q);
 		let clampAngle = 10 * Math.PI/180;

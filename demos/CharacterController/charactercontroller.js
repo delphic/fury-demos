@@ -734,8 +734,8 @@ let CharacterController = (() => {
 		controller.moveXZ = (contacts, velocity, elapsed, inputVector) => {
 			vec3.copy(lastPosition, playerPosition);
 			vec3.copy(targetPosition, playerPosition);
-			vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3X, velocity[0] * elapsed);
-			vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3Z, velocity[2] * elapsed);
+			vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3.X, velocity[0] * elapsed);
+			vec3.scaleAndAdd(targetPosition, targetPosition, Maths.vec3.Z, velocity[2] * elapsed);
 
 			let requestedVx = velocity[0];
 			let requestedVz = velocity[2];
@@ -850,7 +850,7 @@ let CharacterController = (() => {
 
 		controller.moveY = (contacts, velocity, elapsed) => {
 			vec3.copy(lastPosition, playerPosition);	
-			vec3.scaleAndAdd(targetPosition, playerPosition, Maths.vec3Y, velocity[1] * elapsed);
+			vec3.scaleAndAdd(targetPosition, playerPosition, Maths.vec3.Y, velocity[1] * elapsed);
 			
 			let collision = checkForPlayerCollisionsY(playerCollisionInfo, world.boxes, elapsed) > 0;
 		
@@ -952,7 +952,7 @@ let loop = function(elapsed) {
 	}
 
 	// Directly rotate camera
-	Maths.quatRotate(camera.rotation, camera.rotation, ry, Maths.vec3Y);
+	Maths.quat.rotate(camera.rotation, camera.rotation, ry, Maths.vec3.Y);
 
 	let clampAngle = 0.5 * Math.PI - 10 * Math.PI/180;
 	let lastVerticalLookAngle = verticalLookAngle;
@@ -970,8 +970,8 @@ let loop = function(elapsed) {
 	// Calculate local axes for camera - ignoring roll
 	// This would be easier with a character transform
 	// Wouldn't need to zero the y component
-	vec3.transformQuat(localX, Maths.vec3X, camera.rotation);
-	vec3.transformQuat(localZ, Maths.vec3Z, camera.rotation);
+	vec3.transformQuat(localX, Maths.vec3.X, camera.rotation);
+	vec3.transformQuat(localZ, Maths.vec3.Z, camera.rotation);
 	vec3.copy(localForward, localZ);	// Before 0ing out y component copy to forward
 	localX[1] = 0;
 	vec3.normalize(localX, localX);	// This should be unnecessary
@@ -987,7 +987,7 @@ let loop = function(elapsed) {
 
 	// Instant rocket launcher spawn impulse on mouse down
 	if (Fury.Input.mouseDown(0, true)) {
-		let temp = Maths.vec3Pool.request();
+		let temp = Maths.vec3.Pool.request();
 		let hit = false;
 		let closestDistance = 100;
 		vec3.negate(localForward, localForward); // camera faces -z so invert
@@ -1015,12 +1015,12 @@ let loop = function(elapsed) {
 				grounded = false;
 			}
 		}
-		Maths.vec3Pool.return(temp);
+		Maths.vec3.Pool.return(temp);
 	}
 
 	// Look for trigger volume - this another example of external force
-	let temp = Maths.vec3Pool.request();
-	let temp2 = Maths.vec3Pool.request();
+	let temp = Maths.vec3.Pool.request();
+	let temp2 = Maths.vec3.Pool.request();
 	for (let i = 0, l = triggerVolumes.length; i < l; i++) {
 		triggerVolumes[i].update(elapsed);
 		if (triggerVolumes[i].tryIntersectBox(playerBox)) {
@@ -1028,7 +1028,7 @@ let loop = function(elapsed) {
 			vec3.scaleAndAdd(temp, temp, triggerVolumes[i].launchDirection, triggerVolumes[i].speed);
 
 			// Set velocity in direction of launch and up to 0, keep perpendicular velocity
-			vec3.cross(temp2, triggerVolumes[i].launchDirection, Maths.vec3Y);
+			vec3.cross(temp2, triggerVolumes[i].launchDirection, Maths.vec3.Y);
 			let dot = vec3.dot(temp2, playerVelocity);
 			vec3.zero(playerVelocity);
 			vec3.scaleAndAdd(playerVelocity, playerVelocity, temp2, dot);
@@ -1040,8 +1040,8 @@ let loop = function(elapsed) {
 			}
 		}
 	}
-	Maths.vec3Pool.return(temp);
-	Maths.vec3Pool.return(temp2);
+	Maths.vec3.Pool.return(temp);
+	Maths.vec3.Pool.return(temp2);
 
 	// Calculate Target Velocity
 	if (grounded) {
@@ -1194,7 +1194,7 @@ let loop = function(elapsed) {
 	// Arguably the change due to falling if there is any, we should just do,
 	// as that should always be smooth
 	vec3.copy(cameraTargetPosition, playerPosition);
-	vec3.scaleAndAdd(cameraTargetPosition, cameraTargetPosition, Maths.vec3Y, 0.5);	// 0.5 offset
+	vec3.scaleAndAdd(cameraTargetPosition, cameraTargetPosition, Maths.vec3.Y, 0.5);	// 0.5 offset
 	if (vec3.squaredLength(cameraTargetPosition) < 0.1) {
 		vec3.copy(camera.position, cameraTargetPosition);
 	} else {
@@ -1268,7 +1268,7 @@ fetch("test.map").then(function(response) {
 	vec3.set(camera.position, playerSpawn.origin[0], playerSpawn.origin[1], playerSpawn.origin[2]);
 	quat.fromEuler(camera.rotation, 0, playerSpawn.angle, 0);
 	vec3.copy(playerPosition, camera.position);
-	vec3.scaleAndAdd(camera.position, camera.position, Maths.vec3Y, 0.5);	// 0.5 offset for camera
+	vec3.scaleAndAdd(camera.position, camera.position, Maths.vec3.Y, 0.5);	// 0.5 offset for camera
 
 	loadMapTextures(namedMaterials, 32);
 	lockCount--;

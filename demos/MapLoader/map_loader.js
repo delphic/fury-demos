@@ -15,7 +15,7 @@ let camera = Camera.create({
 	position: [ 0.0, 1.0, 0.0 ] 
 });
 let scene = Scene.create({ camera: camera, enableFrustumCulling: true });
-let vec3Pool = Maths.vec3Pool;
+let vec3Pool = Maths.vec3.Pool;
 
 // Fullscreen logic
 let glCanvas = document.getElementById("fury");
@@ -172,9 +172,9 @@ let MapLoader = (function(){
 	
 				let rotation = mat4.create();
 				if (Maths.approximately(Math.abs(a[1]), 1.0, 0.001)) {
-					mat4.lookAt(rotation, Maths.vec3Zero, a, Maths.vec3X);
+					mat4.lookAt(rotation, Maths.vec3.ZERO, a, Maths.vec3.X);
 				} else {
-					mat4.lookAt(rotation, Maths.vec3Zero, a, Maths.vec3Y);
+					mat4.lookAt(rotation, Maths.vec3.ZERO, a, Maths.vec3.Y);
 				}
 		
 				let temp = vec3Pool.request();
@@ -192,6 +192,7 @@ let MapLoader = (function(){
 					vertices[i].angle = Math.atan2(temp[1], temp[0]) + Math.PI;
 					// this works only because the shape is requried to be convex
 				}
+				vec3Pool.return(temp);
 		
 				vertices.sort((a, b) => { 
 					if (a.angle < b.angle) {
@@ -235,6 +236,8 @@ let MapLoader = (function(){
 			} else {
 				console.warn("Generated less than 3 vertices for plane " + i1);
 			}
+
+			vec3Pool.return(center);
 		}
 		return result;
 	};
@@ -381,7 +384,7 @@ let loop = function(elapsed) {
 	}
 
 	// Directly rotate camera
-	Maths.quatRotate(camera.rotation, camera.rotation, ry, Maths.vec3Y);
+	Maths.quat.rotate(camera.rotation, camera.rotation, ry, Maths.vec3.Y);
 
 	let clampAngle = 0.5 * Math.PI - 10 * Math.PI/180;
 	let lastVerticalLookAngle = verticalLookAngle;
@@ -393,8 +396,8 @@ let loop = function(elapsed) {
 	inputY = Input.getAxis("e", "q"); 
 	inputX = Input.getAxis("d", "a");
 
-	vec3.transformQuat(localX, Maths.vec3X, camera.rotation);
-	vec3.transformQuat(localZ, Maths.vec3Z, camera.rotation);
+	vec3.transformQuat(localX, Maths.vec3.X, camera.rotation);
+	vec3.transformQuat(localZ, Maths.vec3.Z, camera.rotation);
 
 	if (inputX !== 0 && inputZ !== 0) {
 		// Normalize input vector if moving in more than one direction
@@ -403,7 +406,7 @@ let loop = function(elapsed) {
 	}
 
 	vec3.scaleAndAdd(camera.position, camera.position, localZ, inputZ * moveSpeed * elapsed);
-	vec3.scaleAndAdd(camera.position, camera.position, Maths.vec3Y, inputY * moveSpeed * elapsed);
+	vec3.scaleAndAdd(camera.position, camera.position, Maths.vec3.Y, inputY * moveSpeed * elapsed);
 	vec3.scaleAndAdd(camera.position, camera.position, localX, inputX * moveSpeed * elapsed);
 
 	scene.render();
@@ -477,7 +480,9 @@ let Plane = (function() {
 		let temp = vec3Pool.request();
 		vec3.scale(temp, p, p[3]);
 		vec3.subtract(temp, v, temp);
-		return vec3.dot(temp, p) > 0;
+		let result = vec3.dot(temp, p) > 0;
+		vec3Pool.return(temp);
+		return result;
 	};
 
 	// takes three planes, returns vec3? representing the point of intersection
@@ -503,7 +508,6 @@ let Plane = (function() {
 			vec3.subtract(diff, diff, point);
 			let distance =  vec3.dot(diff, c) / vec3.dot(edge, c);
 			vec3Pool.return(diff);
-			vec3Pool.return(edge);
 
 			// write point of intersection into point and return
 			vec3.scaleAndAdd(point, point, edge, distance);

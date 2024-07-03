@@ -293,7 +293,7 @@ module.exports = (function() {
 		// TODO: Review depth and frustrum to make sure they deal with look in -z correctly
 		calculateFrustum: function() {
 			// TODO: Update to work for orthonormal projection as well
-			Maths.quatLocalAxes(this.rotation, localX, localY, localZ);
+			Maths.quat.localAxes(this.rotation, localX, localY, localZ);
 
 			// Calculate Planes
 			// NOTE: Relies on the fact camera looks in -ve z direction
@@ -311,24 +311,24 @@ module.exports = (function() {
 			this.planes[1][3] = -vec3.dot(this.planes[1], vec3Cache);
 			// Left
 			quat.identity(q);
-			Maths.quatRotate(q, q, 0.5 * this.ratio * this.fov, localY);	// Rotation is anti-clockwise apparently
+			Maths.quat.rotate(q, q, 0.5 * this.ratio * this.fov, localY);	// Rotation is anti-clockwise apparently
 			vec3.transformQuat(this.planes[2], localX, q);
 			this.planes[2][3] = -vec3.dot(this.planes[2], this.position);
 			// Right
 			quat.identity(q);
-			Maths.quatRotate(q, q, -0.5 * this.ratio * this.fov, localY);
+			Maths.quat.rotate(q, q, -0.5 * this.ratio * this.fov, localY);
 			vec3.negate(vec3Cache, localX);
 			vec3.transformQuat(this.planes[3], vec3Cache, q);
 			this.planes[3][3] = -vec3.dot(this.planes[3], this.position);
 			// Top
 			quat.identity(q);
-			Maths.quatRotate(q, q, 0.5 * this.fov, localX);
+			Maths.quat.rotate(q, q, 0.5 * this.fov, localX);
 			vec3.negate(vec3Cache, localY);
 			vec3.transformQuat(this.planes[4], vec3Cache, q);
 			this.planes[4][3] = -vec3.dot(this.planes[4], this.position);
 			// Bottom
 			quat.identity(q);
-			Maths.quatRotate(q, q, -0.5 * this.fov, localX);
+			Maths.quat.rotate(q, q, -0.5 * this.fov, localX);
 			vec3.transformQuat(this.planes[5], localY, q);
 			this.planes[5][3] = -vec3.dot(this.planes[5], this.position);
 
@@ -384,7 +384,7 @@ module.exports = (function() {
 			return 2*(q1*q3 + q0*q2)*(l0 - p0) + 2*(q2*q3 - q0*q1)*(l1 - p1) + (1 - 2*q1*q1 - 2*q2*q2)*(l2 - p2);
 		},
 		getLookDirection: function(out) {
-			vec3.transformQuat(out, Maths.vec3Z, this.rotation);
+			vec3.transformQuat(out, Maths.vec3.Z, this.rotation);
 			vec3.negate(out, out); // Camera faces in -z
 		},
 		getProjectionMatrix: function(out) {
@@ -1352,48 +1352,6 @@ module.exports = (function() {
 	// I.e. the dot product of the offset point?
 	// Look at MapLoader demo it has an implementation, though it needs updating to encourage use of "out" parameters
 
-	// todo: move extensions into their respective modules
-
-	let vec3X = exports.vec3X = vec3.fromValues(1,0,0);
-	let vec3Y = exports.vec3Y = vec3.fromValues(0,1,0);
-	let vec3Z = exports.vec3Z = vec3.fromValues(0,0,1);
-	exports.vec3Zero = vec3.fromValues(0,0,0);
-	exports.vec3One = vec3.fromValues(1,1,1);
-
-	exports.vec3Pool = (function(){
-		let stack = [];
-		for (let i = 0; i < 5; i++) {
-			stack.push(vec3.create());
-		}
-		
-		return {
-			return: (v) => { stack.push(v); },
-			request: () => {
-				if (stack.length > 0) {
-					return stack.pop();
-				}
-				return vec3.create();
-			}
-		}
-	})();
-
-	exports.quatPool = (function(){
-		let stack = [];
-		for (let i = 0; i < 5; i++) {
-			stack.push(quat.create());
-		}
-		
-		return {
-			return: (v) => { stack.push(v); },
-			request: () => {
-				if (stack.length > 0) {
-					return stack.pop();
-				}
-				return quat.create();
-			}
-		}
-	})();
-
 	let equals = common.equals;
 
 	let approximately = exports.approximately = (a, b, epsilon) => {
@@ -1415,7 +1373,15 @@ module.exports = (function() {
 		return x * x * (3 - 2 * x); 
 	};
 
-	let moveTowards = exports.moveTowards = (a, b, maxDelta) => {
+	/**
+	 * Moves number value towards b from a limited by a maximum value
+	 * 
+	 * @param {Number} a 
+	 * @param {Number} b 
+	 * @param {Number} maxDelta 
+	 * @returns {Number}
+	 */
+	exports.moveTowards = (a, b, maxDelta) => {
 		let delta = b - a;
 		return maxDelta >= Math.abs(delta) ? b : a + Math.sign(delta) * maxDelta; 
 	};
@@ -1448,63 +1414,35 @@ module.exports = (function() {
 		return result;
 	};
 
-	const angleDotEpison = 0.000001;  // If the dot product 
+	const ANGLE_DOT_EPSILON = 0.000001;
 
-	// vec3 extensions adapated from https://graemepottsfolio.wordpress.com/2015/11/26/vectors-programming/
-	// TODO: Tests
+	// RotateTowards extension has to be here to avoid cyclic dependency between quat and vec3
 
-	exports.vec3Slerp = (() => {
-		let an = vec3.create(), bn = vec3.create();
-		return (out, a, b, t) => {
-			vec3.normlize(an, a);
-			vec3.normlize(bn, b);
-			let dot = vec3.dot(an, bn);
-			if (approximately(Math.abs(dot), 1.0, angleDotEpison)) {
-				// lerp
-				vec3.lerp(out, a, b, t);
-			} else {
-				// Slerp
-				// a * sin ( theta * (1 - t) / sin (theta)) + b * (sin(theta * t) / sin(theta)) where theta = acos(|a|.|b|)
-				let theta = Math.acos(dot);
-				let sinTheta = Math.sin(theta);
-				let ap = Math.sin(theta * (1.0 - t)) / sinTheta;
-				let bp = Math.sin(theta * t ) / sinTheta;
-				out[0] = a[0] * ap + b[0] * bp;
-				out[1] = a[1] * ap + b[1] * bp;
-				out[2] = a[2] * ap + b[2] * bp;
-			}
-		};
-	})(); 
-
-	exports.vec3MoveTowards = (() => {
-		let delta = vec3.create();
-		return (out, a, b, maxDelta) => {
-			vec3.sub(delta, b, a);
-			let sqrLen = vec3.sqrDist(a, b); 
-			let sqrMaxDelta = maxDelta * maxDelta;
-			if (sqrMaxDelta >= sqrLen) {
-				vec3.copy(out, b);
-			} else {
-				vec3.scaleAndAdd(out, a, delta, maxDelta / Math.sqrt(sqrLen));
-			}
-		}; 
-	})();
-
-	exports.vec3RotateTowards = (() => {
+	/**
+	 * Rotate a vec3 towards another with a specificed maximum change
+	 * in magnitude and a maximum change in angle 
+	 * 
+	 * @param {vec3} out
+	 * @param {vec3} a the vector to rotate from
+	 * @param {vec3} b the vector to rotate towards
+	 * @param {Number} maxRadiansDelta the maximum allowed difference in angle in Radians
+	 * @param {Number} maxMagnitudeDelta the maximum allowed difference in magnitude
+	 */
+	vec3.rotateTowards = (() => {
 		let an = vec3.create();
 		let bn = vec3.create();
 		let cross = vec3.create();
-		let q = quat.create();
+		let q = quat.create(); 
 		return (out, a, b, maxRadiansDelta, maxMagnitudeDelta) => {
 			let aLen = vec3.length(a);
 			let bLen = vec3.length(b);
 			vec3.normlize(an, a);
 			vec3.normlize(bn, b);
-
+	
 			// check for magnitude overshoot via move towards
-			let targetLen = moveTowards(aLen, bLen, maxMagnitudeDelta);
+			let targetLen = exports.moveTowards(aLen, bLen, maxMagnitudeDelta);
 			let dot = vec3.dot(an, bn);
-			if (approximately(Math.abs(dot), 1.0, angleDotEpison)) {  // Q: What about when pointing in opposite directions?
+			if (approximately(Math.abs(dot), 1.0, ANGLE_DOT_EPSILON)) {  // Q: What about when pointing in opposite directions?
 				// if pointing same direction just change magnitude
 				vec3.copy(out, an);
 				vec3.scale(out, targetLen);
@@ -1531,74 +1469,6 @@ module.exports = (function() {
 		};
 	})();
 
-	exports.vec3SmoothDamp = (() => {
-		let delta = vec3.create();
-		let temp = vec3.create();
-		return (out, a, b, velocity, smoothTime, maxSpeed, elapsed) => { // Q: Should have outVelocity?
-			if (vec3.equals(a, b)) {
-				vec3.copy(out, b);
-			} else {
-				// Derivation: https://graemepottsfolio.wordpress.com/2016/01/11/game-programming-math-libraries/
-				smoothTime = Math.max(0.0001, smoothTime); // minimum smooth time of 0.0001
-				let omega = 2.0 / smoothTime;
-				let x = omega * elapsed;
-				let exp = 1.0 / (1.0 + x + 0.48 * x * x + 0.245 * x * x * x);
-				vec3.sub(delta, a, b);
-				let length = vec3.length(delta);
-				let maxDelta = maxSpeed * smoothTime;
-
-				let deltaX = Math.min(length, maxDelta);
-				vec3.scale(delta, delta, deltaX / length);
-
-				// temp = (velocity + omega * delta) * elapsed
-				vec3.scaleAndAdd(temp, velocity, delta, omega);
-				vec3.scale(temp, temp, elapsed);
-
-				// velocity = (velocity - omega * temp) * exp
-				vec3.scaleAndAdd(velocity, velocity, temp, -omega);
-				vec3.scale(velocity, velocity, exp);
-
-				// out = a - delta + (delta + temp) * exp;
-				vec3.sub(out, a, delta);
-				vec3.scaleAndAdd(out, out, delta, exp);
-				vec3.scaleAndAdd(out, out, temp, exp);
-
-				// Ensure we don't overshoot
-				if (vec3.sqrDist(b, a) <= vec3.sqrDist(out, a)) {
-					vec3.copy(out, b);
-					vec3.zero(velocity);
-				}
-			}
-		};
-	})();
-
-	exports.vec3ToString = (v) => { return "(" + v[0] + ", " + v[1] + ", " + v[2] + ")"; };
-
-	exports.quatEuler = (x, y, z) => {
-		let q = quat.create();
-		quat.fromEuler(q, x, y, z);
-		return q;
-	};
-
-	exports.quatIsIdentity = (q) => {
-		// Is the provided quaterion identity
-		return (equals(q[0], 0) && equals(q[1], 0) && equals(q[2], 0) && equals(q[3], 1));
-	};
-
-	exports.quatRotate = (function() {
-		let i = quat.create();
-		return (out, q, rad, axis) => {
-			quat.setAxisAngle(i, axis, rad);
-			return quat.multiply(out, i, q);
-		};
-	})();
-
-	exports.quatLocalAxes = (q, localX, localY, localZ) => {
-		vec3.transformQuat(localX, vec3X, q);
-		vec3.transformQuat(localY, vec3Y, q);
-		vec3.transformQuat(localZ, vec3Z, q);
-	};
-
 	// See https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
 	// Note: They define roll as rotation around x axis, pitch around y axis, and yaw around z-axis
 	// I do not agree, roll is around z-axis, pitch around x-axis, and yaw around y-axis.
@@ -1606,7 +1476,8 @@ module.exports = (function() {
 
 	// I attempted to swap and rearrange some of the formula so pitch could be -pi/2 to pi/2 range
 	// and yaw would be -pi to pi but naively swapping the formula according to the apparent pattern did not work
-	// c.f. 7dfps player class for hacky work around - TODO: Fix these
+	// c.f. 7dfps player class for hacky work around 
+	// TODO: Fix these
 	exports.calculatePitch = (q) => {
 		// x-axis rotation
 		let w = q[3], x = q[0], y = q[1], z = q[2];
@@ -2228,6 +2099,36 @@ exports.mul = exports.multiply;
  * @function
  */
 exports.sub = exports.subtract;
+
+/**
+ * mat2 pool for minimising garbage allocation 
+ */
+exports.Pool = (function(){
+	let stack = [];
+	for (let i = 0; i < 5; i++) {
+		stack.push(exports.create());
+	}
+	
+	return {
+		/**
+		 * return a borrowed mat2 to the pool
+		 * @param {mat2}
+		 */
+		return: (v) => { stack.push(exports.identity(v)); },
+		/**
+		 * request a mat2 from the pool
+		 * @returns {mat2}
+		 */
+		request: () => {
+			if (stack.length > 0) {
+				return stack.pop();
+			}
+			return exports.create();
+		}
+	}
+})();
+
+exports.IDENTITY = Object.freeze(exports.create());
 },{"./common.js":12}],15:[function(require,module,exports){
 const { ARRAY_TYPE, EPSILON } = require("./common.js");
 
@@ -3101,6 +3002,36 @@ exports.mul = exports.multiply;
  * @function
  */
 exports.sub = exports.subtract;
+
+/**
+ * mat3 pool for minimising garbage allocation 
+ */
+exports.Pool = (function(){
+	let stack = [];
+	for (let i = 0; i < 5; i++) {
+		stack.push(exports.create());
+	}
+	
+	return {
+		/**
+		 * return a borrowed mat3 to the pool
+		 * @param {mat3}
+		 */
+		return: (m) => { stack.push(exports.identity(m)); },
+		/**
+		 * request a mat3 from the pool
+		 * @returns {mat3}
+		 */
+		request: () => {
+			if (stack.length > 0) {
+				return stack.pop();
+			}
+			return exports.create();
+		}
+	}
+})();
+
+exports.IDENTITY = Object.freeze(exports.create());
 },{"./common.js":12}],16:[function(require,module,exports){
 const { ARRAY_TYPE, EPSILON } = require("./common.js");
 
@@ -5292,8 +5223,38 @@ exports.mul = exports.multiply;
  * @function
  */
 exports.sub = exports.subtract;
+
+/**
+ * mat4 pool for minimising garbage allocation 
+ */
+exports.Pool = (function(){
+	let stack = [];
+	for (let i = 0; i < 5; i++) {
+		stack.push(exports.create());
+	}
+	
+	return {
+		/**
+		 * return a borrowed mat4 to the pool
+		 * @param {mat4}
+		 */
+		return: (m) => { stack.push(exports.identity(m)); },
+		/**
+		 * request a mat4 from the pool
+		 * @returns {mat4}
+		 */
+		request: () => {
+			if (stack.length > 0) {
+				return stack.pop();
+			}
+			return exports.create();
+		}
+	}
+})();
+
+exports.IDENTITY = Object.freeze(exports.create());
 },{"./common.js":12}],17:[function(require,module,exports){
-const { ANGLE_ORDER, ARRAY_TYPE, EPSILON, RANDOM } = require("./common.js");
+const { ANGLE_ORDER, ARRAY_TYPE, EPSILON, RANDOM, equals } = require("./common.js");
 const mat3 = require("./mat3.js");
 const vec3 = require("./vec3.js");
 const vec4 = require("./vec4.js");
@@ -5746,6 +5707,21 @@ exports.fromMat3 = function(out, m) {
 };
 
 /**
+ * Creates a new quaternion from the given euler angle x, y, z, with default angle order
+ *
+ * @param {Number} x Angle to rotate around X axis in degrees.
+ * @param {Number} y Angle to rotate around Y axis in degrees.
+ * @param {Number} z Angle to rotate around Z axis in degrees.
+ * @returns {quat} out
+ * @function
+ */
+exports.euler = function(x, y, z) {
+	let q = quat.create();
+	quat.fromEuler(q, x, y, z);
+	return q;
+};
+
+/**
  * Creates a quaternion from the given euler angle x, y, z using the provided intrinsic order for the conversion.
  *
  * @param {quat} out the receiving quaternion
@@ -6081,6 +6057,76 @@ exports.setAxes = (function () {
 		return normalize(out, fromMat3(out, matr));
 	};
 })();
+
+/**
+ * quat pool for minimising garbage allocation 
+ */
+exports.Pool = (function(){
+	let stack = [];
+	for (let i = 0; i < 5; i++) {
+		stack.push(exports.create());
+	}
+	
+	return {
+		/**
+		 * return a borrowed quat to the pool
+		 * @param {quat}
+		 */
+		return: (q) => { stack.push(exports.identity(q)); },
+		/**
+		 * request a quat from the pool
+		 * @returns {quat}
+		 */
+		request: () => {
+			if (stack.length > 0) {
+				return stack.pop();
+			}
+			return exports.create();
+		}
+	}
+})();
+
+/**
+ * Tests if the provided quaternion is approximately equal to the identity quaternion
+ * 
+ * @param {quat} q the quaternion to test 
+ * @returns {Boolean} true if the quaternion is approximately an identity quaternion
+ */
+exports.isIdentity = (q) => {
+	return (equals(q[0], 0) && equals(q[1], 0) && equals(q[2], 0) && equals(q[3], 1));
+};
+
+/**
+ * Rotate a quaternion using axis angle
+ * 
+ * @param {quat} out the receiving quaternion
+ * @param {quat} q the quaternion to rotate
+ * @param {Number} rad the number of radians to rotate the quaternion by
+ * @param {vec3} axis the axis around which to rotate the quaternion
+ */
+exports.rotate = (function() {
+	let i = exports.create();
+	return (out, q, rad, axis) => {
+		exports.setAxisAngle(i, axis, rad);
+		return exports.multiply(out, i, q);
+	};
+})();
+
+/**
+ * Generate a set of local cartesian axes from a quaternion rotation
+ * 
+ * @param {quat} q the quaternion to generate the local axes from 
+ * @param {vec3} localX the receiving vector for the local x axis 
+ * @param {vec3} localY the receiving vector for the local y axis
+ * @param {vec3} localZ  the receiving vector for the local z axis
+ */
+exports.localAxes = (q, localX, localY, localZ) => {
+	vec3.transformQuat(localX, vec3.X, q);
+	vec3.transformQuat(localY, vec3.Y, q);
+	vec3.transformQuat(localZ, vec3.Z, q);
+};
+
+exports.IDENTITY = Object.freeze(exports.create());
 },{"./common.js":12,"./mat3.js":15,"./vec3.js":20,"./vec4.js":21}],18:[function(require,module,exports){
 const { ARRAY_TYPE, EPSILON } = require("./common.js");
 const quat = require("./quat.js");
@@ -7630,6 +7676,41 @@ exports.forEach = (function() {
 		return a;
 	};
 })();
+
+/**
+ * vec2 pool for minimising garbage allocation 
+ */
+exports.Pool = (function(){
+	let stack = [];
+	for (let i = 0; i < 5; i++) {
+		stack.push(exports.create());
+	}
+	
+	return {
+		/**
+		 * return a borrowed vec2 to the pool
+		 * @param {vec2}
+		 */
+		return: (v) => { stack.push(exports.zero(v)); },
+		/**
+		 * request a vec2 from the pool
+		 * @returns {vec2}
+		 */
+		request: () => {
+			if (stack.length > 0) {
+				return stack.pop();
+			}
+			return exports.create();
+		}
+	}
+})();
+
+exports.ZERO = Object.freeze(exports.create());
+exports.ONE = Object.freeze(exports.fromValues(1,1));
+exports.X = Object.freeze(exports.fromValues(1,0));
+exports.Y = Object.freeze(exports.fromValues(0,1));
+exports.NEG_X = Object.freeze(exports.fromValues(-1,0));
+exports.NEG_Y = Object.freeze(exports.fromValues(0,-1));
 },{"./common.js":12}],20:[function(require,module,exports){
 const { ARRAY_TYPE, EPSILON, RANDOM, round } = require("./common.js");
 
@@ -8456,6 +8537,99 @@ exports.forEach = (function () {
 	};
 })();
 
+/**
+ * vec3 pool for minimising garbage allocation 
+ */
+exports.Pool = (function(){
+	let stack = [];
+	for (let i = 0; i < 5; i++) {
+		stack.push(exports.create());
+	}
+	
+	return {
+		/**
+		 * return a borrowed vec3 to the pool
+		 * @param {vec3}
+		 */
+		return: (v) => { stack.push(exports.zero(v)); },
+		/**
+		 * request a vec3 from the pool
+		 * @returns {vec3}
+		 */
+		request: () => {
+			if (stack.length > 0) {
+				return stack.pop();
+			}
+			return exports.create();
+		}
+	}
+})();
+
+// vec3 extensions adapated from https://graemepottsfolio.wordpress.com/2015/11/26/vectors-programming/
+
+exports.moveTowards = (() => {
+	let delta = exports.create();
+	return (out, a, b, maxDelta) => {
+		exports.subtract(delta, b, a);
+		let sqrLen = exports.squaredDistance(a, b); 
+		let sqrMaxDelta = maxDelta * maxDelta;
+		if (sqrMaxDelta >= sqrLen) {
+			exports.copy(out, b);
+		} else {
+			exports.scaleAndAdd(out, a, delta, maxDelta / Math.sqrt(sqrLen));
+		}
+	}; 
+})();
+
+exports.smoothDamp = (() => {
+	let delta = exports.create();
+	let temp = exports.create();
+	return (out, a, b, velocity, smoothTime, maxSpeed, elapsed) => { // Q: Should have outVelocity?
+		if (exports.equals(a, b)) {
+			exports.copy(out, b);
+		} else {
+			// Derivation: https://graemepottsfolio.wordpress.com/2016/01/11/game-programming-math-libraries/
+			smoothTime = Math.max(0.0001, smoothTime); // minimum smooth time of 0.0001
+			let omega = 2.0 / smoothTime;
+			let x = omega * elapsed;
+			let exp = 1.0 / (1.0 + x + 0.48 * x * x + 0.245 * x * x * x);
+			exports.subtract(delta, a, b);
+			let length = exports.length(delta);
+			let maxDelta = maxSpeed * smoothTime;
+
+			let deltaX = Math.min(length, maxDelta);
+			exports.scale(delta, delta, deltaX / length);
+
+			// temp = (velocity + omega * delta) * elapsed
+			exports.scaleAndAdd(temp, velocity, delta, omega);
+			exports.scale(temp, temp, elapsed);
+
+			// velocity = (velocity - omega * temp) * exp
+			exports.scaleAndAdd(velocity, velocity, temp, -omega);
+			exports.scale(velocity, velocity, exp);
+
+			// out = a - delta + (delta + temp) * exp;
+			exports.sub(out, a, delta);
+			exports.scaleAndAdd(out, out, delta, exp);
+			exports.scaleAndAdd(out, out, temp, exp);
+
+			// Ensure we don't overshoot
+			if (exports.sqrDist(b, a) <= exports.sqrDist(out, a)) {
+				exports.copy(out, b);
+				exports.zero(velocity);
+			}
+		}
+	};
+})();
+
+exports.ZERO = Object.freeze(exports.create());
+exports.ONE = Object.freeze(exports.fromValues(1,1,1));
+exports.X = Object.freeze(exports.fromValues(1,0,0));
+exports.Y = Object.freeze(exports.fromValues(0,1,0));
+exports.Z = Object.freeze(exports.fromValues(0,0,1));
+exports.NEG_X = Object.freeze(exports.fromValues(-1,0,0));
+exports.NEG_Y = Object.freeze(exports.fromValues(0,-1,0));
+exports.NEG_Z = Object.freeze(exports.fromValues(0,0,-1));
 },{"./common.js":12}],21:[function(require,module,exports){
 const { ARRAY_TYPE, EPSILON, RANDOM, round } = require("./common.js");
 
@@ -9127,6 +9301,36 @@ exports.forEach = (function() {
 		return a;
 	};
 })();
+
+/**
+ * vec4 pool for minimising garbage allocation 
+ */
+exports.Pool = (function(){
+	let stack = [];
+	for (let i = 0; i < 5; i++) {
+		stack.push(exports.create());
+	}
+	
+	return {
+		/**
+		 * return a borrowed vec4 to the pool
+		 * @param {vec4}
+		 */
+		return: (v) => { stack.push(exports.zero(v)); },
+		/**
+		 * request a vec4 from the pool
+		 * @returns {vec4}
+		 */
+		request: () => {
+			if (stack.length > 0) {
+				return stack.pop();
+			}
+			return exports.create();
+		}
+	}
+})();
+
+exports.ZERO = Object.freeze(exports.create());
 },{"./common.js":12}],22:[function(require,module,exports){
 const r = require('./renderer');
 const Bounds = require('./bounds');
@@ -10765,7 +10969,7 @@ module.exports = (function() {
 
 		let createObjectBounds = function(object, mesh, rotation) {
 			// If object is static and not rotated, create object AABB from mesh bounds
-			if (!forceSphereCulling && object.static && (!rotation || Maths.quatIsIdentity(rotation))) {
+			if (!forceSphereCulling && object.static && (!rotation || Maths.quat.isIdentity(rotation))) {
 				// TODO: Allow for calculation of AABB of rotated meshes
 				let center = vec3.clone(mesh.bounds.center);
 				vec3.add(center, center, object.transform.position);

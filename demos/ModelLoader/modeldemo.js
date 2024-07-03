@@ -17,7 +17,7 @@ Fury.init("fury");
 
 // TODO: Orbit camera view - zoom / rotate etc
 let cameraPosition = vec3.create();
-let cameraRotation = Maths.quatEuler(-30, 135, 0);
+let cameraRotation = Maths.quat.euler(-30, 135, 0);
 
 // TODO: clear color as scene property
 let camera = Camera.create({ near: 0.01, far: 10000.0, fov: 1.0472, ratio: 1.0, position: cameraPosition, rotation: cameraRotation, clearColor: [0.1, 0.1, 0.2, 1.0] });
