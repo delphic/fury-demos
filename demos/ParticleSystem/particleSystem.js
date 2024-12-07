@@ -126,7 +126,7 @@ let ParticleSystem = (function(){
 
 	TODO: create methods for some sensible default delegates - configurable with method parameters
 
-	TODO: Shasder for Billboard rendering - http://www.opengl-tutorial.org/intermediate-tutorials/billboards-particles/billboards/ 
+	TODO: Shader for Billboard rendering - http://www.opengl-tutorial.org/intermediate-tutorials/billboards-particles/billboards/ 
 	*/
 
 	let exports = {};
