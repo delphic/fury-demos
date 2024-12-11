@@ -1340,17 +1340,19 @@ let globalize = () => {
 
 module.exports = (function() {
 	let exports = {
+		toDegree: common.toDegree,
 		toRadian: common.toRadian,
 		equals: common.equals,
-		mat2: mat2,
-		mat3: mat3,
-		mat4: mat4,
-		quat: quat,
-		quat2: quat2,
-		vec2: vec2,
-		vec3: vec3,
-		vec4: vec4,
 	};
+
+	exports.mat2 = require('./maths/mat2.js');
+	exports.mat3 = require('./maths/mat3.js');
+	exports.mat4 = require('./maths/mat4.js');
+	exports.quat = require('./maths/quat.js');
+	exports.quat2 = require('./maths/quat2.js');
+	exports.vec2 = require('./maths/vec2.js');
+	exports.vec3 = require('./maths/vec3.js');
+	exports.vec4 = require('./maths/vec4.js');
 
 	exports.Ease = require('./maths/ease');
 
@@ -10490,6 +10492,19 @@ module.exports = (function(){
 		return Math.floor(min + rand() * (max - min + 1));
 	};
 
+	exports.pointInCircle = (out, radius = 1) => {
+		let r = radius * Math.sqrt(Random.value());
+		let theta = Random.value() * 2 * Math.PI;
+		out[0] = r * Math.cos(theta);
+		out[1] = r * Math.sin(theta);
+	};
+
+	exports.pointOnCircle = (out, radius = 1) => {
+		let theta = Random.value() * 2 * Math.PI;
+		out[0] = radius * Math.cos(theta);
+		out[1] = radius * Math.sin(theta);
+	};
+
 	return exports;
 })();
 },{}],29:[function(require,module,exports){
@@ -11921,6 +11936,15 @@ module.exports = (function(){
 			settings.min,
 			settings.generateMipmaps,
 			settings.enableAnisotropicFiltering);
+	};
+
+	exports.load = (uri, config, callback) => {
+		let image = new Image();
+		image.onload = function() {
+			texture = exports.create(config);
+			callback(texture);
+		}
+		image.src = uri;
 	};
 
 	exports.createTextureArray = (config) => {
