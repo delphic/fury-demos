@@ -54,26 +54,35 @@ window.onload = (event) => {
 	scene = Fury.Scene.create({ camera: camera });
 
 	loadAssets(()=>{
-		TextMesh.create({
-			text: "The Quick Brown Fox Jumped Over the Lazy Dog!",
-			scene: scene,
-			atlas: atlases["mini"],
-			position: vec3.fromValues(0,-16,0),
-			alignment: TextMesh.Alignment.center
-		});
-
-		TextMesh.create({
-			text: "The Quick Brown Fox Jumped Over the Lazy Dog!",
-			scene: scene,
-			atlas: atlases["micro"],
-			position: vec3.fromValues(0,16,0),
-			alignment: TextMesh.Alignment.center
-		});
-
+		createTextMeshes();
 		Fury.GameLoop.init({ loop: loop });
 		Fury.GameLoop.start();
 	});
+};
 
+let createTextMeshes = function() {
+	TextMesh.create({
+		text: "The Quick Brown Fox Jumped Over the Lazy Dog!",
+		scene: scene,
+		atlas: atlases["mini"],
+		position: vec3.fromValues(0,-16,0),
+		alignment: TextMesh.Alignment.center
+	});
+
+	TextMesh.create({
+		text: "The Quick Brown Fox Jumped Over the Lazy Dog!",
+		scene: scene,
+		atlas: atlases["micro"],
+		position: vec3.fromValues(0,16,0),
+		alignment: TextMesh.Alignment.center
+	});
+};
+
+// Test to make sure prefabs are given sufficiently independent properties
+// (offset and color are the most obvious issues)
+window.refresh = function() {
+	scene.clear();
+	createTextMeshes();
 };
 
 let loadAssets = (callback) => {
