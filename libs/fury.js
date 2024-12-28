@@ -474,8 +474,23 @@ module.exports = (function() {
 // Client.js - for using Fury old school style as a JS file which adds a
 // global which you can use. 
 
+const Fury = require('./fury.js'); 
 // Create Fury Global
-window.Fury = require('./fury.js');
+window.Fury = Fury;
+
+// Add globalize extension for maths classes for ease of use
+const { Maths } = Fury;
+Maths.globalize = function() {
+	window.mat2 = Maths.mat2;
+	window.mat3 = Maths.mat3;
+	window.mat4 = Maths.mat4;
+	window.quat = Maths.quat;
+	window.quat2 = Maths.quat2;
+	window.vec2 = Maths.vec2;
+	window.vec3 = Maths.vec3;
+	window.vec4 = Maths.vec4;
+};
+
 },{"./fury.js":5}],5:[function(require,module,exports){
 // Fury Module can be used with 'require'
 module.exports = (function() {
@@ -1317,47 +1332,31 @@ module.exports = (function(){
 })();
 },{}],11:[function(require,module,exports){
 // Maths modules are a CommonJS port of glMatrix v3.4.0
-// with added extensions and a helper to globalize for ease of use
-// when importing Fury as a standalone script.
-let common = require('./maths/common.js');
-let mat2 = require('./maths/mat2.js');
-let mat3 = require('./maths/mat3.js');
-let mat4 = require('./maths/mat4.js');
-let quat = require('./maths/quat.js');
-let quat2 = require('./maths/quat2.js');
-let vec2 = require('./maths/vec2.js');
-let vec3 = require('./maths/vec3.js');
-let vec4 = require('./maths/vec4.js');
-
-let globalize = () => {
-	// Lets create some globals!
-	if (window) {
-		window.mat2 = mat2;
-		window.mat3 = mat3;
-		window.mat4 = mat4;
-		window.quat = quat;
-		window.quat2 = quat2;
-		window.vec2 = vec2;
-		window.vec3 = vec3;
-		window.vec4 = vec4;
-	}
-};
+const common = require('./maths/common');
+const mat2 = require('./maths/mat2');
+const mat3 = require('./maths/mat3');
+const mat4 = require('./maths/mat4');
+const quat = require('./maths/quat');
+const quat2 = require('./maths/quat2');
+const vec2 = require('./maths/vec2');
+const vec3 = require('./maths/vec3');
+const vec4 = require('./maths/vec4');
 
 module.exports = (function() {
-	let exports = {
-		toDegree: common.toDegree,
-		toRadian: common.toRadian,
-		equals: common.equals,
-	};
+	let exports = {};
 
-	exports.mat2 = require('./maths/mat2.js');
-	exports.mat3 = require('./maths/mat3.js');
-	exports.mat4 = require('./maths/mat4.js');
-	exports.quat = require('./maths/quat.js');
-	exports.quat2 = require('./maths/quat2.js');
-	exports.vec2 = require('./maths/vec2.js');
-	exports.vec3 = require('./maths/vec3.js');
-	exports.vec4 = require('./maths/vec4.js');
+	exports.toDegree = common.toDegree;
+	exports.toRadian = common.toRadian;
+	exports.equals = common.equals;
+
+	exports.mat2 = mat2;
+	exports.mat3 = mat3;
+	exports.mat4 = mat4;
+	exports.quat = quat;
+	exports.quat2 = quat2;
+	exports.vec2 = vec2;
+	exports.vec3 = vec3;
+	exports.vec4 = vec4;
 
 	exports.Ease = require('./maths/ease');
 
@@ -1513,12 +1512,10 @@ module.exports = (function() {
 		// It does seem to be related to crossing boundaries but it's not entirely predictable
 	};
 
-	exports.globalize = globalize;
-
 	return exports;
 })();
 
-},{"./maths/common.js":12,"./maths/ease":13,"./maths/mat2.js":14,"./maths/mat3.js":15,"./maths/mat4.js":16,"./maths/quat.js":17,"./maths/quat2.js":18,"./maths/vec2.js":19,"./maths/vec3.js":20,"./maths/vec4.js":21}],12:[function(require,module,exports){
+},{"./maths/common":12,"./maths/ease":13,"./maths/mat2":14,"./maths/mat3":15,"./maths/mat4":16,"./maths/quat":17,"./maths/quat2":18,"./maths/vec2":19,"./maths/vec3":20,"./maths/vec4":21}],12:[function(require,module,exports){
 // Configuration Constants
 const EPSILON = 0.000001;
 // In modern browsers, arrays perform significantly better than typed arrays and serialize / deserialize more quickly
@@ -11274,7 +11271,7 @@ module.exports = (function() {
 			for (let i = 0, l = renderObjects.keys.length; i < l; i++) {
 				// TODO: Detect if resorting is necessary (check +1 and -1 in array against sort function)
 				renderObject = renderObjects[renderObjects.keys[i]];
-				if (scene.enableFrustumCulling) {
+				if (scene.enableFrustumCulling && renderObject.active) {
 					culled = isCulledByFrustrum(camera, renderObject);
 				}
 				if (!culled && renderObject.active) {
@@ -11295,7 +11292,7 @@ module.exports = (function() {
 					let instances = prefab.instances;
 					for (let j = 0, n = instances.keys.length; j < n; j++) {
 						let instance = instances[instances.keys[j]];
-						if (scene.enableFrustumCulling) {
+						if (scene.enableFrustumCulling && instance.active) {
 							culled = isCulledByFrustrum(camera, instance);
 						}
 						if (!culled && instance.active) {
@@ -12074,15 +12071,63 @@ const { quat, vec3, mat4 } = require('./maths');
 module.exports = (function() {
 	let exports = {};
 
+	let _ = vec3.create();
+
 	let prototype = {
 		updateMatrix: function() {
 			mat4.fromRotationTranslation(this.matrix, this.rotation, this.position);
-				mat4.scale(this.matrix, this.matrix, this.scale);
-				let parent = this.parent;
-				if (parent) {
-					parent.updateMatrix();
-					mat4.multiply(this.matrix, parent.matrix, this.matrix);
-				}
+			mat4.scale(this.matrix, this.matrix, this.scale);
+			let parent = this.parent;
+			if (parent) {
+				parent.updateMatrix();
+				mat4.multiply(this.matrix, parent.matrix, this.matrix);
+			}
+		},
+		getWorldPosition: function(out) {
+			if (!parent) {
+				vec3.copy(out, this.position);
+			} else {
+				this.updateMatrix();
+				mat4.getTranslation(out, this.matrix);
+			}
+			return out;
+		},
+		getWorldRotation: function(out) {
+			if (!parent) {
+				quat.copy(out, this.rotation);
+			} else {
+				this.updateMatrix();
+				mat4.getRotation(out, this.matrix);
+			}
+			return out;
+		},
+		getWorldScale: function(out) {
+			if (!parent) {
+				vec3.copy(out, this.scale);
+			} else {
+				this.updateMatrix();
+				mat4.getScaling(out, this.matrix);
+			}
+			return out;
+		},
+		getWorldPositionRotation: function(position, rotation) {
+			if (!parent) {
+				vec3.copy(position, this.position);
+				quat.copy(rotation, this.rotation);
+			} else {
+				this.updateMatrix();
+				mat4.decompose(rotation, position, _);
+			}
+		},
+		getWorldPositionRotationScale: function(position, rotation, scale) {
+			if (!parent) {
+				vec3.copy(position, this.position);
+				quat.copy(rotation, this.rotation);
+				vec3.copy(scale, this.scale);
+			} else {
+				this.updateMatrix();
+				mat4.decompose(rotation, position, scale);
+			}
 		}
 	};
 
