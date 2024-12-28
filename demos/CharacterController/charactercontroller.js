@@ -924,16 +924,27 @@ let hitPoint = vec3.create();
 let mouseLookSpeed = 0.1;
 let verticalLookAngle = 0;
 
+// Request pointer lock when clicking on canvas
+document.getElementById("fury").addEventListener('click', () => {
+	if (!Fury.Input.isPointerLocked()) {
+		let request = Fury.Input.requestPointerLock(); 
+		if (request) {
+			request.catch((error) => {
+				window.setTimeout(Fury.Input.requestPointerLock, 1000);
+			});
+		} else {
+			window.setTimeout(Fury.Input.requestPointerLock, 1000);
+		}
+	}
+});
+// document.addEventListener("pointerlockerror", lockError, false);
+
 // Game Loop
 let loop = function(elapsed) {
 	// Rotation around axis
 	let ry = 0, rx = 0;
 
-	if (!Fury.Input.isPointerLocked()) {
-		if (Fury.Input.mouseDown(0)) {
-			Fury.Input.requestPointerLock();
-		}
-	} else {
+	if (Fury.Input.isPointerLocked()) {
 		ry -= mouseLookSpeed * elapsed * Fury.Input.MouseDelta[0];
 		rx -= mouseLookSpeed * elapsed * Fury.Input.MouseDelta[1];
 	}

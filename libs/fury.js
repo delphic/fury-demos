@@ -899,7 +899,7 @@ module.exports = (function() {
 	};
 
 	exports.requestPointerLock = function() {
-		return canvas.requestPointerLock();
+		return canvas.requestPointerLock({ unadjustedMovement: true });
 	};
 
 	exports.releasePointerLock = function() {
